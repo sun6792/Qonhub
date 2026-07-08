@@ -37,6 +37,16 @@ class AppServiceProvider extends ServiceProvider
     {
         Http::globalMiddleware(OutboundHttpProxy::middleware());
 
+        // 本地开发环境跳过 SSL 验证（企业网络 HTTPS 拦截兼容）
+        if (app()->environment('local')) {
+            Http::globalMiddleware(static function (callable $handler): callable {
+                return static function (\Psr\Http\Message\RequestInterface $request, array $options) use ($handler) {
+                    $options['verify'] = false;
+                    return $handler($request, $options);
+                };
+            });
+        }
+
         View::composer(['site.layout', 'theme.*.layout'], SiteLayoutComposer::class);
 
         View::composer('admin.layouts.app', function ($view): void {

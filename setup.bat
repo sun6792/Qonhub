@@ -37,7 +37,7 @@ echo [OK] PostgreSQL 已安装
 REM === 复制环境变量 ===
 if not exist .env (
     echo [执行] 创建 .env 文件...
-    copy .env.example .env
+    copy .env.local.example .env
     echo [提示] 请编辑 .env 填写数据库密码和 AI API Key
 )
 
