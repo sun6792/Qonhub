@@ -1,0 +1,17 @@
+{
+  "version": "2.1.0",
+  "release_date": "2026-06-26",
+  "release_type": "minor",
+  "archive_url": "https://github.com/yaojingang/Qonhub AI/archive/refs/heads/main.zip",
+  "payload": {
+    "title_zh": "Qonhub AI v2.1.0",
+    "title_en": "Qonhub AI v2.1.0",
+    "summary_zh": "Qonhub AI 2.1.0 新增企业知识库草稿生成工作流，增�?AI 清洗与结构化整理的原文覆盖，补充在线主题编辑、目标站�?SEO、分发可视化、APIHot 推荐主题和部署稳定性改进�?,
+    "summary_en": "Qonhub AI 2.1.0 adds the Enterprise Knowledge drafting workflow, improves source coverage during AI cleanup and structured organization, and includes live theme editing, target-site SEO, distribution visibility, the APIHot recommendation theme, and deployment stability improvements.",
+    "upgrade_tip_zh": "升级后建议执�?php artisan migrate、php artisan optimize，并重启队列进程；企业知识库草稿生成依赖后台队列与可�?AI 模型，处理长文件前请确认 worker 正常运行�?,
+    "upgrade_tip_en": "After upgrading, run php artisan migrate, php artisan optimize, and restart queue workers. Enterprise Knowledge drafting depends on background queues and available AI models, so verify workers before processing long source files.",
+    "release_url": "https://github.com/yaojingang/Qonhub AI",
+    "changelog_url_zh": "https://github.com/yaojingang/Qonhub AI/blob/main/docs/CHANGELOG.md",
+    "changelog_url_en": "https://github.com/yaojingang/Qonhub AI/blob/main/docs/CHANGELOG_en.md"
+  }
+}
