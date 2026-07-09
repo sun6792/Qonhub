@@ -82,6 +82,7 @@ class DistributionController extends Controller
                 ->all(),
             'stats' => $stats,
             'logs' => $logs,
+            'mediaPlatforms' => $this->buildMediaPlatforms(),
         ]);
     }
 
@@ -1610,5 +1611,15 @@ class DistributionController extends Controller
         return redirect()
             ->route('admin.distribution.show', ['channelId' => (int) $channel->id])
             ->with('message', $message);
+    }
+
+    /**
+     * 自媒体平台面板数据（从 config/media-platforms.php 读取）。
+     *
+     * @return list<array{key:string, name:string, icon:string, login_url:string, color:string, description:string}>
+     */
+    private function buildMediaPlatforms(): array
+    {
+        return config('media-platforms.platforms', []);
     }
 }

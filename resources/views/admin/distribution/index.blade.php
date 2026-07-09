@@ -27,6 +27,10 @@
                     <i data-lucide="plus" class="mr-2 h-4 w-4"></i>
                     {{ __('admin.distribution.button.create') }}
                 </a>
+                <a href="{{ route('admin.distribution.armory') }}" class="inline-flex items-center rounded-md border border-transparent bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700">
+                    <i data-lucide="package" class="mr-2 h-4 w-4"></i>
+                    内容弹药库
+                </a>
             </div>
         </div>
 
@@ -133,6 +137,58 @@
             <div class="rounded-lg bg-white p-5 shadow">
                 <div class="text-sm font-medium text-gray-500">{{ __('admin.distribution.stats.failed') }}</div>
                 <div class="mt-2 text-2xl font-semibold text-red-700">{{ (int) ($stats['failed'] ?? 0) }}</div>
+            </div>
+        </div>
+
+        {{-- 自媒体平台面板 --}}
+        <div class="rounded-lg bg-white shadow">
+            <div class="border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+                <div>
+                    <h2 class="text-lg font-medium text-gray-900">📡 自媒体平台</h2>
+                    <p class="mt-1 text-sm text-gray-500">管理各平台登录状态，一键跳转发布。发布功能需配合 Wechatsync 扩展使用。</p>
+                </div>
+                <a href="https://github.com/wechatsync/Wechatsync" target="_blank" rel="noopener noreferrer" class="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-600 hover:bg-gray-50">
+                    <i data-lucide="external-link" class="mr-1 h-3.5 w-3.5"></i>
+                    Wechatsync 扩展
+                </a>
+            </div>
+            <div class="px-6 py-5">
+                <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    @foreach ($mediaPlatforms as $platform)
+                        <div class="group relative rounded-xl border border-gray-200 bg-white p-5 transition hover:border-gray-300 hover:shadow-md">
+                            <div class="mb-4 flex items-center gap-3">
+                                <div class="flex h-10 w-10 items-center justify-center rounded-lg" style="background-color: {{ $platform['color'] }}1A;">
+                                    <svg class="h-5 w-5" style="color: {{ $platform['color'] }}" fill="currentColor" viewBox="0 0 24 24">
+                                        <path d="{{ $platform['icon'] }}"/>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <h3 class="text-sm font-semibold text-gray-900">{{ $platform['name'] }}</h3>
+                                    <p class="text-xs text-gray-500">{{ $platform['description'] }}</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <span class="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium bg-gray-50 text-gray-600 border-gray-200">
+                                    <span class="h-1.5 w-1.5 rounded-full bg-gray-400"></span>
+                                    未集成
+                                </span>
+                                <div class="flex items-center gap-2">
+                                    <a href="{{ $platform['login_url'] }}" target="_blank" rel="noopener noreferrer"
+                                       class="inline-flex items-center rounded-md border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition"
+                                       title="打开 {{ $platform['name'] }} 登录页">
+                                        <i data-lucide="log-in" class="mr-1 h-3 w-3"></i>
+                                        登录
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    @endforeach
+                </div>
+            </div>
+            <div class="border-t border-gray-100 bg-gray-50/50 px-6 py-3 rounded-b-lg">
+                <p class="text-xs text-gray-500">
+                    💡 提示：安装 Wechatsync Chrome 扩展后，登录过的平台会自动显示 🟢 已连接 状态，届时可通过此面板直接发布文章。
+                </p>
             </div>
         </div>
 

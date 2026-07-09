@@ -330,7 +330,7 @@ class JobQueueService
      *
      * @return int 成功回退并重新投递的记录数
      */
-    public function recoverStaleJobs(int $timeoutSeconds = 600): int
+    public function recoverStaleJobs(int $timeoutSeconds = 120): int
     {
         $threshold = now()->subSeconds(max(60, $timeoutSeconds));
         $candidateIds = TaskRun::query()

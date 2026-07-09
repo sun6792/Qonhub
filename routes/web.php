@@ -156,6 +156,10 @@ Route::prefix($adminPrefix)->name('admin.')->middleware(['admin.locale'])->group
             Route::post('{channelId}/sync-settings', [DistributionController::class, 'syncSettings'])->name('sync-settings')->whereNumber('channelId');
             Route::get('{channelId}', [DistributionController::class, 'show'])->name('show')->whereNumber('channelId');
             Route::post('{channelId}/health', [DistributionController::class, 'health'])->name('health')->whereNumber('channelId');
+
+            // 内容弹药库
+            Route::get('armory', [\App\Http\Controllers\Admin\ContentArmoryController::class, 'index'])->name('armory');
+            Route::post('armory/rewrite', [\App\Http\Controllers\Admin\ContentArmoryController::class, 'rewrite'])->name('armory.rewrite');
         });
 
         // 文章管理（Blade 新路径）

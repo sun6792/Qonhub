@@ -1,0 +1,283 @@
+@extends('admin.layouts.app')
+
+@php
+    $templates = $templates ?? [];
+    $templateStats = $templateStats ?? [];
+    $articles = $articles ?? collect();
+    $search = $search ?? '';
+@endphp
+
+@section('content')
+    <div class="space-y-8 px-4 sm:px-0">
+        {{-- 头部 --}}
+        <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+                <h1 class="text-2xl font-bold text-gray-900">📦 内容弹药库</h1>
+                <p class="mt-1 text-sm text-gray-600">选文章 → 点平台模板 → AI 改写 → 一键复制 → 去平台粘贴发布</p>
+            </div>
+            <a href="{{ route('admin.distribution.index') }}" class="inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+                <i data-lucide="arrow-left" class="mr-2 h-4 w-4"></i>
+                返回分发管理
+            </a>
+        </div>
+
+        {{-- 模板组统计卡片 --}}
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+            @foreach ($templates as $tpl)
+                <div class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm" data-template-key="{{ $tpl['key'] }}">
+                    <div class="text-xs font-medium uppercase text-gray-500">{{ $tpl['name'] }}</div>
+                    <div class="mt-1 text-2xl font-semibold text-gray-900">{{ $templateStats[$tpl['key']] ?? 0 }}</div>
+                    <div class="mt-1 text-xs text-gray-500">个平台</div>
+                    <p class="mt-2 text-xs text-gray-400 line-clamp-2">{{ $tpl['style'] }}</p>
+                </div>
+            @endforeach
+        </div>
+
+        {{-- 搜索 --}}
+        <form method="GET" action="{{ route('admin.distribution.armory') }}" class="flex gap-3">
+            <input type="text" name="search" value="{{ $search }}" placeholder="搜索已发布文章标题或关键词..."
+                   class="block w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500">
+            <button type="submit" class="inline-flex items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">搜索</button>
+            @if ($search !== '')
+                <a href="{{ route('admin.distribution.armory') }}" class="inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">清除</a>
+            @endif
+        </form>
+
+        {{-- 文章列表 --}}
+        @if ($articles->isEmpty())
+            <div class="rounded-lg bg-white p-10 text-center shadow">
+                <i data-lucide="file-text" class="mx-auto mb-3 h-10 w-10 text-gray-400"></i>
+                <div class="text-sm font-medium text-gray-900">暂无已发布文章</div>
+                <div class="mt-1 text-sm text-gray-500">先在任务管理中生成并发布文章，再到这里分发。</div>
+            </div>
+        @else
+            <div class="space-y-4">
+                @foreach ($articles as $article)
+                    <div class="rounded-lg border border-gray-200 bg-white shadow transition hover:shadow-md" id="article-{{ (int) $article->id }}">
+                        <div class="border-b border-gray-100 bg-gray-50/50 px-5 py-4">
+                            <div class="flex items-start justify-between gap-4">
+                                <div class="min-w-0 flex-1">
+                                    <h3 class="text-base font-semibold text-gray-900">{{ $article->title }}</h3>
+                                    <div class="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-gray-500">
+                                        <span>{{ $article->task?->name ?? '-' }}</span>
+                                        <span>·</span>
+                                        <span>{{ $article->published_at?->format('Y-m-d H:i') }}</span>
+                                        <span>·</span>
+                                        <span>{{ mb_strlen(strip_tags((string) $article->content), 'UTF-8') }} 字</span>
+                                        @if ($article->keywords)
+                                            <span>·</span>
+                                            <span class="text-blue-600">{{ $article->keywords }}</span>
+                                        @endif
+                                    </div>
+                                </div>
+                                <span class="inline-flex shrink-0 items-center rounded-full bg-green-100 px-2.5 py-1 text-xs font-medium text-green-800">已发布</span>
+                            </div>
+                        </div>
+
+                        {{-- 模板按钮行 --}}
+                        <div class="px-5 py-3">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <span class="text-xs font-medium text-gray-500 mr-1">AI 改写为：</span>
+                                @foreach ($templates as $tpl)
+                                    <button type="button"
+                                            data-rewrite-btn
+                                            data-article-id="{{ (int) $article->id }}"
+                                            data-template-key="{{ $tpl['key'] }}"
+                                            data-template-name="{{ $tpl['name'] }}"
+                                            class="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700"
+                                            title="AI 改写为「{{ $tpl['name'] }}」">
+                                        <i data-lucide="sparkles" class="h-3 w-3"></i>
+                                        {{ $tpl['name'] }}
+                                    </button>
+                                @endforeach
+                            </div>
+                        </div>
+
+                        {{-- 改写结果预览区（默认隐藏） --}}
+                        <div data-rewrite-panel class="hidden border-t border-gray-100 px-5 py-4">
+                            <div class="mb-3 flex items-center justify-between">
+                                <div class="flex items-center gap-2">
+                                    <span class="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2.5 py-1 text-xs font-medium text-blue-700" data-rewrite-label>改写中...</span>
+                                    <span class="text-xs text-gray-400" data-rewrite-status></span>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <button type="button" data-copy-btn
+                                            class="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-green-50 hover:border-green-300 hover:text-green-700 transition"
+                                            title="复制改写内容">
+                                        <i data-lucide="copy" class="h-3.5 w-3.5"></i>
+                                        一键复制
+                                    </button>
+                                    <button type="button" data-collapse-btn
+                                            class="inline-flex items-center rounded-md p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                                            title="收起">
+                                        <i data-lucide="chevron-up" class="h-4 w-4"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div data-rewrite-content
+                                 class="max-h-[400px] overflow-y-auto rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm leading-relaxed text-gray-800 whitespace-pre-wrap">
+                                <div class="flex items-center justify-center py-8 text-gray-400" data-rewrite-loading>
+                                    <i data-lucide="loader-2" class="mr-2 h-5 w-5 animate-spin"></i>
+                                    AI 正在改写中...
+                                </div>
+                            </div>
+                            {{-- 平台列表 --}}
+                            <div data-platform-list class="mt-3 flex flex-wrap gap-1.5"></div>
+                        </div>
+                    </div>
+                @endforeach
+            </div>
+
+            {{-- 分页 --}}
+            <div class="mt-6">
+                {{ $articles->links() }}
+            </div>
+        @endif
+    </div>
+
+    {{-- Toast --}}
+    <div id="toast" class="fixed right-6 top-6 z-50 hidden rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm font-medium text-green-800 shadow-lg transition"></div>
+@endsection
+
+@push('scripts')
+<script>
+(function () {
+    const REWRITE_URL = '{{ route('admin.distribution.armory.rewrite') }}';
+    const CSRF = '{{ csrf_token() }}';
+
+    function showToast(msg, type = 'success') {
+        const el = document.getElementById('toast');
+        if (!el) return;
+        el.textContent = msg;
+        el.className = 'fixed right-6 top-6 z-50 rounded-lg border px-4 py-3 text-sm font-medium shadow-lg transition';
+        el.classList.add(type === 'error'
+            ? 'border-red-200 bg-red-50 text-red-800'
+            : 'border-green-200 bg-green-50 text-green-800');
+        el.classList.remove('hidden');
+        setTimeout(() => el.classList.add('hidden'), 2500);
+    }
+
+    async function copyToClipboard(text) {
+        try {
+            await navigator.clipboard.writeText(text);
+            showToast('✅ 已复制到剪贴板！去对应平台粘贴发布即可');
+        } catch {
+            // Fallback for older browsers
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            ta.style.position = 'fixed';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+            showToast('✅ 已复制到剪贴板！');
+        }
+    }
+
+    function getPlatformLinks(platforms) {
+        if (!platforms || !platforms.length) return '';
+        return platforms.map(p =>
+            `<a href="${p.login_url}" target="_blank" rel="noopener noreferrer"
+                class="inline-flex items-center rounded-md border border-gray-200 bg-white px-2 py-1 text-xs text-gray-600 hover:bg-blue-50 hover:border-blue-300 transition">
+                <i data-lucide="external-link" class="mr-1 h-3 w-3"></i>${p.name}
+            </a>`
+        ).join('');
+    }
+
+    document.addEventListener('click', async function (e) {
+        // Rewrite button
+        const rewriteBtn = e.target.closest('[data-rewrite-btn]');
+        if (rewriteBtn) {
+            const articleId = rewriteBtn.dataset.articleId;
+            const templateKey = rewriteBtn.dataset.templateKey;
+            const templateName = rewriteBtn.dataset.templateName;
+            const card = document.getElementById('article-' + articleId);
+            if (!card) return;
+
+            const panel = card.querySelector('[data-rewrite-panel]');
+            const content = panel.querySelector('[data-rewrite-content]');
+            const loading = panel.querySelector('[data-rewrite-loading]');
+            const label = panel.querySelector('[data-rewrite-label]');
+            const status = panel.querySelector('[data-rewrite-status]');
+            const copyBtn = panel.querySelector('[data-copy-btn]');
+            const platformList = panel.querySelector('[data-platform-list]');
+            const prevContent = panel.querySelector('.rewritten-text');
+
+            // Show panel + loading
+            panel.classList.remove('hidden');
+            if (prevContent) prevContent.remove();
+            loading.classList.remove('hidden');
+            label.textContent = templateName;
+            status.textContent = '改写中...';
+            copyBtn.disabled = true;
+            copyBtn.classList.add('opacity-50', 'cursor-not-allowed');
+            platformList.innerHTML = '';
+            content.scrollTop = 0;
+
+            try {
+                const resp = await fetch(REWRITE_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': CSRF },
+                    body: JSON.stringify({ article_id: parseInt(articleId), template_key: templateKey }),
+                });
+                const data = await resp.json();
+
+                loading.classList.add('hidden');
+
+                if (!data.ok) {
+                    status.textContent = '失败';
+                    label.className = 'inline-flex items-center gap-1 rounded-full bg-red-100 px-2.5 py-1 text-xs font-medium text-red-700';
+                    content.innerHTML = '<div class="text-red-600">' + (data.error || '未知错误') + '</div>';
+                    return;
+                }
+
+                status.textContent = '改写完成 · ' + data.rewritten.length + ' 字';
+                label.className = 'inline-flex items-center gap-1 rounded-full bg-green-100 px-2.5 py-1 text-xs font-medium text-green-700';
+                copyBtn.disabled = false;
+                copyBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+
+                const wrapper = document.createElement('div');
+                wrapper.className = 'rewritten-text';
+                wrapper.textContent = data.rewritten;
+                content.appendChild(wrapper);
+
+                // Render platform links
+                const tpl = @json($templates).find(t => t.key === templateKey);
+                if (tpl && tpl.platforms) {
+                    platformList.innerHTML = getPlatformLinks(tpl.platforms);
+                    if (typeof lucide !== 'undefined') lucide.createIcons();
+                }
+
+            } catch (err) {
+                loading.classList.add('hidden');
+                status.textContent = '网络错误';
+                label.className = 'inline-flex items-center gap-1 rounded-full bg-red-100 px-2.5 py-1 text-xs font-medium text-red-700';
+                content.innerHTML = '<div class="text-red-600">请求失败: ' + err.message + '</div>';
+            }
+
+            return;
+        }
+
+        // Collapse button
+        const collapseBtn = e.target.closest('[data-collapse-btn]');
+        if (collapseBtn) {
+            const panel = collapseBtn.closest('[data-rewrite-panel]');
+            if (panel) panel.classList.add('hidden');
+            return;
+        }
+
+        // Copy button
+        const copyBtn = e.target.closest('[data-copy-btn]');
+        if (copyBtn && !copyBtn.disabled) {
+            const panel = copyBtn.closest('[data-rewrite-panel]');
+            const rewritten = panel.querySelector('.rewritten-text');
+            if (rewritten) {
+                await copyToClipboard(rewritten.textContent);
+            }
+            return;
+        }
+    });
+})();
+</script>
+@endpush

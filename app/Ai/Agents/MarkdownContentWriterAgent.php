@@ -22,7 +22,7 @@ use Laravel\Ai\Promptable;
  * 使用 `max_output_tokens`，Gemini 使用 `maxOutputTokens`。未设置 maxTokens 时不附带该字段，
  * 不影响知识库切片、URL 导入等其他调用方的既有行为。
  */
-#[Timeout(240)]
+#[Timeout(120)]
 class MarkdownContentWriterAgent implements Agent, Conversational, HasProviderOptions, HasTools
 {
     use Promptable;
