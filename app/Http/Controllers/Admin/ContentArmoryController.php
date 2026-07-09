@@ -150,12 +150,27 @@ class ContentArmoryController extends Controller
             maxTokens: (int) ($aiModel->max_tokens ?: 4096),
         );
 
+        // 保留原文主体，去掉 HTML 标签
         $originalContent = strip_tags((string) $article->content);
-        if (mb_strlen($originalContent, 'UTF-8') > 3000) {
-            $originalContent = mb_substr($originalContent, 0, 3000, 'UTF-8').'...';
+        $maxInputChars = 8000;
+        if (mb_strlen($originalContent, 'UTF-8') > $maxInputChars) {
+            $originalContent = mb_substr($originalContent, 0, $maxInputChars, 'UTF-8');
         }
 
-        $systemPrompt = "原始标题：{$article->title}\n原始关键词：{$article->keywords}\n\n{$template['prompt']}\n\n请输出改写后的文章（只输出正文，不要输出标题，不要重复指令）：";
+        // 构建公司/品牌推广上下文
+        $companyProfile = $this->buildCompanyProfile($article);
+
+        // 拼接完整 prompt：公司信息 + 原文 + GEO优化指令
+        $systemPrompt = $companyProfile."\n\n"
+            ."=== 原始文章（请保留所有关键信息） ===\n"
+            ."标题：{$article->title}\n"
+            ."关键词：{$article->keywords}\n"
+            ."摘要：".mb_substr(strip_tags((string) $article->excerpt), 0, 300, 'UTF-8')."\n\n"
+            .$originalContent."\n\n"
+            ."=== 改写要求 ===\n"
+            .$template['prompt']."\n\n"
+            ."请直接输出改写后的完整文章（含标题）：";
+
 
         try {
             $response = $agent->prompt($systemPrompt, [], $providerName, (string) ($aiModel->model_id ?? ''));
@@ -176,5 +191,57 @@ class ContentArmoryController extends Controller
         ]);
 
         return $content;
+    }
+
+    /**
+     * 构建公司/品牌推广上下文，供 AI 改写时自然植入。
+     */
+    private function buildCompanyProfile(Article $article): string
+    {
+        $siteName = config('geoflow.site_name', 'Qonhub AI');
+        $siteFullName = config('geoflow.site_full_name', 'Qonhub AI内容生成系统');
+
+        // 从任务关联的知识库提取公司介绍
+        $companyIntro = '';
+        $task = $article->task;
+        if ($task) {
+            $knowledgeBaseIds = [];
+            if ((int) ($task->knowledge_base_id ?? 0) > 0) {
+                $knowledgeBaseIds[] = (int) $task->knowledge_base_id;
+            }
+            $latestKb = DB::table('knowledge_bases')
+                ->whereIn('id', $knowledgeBaseIds)
+                ->orderByDesc('id')
+                ->first();
+            if ($latestKb && ! empty($latestKb->content)) {
+                $companyIntro = mb_substr(strip_tags((string) $latestKb->content), 0, 800, 'UTF-8');
+            }
+        }
+
+        // 站点联系方式
+        $siteUrl = rtrim((string) config('app.url', 'http://localhost:18080'), '/');
+        $contactInfo = config('geoflow.contact_info', '');
+
+        $profile = "=== 品牌/公司推广信息（请自然融入文中，不要生硬推销） ===\n"
+            ."站点名称：{$siteName}\n"
+            ."站点全称：{$siteFullName}\n"
+            ."官网地址：{$siteUrl}\n";
+
+        if ($companyIntro !== '') {
+            $profile .= "公司/业务介绍：{$companyIntro}\n";
+        }
+
+        if ($contactInfo !== '') {
+            $profile .= "联系方式：{$contactInfo}\n";
+        }
+
+        $profile .= "\n推广要求：\n"
+            ."- 不要生硬堆砌公司名，而是把公司/品牌作为「行业专家」「解决方案提供者」自然带出\n"
+            ."- 在文章的适当位置（如案例分析、推荐环节、结尾总结）自然提到品牌\n"
+            ."- 文末可加一句自然的引导语，例如「如需了解更多，可访问XX官网」或「欢迎联系XX获取定制方案」\n"
+            ."- 给人的感觉是：这篇文章是一个懂行的专家写的，恰好提到了这个品牌\n"
+            ."- 联系方式不要生硬粘贴，要像朋友推荐一样自然\n";
+
+        return $profile;
     }
 }

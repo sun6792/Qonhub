@@ -29,6 +29,8 @@ return [
     'site_description' => env('SITE_DESCRIPTION', ''),
     // SEO 关键词（逗号分隔等，依前端使用方式）
     'site_keywords' => env('SITE_KEYWORDS', ''),
+    // 公司联系方式（用于多平台分发时自然植入文末）；可包含电话/邮箱/地址等
+    'contact_info' => env('GEOFLOW_CONTACT_INFO', ''),
 
     // 后台入口路径前缀，如 /geo_admin（勿与前台路由冲突）
     'admin_base_path' => '/'.$adminBasePath,
