@@ -101,7 +101,7 @@ class WorkerExecutionService
             $freshTask = Task::query()
                 ->whereKey((int) $task->id)
                 ->lockForUpdate()
-                ->first(['id', 'status', 'schedule_enabled', 'created_count', 'draft_limit', 'article_limit', 'publish_interval', 'next_publish_at']);
+                ->first(['id', 'status', 'schedule_enabled', 'need_review', 'created_count', 'draft_limit', 'article_limit', 'publish_interval', 'next_publish_at']);
             if (! $freshTask || ($freshTask->status ?? 'paused') !== 'active' || (int) ($freshTask->schedule_enabled ?? 1) !== 1) {
                 throw new RuntimeException('任务未激活');
             }
@@ -150,7 +150,12 @@ class WorkerExecutionService
                 'loop_count' => DB::raw('COALESCE(loop_count,0)+1'),
                 'updated_at' => now(),
             ];
-            if ($freshTask->next_publish_at === null || ! $freshTask->next_publish_at->greaterThan(now())) {
+            // 自动审批模式（need_review=0）：草稿生成后立即可发布，实现"生成→发布→再生成"自驱循环；
+            // 手动审批模式（need_review=1）：按发布间隔等待管理员审核。
+            $isAutoApproved = (int) ($freshTask->need_review ?? 1) === 0;
+            if ($isAutoApproved) {
+                $taskUpdate['next_publish_at'] = now();
+            } elseif ($freshTask->next_publish_at === null || ! $freshTask->next_publish_at->greaterThan(now())) {
                 $taskUpdate['next_publish_at'] = now()->addSeconds($this->normalizePublishInterval($freshTask));
             }
             Task::query()->whereKey($task->id)->update($taskUpdate);

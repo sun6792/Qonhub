@@ -409,19 +409,18 @@ class JobQueueService
     }
 
     /**
-     * 草稿生成成功后立即串行补投下一轮生成，使“生成草稿”和“按间隔发布”解耦。
+     * 生成或发布完成后立即串行补投下一轮执行，形成”生成→发布→再生成”的自驱链条。
      *
-     * 发布动作不在这里补投：发布节奏由 next_publish_at + geoflow:schedule-tasks 控制。
+     * - generate_draft：生成成功后，若草稿池未满则继续生成，否则检查是否有可发布草稿腾空间。
+     * - publish_draft：发布成功后，草稿池出现空位，立即补投生成任务。
      *
      * @param  array<string,mixed>  $meta
      */
     private function enqueueFollowUpGenerationIfNeeded(int $taskId, array $meta): void
     {
-        if (($meta['action'] ?? '') !== 'generate_draft') {
-            return;
-        }
+        $action = (string) ($meta['action'] ?? '');
 
-        if ((string) config('queue.default') === 'sync') {
+        if (! in_array($action, ['generate_draft', 'publish_draft'], true)) {
             return;
         }
 
@@ -443,13 +442,30 @@ class JobQueueService
             ->where('status', 'draft')
             ->whereNull('deleted_at')
             ->count();
-        if ($draftCount >= $draftLimit) {
+
+        // 草稿池未满：直接投递生成任务。
+        if ($draftCount < $draftLimit) {
+            $this->enqueueTaskJob($taskId, 'generate_article', [
+                'source' => 'follow_up_generation',
+            ]);
+
             return;
         }
 
-        $this->enqueueTaskJob($taskId, 'generate_article', [
-            'source' => 'follow_up_generation',
-        ]);
+        // 草稿池已满：检查是否有可自动发布的草稿（已审批/自动审批），
+        // 有则投递任务让 Worker 先发布腾出空间再生成。
+        $publishableDraftExists = DB::table('articles')
+            ->where('task_id', $taskId)
+            ->where('status', 'draft')
+            ->whereIn('review_status', ['approved', 'auto_approved'])
+            ->whereNull('deleted_at')
+            ->exists();
+
+        if ($publishableDraftExists) {
+            $this->enqueueTaskJob($taskId, 'generate_article', [
+                'source' => 'follow_up_generation_after_publish',
+            ]);
+        }
     }
 
     /**
