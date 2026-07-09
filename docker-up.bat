@@ -8,11 +8,26 @@ echo   使用 .env.docker（不影响本地 .env）
 echo ============================================
 echo.
 
-REM 检查 .env.docker 中的 API Key
-findstr /C:"sk-" .env.docker >nul 2>&1
-if %errorlevel% neq 0 (
-    echo [提示] .env.docker 中未检测到 AI API Key。
-    echo 请编辑 .env.docker，填入你的 DeepSeek API Key 等信息。
+REM 首次使用：从模板创建 .env.docker
+if not exist .env.docker (
+    echo [首次运行] 从 .env.docker.example 创建 .env.docker...
+    copy .env.docker.example .env.docker >nul
+    echo [重要] 请编辑 .env.docker，填入：
+    echo   1. APP_URL（你的域名或IP）
+    echo   2. GEOFLOW_ADMIN_PASSWORD（管理员密码）
+    echo   3. AI API Key（从本地 .env 复制）
+    echo.
+    pause
+    exit /b
+)
+
+REM 检查 .env.docker 中的关键配置
+findstr /C:"APP_URL=https://your-domain.com" .env.docker >nul 2>&1
+if %errorlevel%==0 (
+    echo [错误] 请先编辑 .env.docker，把 APP_URL 改成你的真实域名！
+    pause
+    exit /b
+)
     echo.
 )
 
