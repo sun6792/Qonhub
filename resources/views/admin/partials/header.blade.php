@@ -21,6 +21,7 @@
     $menu = [
         'dashboard' => ['route' => 'admin.dashboard', 'name' => __('admin.nav.dashboard')],
         'analytics' => ['route' => 'admin.analytics', 'name' => __('admin.nav.analytics')],
+        'workspaces' => ['route' => 'admin.workspaces.index', 'name' => '工作空间'],
         'tasks' => ['route' => 'admin.tasks.index', 'name' => __('admin.nav.tasks')],
         'distribution' => ['route' => 'admin.distribution.index', 'name' => __('admin.nav.distribution')],
         'articles' => ['route' => 'admin.articles.index', 'name' => __('admin.nav.articles')],
@@ -33,6 +34,14 @@
     }
     $subMap = [
         'admin.analytics' => 'analytics',
+        'admin.workspaces.index' => 'workspaces',
+        'admin.workspaces.create' => 'workspaces',
+        'admin.workspaces.show' => 'workspaces',
+        'admin.workspaces.edit' => 'workspaces',
+        'admin.operator-monitor.index' => 'workspaces',
+        'admin.operator-monitor.detail' => 'workspaces',
+        'admin.ai-visibility.index' => 'workspaces',
+        'admin.ai-visibility.show' => 'workspaces',
         'admin.system-updates.index' => 'dashboard',
         'admin.system-updates.check' => 'dashboard',
         'admin.system-updates.plan' => 'dashboard',

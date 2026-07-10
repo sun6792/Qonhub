@@ -1,0 +1,36 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Node
+node_modules/
+npm-debug.log*
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Claude Code
+.claude/
+
+# Raw research data
+raw/
+
+# Tool runtime directories
+.playwright-mcp/
+.agents/
+.qwen/
+
+# Local skill registry (machine-specific paths)
+skills-lock.json
+
+# Local TODO (not tracked)
+todo.md

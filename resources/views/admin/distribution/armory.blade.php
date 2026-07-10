@@ -5,6 +5,8 @@
     $templateStats = $templateStats ?? [];
     $articles = $articles ?? collect();
     $search = $search ?? '';
+    $workspaceId = $workspaceId ?? 0;
+    $workspaces = $workspaces ?? collect();
 @endphp
 
 @section('content')
@@ -33,12 +35,18 @@
             @endforeach
         </div>
 
-        {{-- 搜索 --}}
-        <form method="GET" action="{{ route('admin.distribution.armory') }}" class="flex gap-3">
+        {{-- 搜索 + 工作空间过滤 --}}
+        <form method="GET" action="{{ route('admin.distribution.armory') }}" class="flex flex-wrap gap-3">
+            <select name="workspace_id" class="rounded-md border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500" onchange="this.form.submit()">
+                <option value="0">全部客户</option>
+                @foreach ($workspaces as $ws)
+                <option value="{{ $ws->id }}" {{ $workspaceId === (int)$ws->id ? 'selected' : '' }}>{{ $ws->name }}</option>
+                @endforeach
+            </select>
             <input type="text" name="search" value="{{ $search }}" placeholder="搜索已发布文章标题或关键词..."
-                   class="block w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                   class="block flex-1 rounded-md border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500">
             <button type="submit" class="inline-flex items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">搜索</button>
-            @if ($search !== '')
+            @if ($search !== '' || $workspaceId > 0)
                 <a href="{{ route('admin.distribution.armory') }}" class="inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">清除</a>
             @endif
         </form>
@@ -121,8 +129,21 @@
                                     AI 正在改写中...
                                 </div>
                             </div>
-                            {{-- 平台列表 --}}
+                            {{-- 平台链接 --}}
                             <div data-platform-list class="mt-3 flex flex-wrap gap-1.5"></div>
+                            {{-- 分发渠道推送 --}}
+                            <div data-channel-push class="mt-3 hidden border-t border-gray-200 pt-3">
+                                <div class="text-xs font-medium text-gray-600 mb-2">📡 推送到分发渠道：</div>
+                                <div data-channel-checkboxes class="flex flex-wrap gap-2 mb-2"></div>
+                                <div class="flex items-center gap-2">
+                                    <button type="button" data-push-btn
+                                            class="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 transition disabled:opacity-50 disabled:cursor-not-allowed">
+                                        <i data-lucide="send" class="h-3 w-3"></i>
+                                        一键推送
+                                    </button>
+                                    <span data-push-result class="text-xs text-gray-500"></span>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 @endforeach
@@ -143,7 +164,20 @@
 <script>
 (function () {
     const REWRITE_URL = '{{ route('admin.distribution.armory.rewrite') }}';
+    const PUBLISH_URL = '{{ route('admin.distribution.armory.publish') }}';
+    const CHANNELS_URL = '{{ route('admin.distribution.armory.channels') }}';
     const CSRF = '{{ csrf_token() }}';
+    let cachedChannels = null;
+
+    async function loadChannels() {
+        if (cachedChannels) return cachedChannels;
+        try {
+            const resp = await fetch(CHANNELS_URL);
+            const data = await resp.json();
+            cachedChannels = data.ok ? (data.channels || []) : [];
+            return cachedChannels;
+        } catch { return []; }
+    }
 
     function showToast(msg, type = 'success') {
         const el = document.getElementById('toast');
@@ -246,8 +280,59 @@
                 const tpl = @json($templates).find(t => t.key === templateKey);
                 if (tpl && tpl.platforms) {
                     platformList.innerHTML = getPlatformLinks(tpl.platforms);
-                    if (typeof lucide !== 'undefined') lucide.createIcons();
                 }
+
+                // Load and render distribution channel checkboxes
+                const channelPush = panel.querySelector('[data-channel-push]');
+                const channelCheckboxes = panel.querySelector('[data-channel-checkboxes]');
+                const pushBtn = panel.querySelector('[data-push-btn]');
+                const pushResult = panel.querySelector('[data-push-result]');
+                const channels = await loadChannels();
+                if (channels.length > 0 && channelPush && channelCheckboxes) {
+                    channelPush.classList.remove('hidden');
+                    channelCheckboxes.innerHTML = channels.map(c =>
+                        `<label class="inline-flex items-center gap-1 rounded border border-gray-200 bg-white px-2 py-1 text-xs cursor-pointer hover:bg-gray-50">
+                            <input type="checkbox" value="${c.id}" data-channel-checkbox class="rounded border-gray-300">
+                            <span>${c.name}</span>
+                            <span class="text-gray-400">(${c.type})</span>
+                        </label>`
+                    ).join('');
+
+                    // Push button handler
+                    pushBtn.onclick = async function() {
+                        const checked = panel.querySelectorAll('[data-channel-checkbox]:checked');
+                        const selectedIds = Array.from(checked).map(cb => parseInt(cb.value));
+                        if (selectedIds.length === 0) {
+                            showToast('请至少选择一个分发渠道', 'error');
+                            return;
+                        }
+                        pushBtn.disabled = true;
+                        pushResult.textContent = '推送中...';
+                        try {
+                            const resp = await fetch(PUBLISH_URL, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': CSRF },
+                                body: JSON.stringify({
+                                    article_id: parseInt(articleId),
+                                    template_key: templateKey,
+                                    rewritten_title: data.title,
+                                    rewritten_content: data.rewritten,
+                                    channel_ids: selectedIds,
+                                }),
+                            });
+                            const result = await resp.json();
+                            pushResult.textContent = result.summary || '';
+                            showToast(result.ok ? '推送完成' : '推送失败');
+                        } catch (err) {
+                            pushResult.textContent = '网络错误';
+                            showToast('推送请求失败: ' + err.message, 'error');
+                        } finally {
+                            pushBtn.disabled = false;
+                        }
+                    };
+                }
+
+                if (typeof lucide !== 'undefined') lucide.createIcons();
 
             } catch (err) {
                 loading.classList.add('hidden');

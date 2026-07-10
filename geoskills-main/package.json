@@ -1,0 +1,33 @@
+{
+  "name": "geoskills",
+  "version": "1.0.0",
+  "description": "Open-source Agent Skills for Generative Engine Optimization (GEO). Diagnose and improve your website's visibility across AI-powered search engines. Compatible with Claude Code, OpenCode, OpenClaw, Codex CLI, Cursor, and more.",
+  "keywords": [
+    "geo",
+    "seo",
+    "ai-visibility",
+    "agent-skill",
+    "agentskills",
+    "openclaw",
+    "opencode",
+    "claude-code-skill",
+    "generative-engine-optimization",
+    "ai-search",
+    "chatgpt",
+    "perplexity",
+    "gemini",
+    "llm",
+    "llm-optimization",
+    "ai-seo",
+    "structured-data",
+    "ai-citability",
+    "schema-markup"
+  ],
+  "homepage": "https://aivsrank.com",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Cognitic-Labs/geoskills"
+  },
+  "license": "Apache-2.0",
+  "author": "AIvsRank <hello@aivsrank.com>"
+}

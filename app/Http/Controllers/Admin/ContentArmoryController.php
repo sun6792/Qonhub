@@ -3,15 +3,26 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\ProcessArticleDistributionJob;
+use App\Models\Admin;
+use App\Models\ArmoryPublishLog;
 use App\Models\Article;
+use App\Models\ArticleDistribution;
 use App\Models\AiModel;
+use App\Models\DistributionChannel;
+use App\Models\Workspace;
+use App\Services\GeoFlow\WorkspaceService;
+use App\Services\GeoFlow\DistributionPayloadBuilder;
+use App\Services\GeoFlow\DistributionPublisherManager;
 use App\Services\GeoFlow\WorkerExecutionService;
 use App\Support\AdminWeb;
 use App\Support\GeoFlow\ApiKeyCrypto;
+use App\Support\GeoFlow\GeoPlatformRules;
 use App\Support\GeoFlow\OpenAiRuntimeProvider;
 use App\Ai\Agents\MarkdownContentWriterAgent;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 use RuntimeException;
@@ -21,14 +32,17 @@ class ContentArmoryController extends Controller
 {
     public function __construct(
         private readonly ApiKeyCrypto $apiKeyCrypto,
+        private readonly DistributionPayloadBuilder $payloadBuilder,
+        private readonly DistributionPublisherManager $publisherManager,
     ) {}
 
     /**
      * 内容弹药库首页：文章列表 + 模板组 + 对应平台。
      */
-    public function index(Request $request): View
+    public function index(Request $request, WorkspaceService $workspaceService): View
     {
         $search = trim((string) $request->query('search', ''));
+        $workspaceId = max(0, (int) $request->query('workspace_id', 0));
         $perPage = 20;
 
         $articlesQuery = Article::query()
@@ -45,12 +59,26 @@ class ContentArmoryController extends Controller
             });
         }
 
+        // 按工作空间过滤：找到该空间下所有任务 → 过滤文章
+        if ($workspaceId > 0) {
+            $taskIds = $workspaceService->assignedIds($workspaceId, \App\Models\Task::class);
+            $articlesQuery->whereIn('task_id', $taskIds ?: [0]);
+        }
+
         $articles = $articlesQuery->paginate($perPage)->withQueryString();
+
+        /** @var Admin $admin */
+        $admin = Auth::guard('admin')->user();
+        $isSuperAdmin = $admin instanceof Admin && $admin->isSuperAdmin();
+
+        // 工作空间下拉列表
+        $workspaces = $isSuperAdmin
+            ? Workspace::query()->where('status', 'active')->orderBy('name')->get()
+            : $workspaceService->listForOperator((int) $admin->id)->where('status', 'active');
 
         /** @var list<array{key:string, name:string, prompt:string, style:string, platforms:list<array{name:string, login_url:string}>}> */
         $templates = config('media-templates.templates', []);
 
-        // 统计每个模板覆盖的平台数
         $templateStats = [];
         foreach ($templates as $tpl) {
             $templateStats[$tpl['key']] = count($tpl['platforms']);
@@ -64,6 +92,8 @@ class ContentArmoryController extends Controller
             'templates' => $templates,
             'templateStats' => $templateStats,
             'search' => $search,
+            'workspaceId' => $workspaceId,
+            'workspaces' => $workspaces,
         ]);
     }
 
@@ -108,6 +138,154 @@ class ContentArmoryController extends Controller
             'rewritten' => $rewritten,
             'template_name' => $template['name'],
         ]);
+    }
+
+    /**
+     * 弹药库改写内容一键推送到分发渠道。
+     */
+    public function publishToChannels(Request $request): JsonResponse
+    {
+        $payload = $request->validate([
+            'article_id' => ['required', 'integer', 'min:1'],
+            'template_key' => ['required', 'string'],
+            'rewritten_title' => ['required', 'string', 'max:500'],
+            'rewritten_content' => ['required', 'string'],
+            'channel_ids' => ['required', 'array', 'min:1'],
+            'channel_ids.*' => ['required', 'integer', 'min:1'],
+        ]);
+
+        $articleId = (int) $payload['article_id'];
+        $templateKey = (string) $payload['template_key'];
+        $rewrittenTitle = (string) $payload['rewritten_title'];
+        $rewrittenContent = (string) $payload['rewritten_content'];
+        $channelIds = array_map('intval', $payload['channel_ids']);
+
+        /** @var Article|null $article */
+        $article = Article::query()->whereKey($articleId)->first();
+        if (! $article) {
+            return response()->json(['ok' => false, 'error' => '文章不存在'], 404);
+        }
+
+        $adminId = Auth::guard('admin')->id();
+        $results = [];
+
+        foreach ($channelIds as $channelId) {
+            /** @var DistributionChannel|null $channel */
+            $channel = DistributionChannel::query()->whereKey($channelId)->first();
+
+            if (! $channel) {
+                $results[] = ['channel_id' => $channelId, 'ok' => false, 'error' => '渠道不存在'];
+                continue;
+            }
+
+            try {
+                // 构建带有改写内容的载荷
+                $basePayload = $this->payloadBuilder->build($article);
+                $basePayload['article']['title'] = $rewrittenTitle;
+                $basePayload['article']['content'] = $rewrittenContent;
+                $basePayload['article']['content_html'] = $rewrittenContent;
+                $basePayload['armory'] = [
+                    'source' => 'content_armory',
+                    'template_key' => $templateKey,
+                    'original_article_id' => $articleId,
+                ];
+
+                // 创建分发记录
+                $distribution = ArticleDistribution::query()->create([
+                    'article_id' => $articleId,
+                    'distribution_channel_id' => $channelId,
+                    'action' => 'publish',
+                    'status' => 'queued',
+                    'next_retry_at' => now(),
+                ]);
+
+                // 发布日志
+                ArmoryPublishLog::query()->create([
+                    'article_id' => $articleId,
+                    'template_key' => $templateKey,
+                    'channel_id' => $channelId,
+                    'rewritten_title' => $rewrittenTitle,
+                    'rewritten_content' => mb_substr($rewrittenContent, 0, 500),
+                    'status' => 'queued',
+                    'message' => '已入队，等待分发',
+                    'published_by_admin_id' => $adminId,
+                ]);
+
+                // 直接推送（同步尝试）
+                try {
+                    $publisher = $this->publisherManager->forChannel($channel);
+                    $publishResult = $publisher->publish($distribution, $basePayload);
+
+                    $distribution->forceFill([
+                        'status' => 'synced',
+                        'synced_at' => now(),
+                    ])->save();
+
+                    ArmoryPublishLog::query()->where('article_id', $articleId)
+                        ->where('channel_id', $channelId)
+                        ->where('template_key', $templateKey)
+                        ->latest()->first()?->forceFill([
+                            'status' => 'success',
+                            'message' => '推送成功',
+                            'response_meta' => $publishResult,
+                        ])->save();
+
+                    $results[] = [
+                        'channel_id' => $channelId,
+                        'channel_name' => $channel->name,
+                        'ok' => true,
+                        'message' => '推送成功',
+                    ];
+                } catch (Throwable $e) {
+                    // 同步推送失败，入队异步重试
+                    ProcessArticleDistributionJob::dispatch((int) $distribution->id)
+                        ->onQueue('distribution')
+                        ->afterCommit();
+
+                    $results[] = [
+                        'channel_id' => $channelId,
+                        'channel_name' => $channel->name,
+                        'ok' => true,
+                        'message' => '已入队，后台异步推送中',
+                    ];
+                }
+            } catch (Throwable $e) {
+                $results[] = [
+                    'channel_id' => $channelId,
+                    'channel_name' => $channel->name ?? '未知',
+                    'ok' => false,
+                    'error' => $e->getMessage(),
+                ];
+            }
+        }
+
+        $successCount = count(array_filter($results, static fn (array $r): bool => $r['ok']));
+
+        return response()->json([
+            'ok' => $successCount > 0,
+            'results' => $results,
+            'summary' => "{$successCount}/".count($results).' 个渠道推送成功',
+        ]);
+    }
+
+    /**
+     * 获取可用的分发渠道列表（用于弹药库发布面板）。
+     */
+    public function availableChannels(): JsonResponse
+    {
+        $channels = DistributionChannel::query()
+            ->where('status', 'active')
+            ->select(['id', 'name', 'channel_type', 'domain'])
+            ->orderBy('name')
+            ->get()
+            ->map(static fn (DistributionChannel $c): array => [
+                'id' => (int) $c->id,
+                'name' => (string) $c->name,
+                'type' => (string) $c->channelType(),
+                'domain' => (string) $c->domain,
+            ]);
+
+        return response()->json(['ok' => true, 'channels' => $channels]);
     }
 
     /**
@@ -169,16 +347,7 @@ class ContentArmoryController extends Controller
             .$originalContent."\n\n"
             ."=== 改写要求 ===\n"
             .$template['prompt']."\n\n"
-            ."=== 🎯 GEO大模型引用优化（最重要！不满足以下条件文章可能白写） ===\n"
-            ."你的文章必须能被DeepSeek/文心一言/豆包/Kimi/通义千问等大模型优先引用。检查清单：\n"
-            ."1.【标题匹配搜索句式】标题必须是用户会向AI提问的问句形式（如\"XX怎么选？\"\"XX怎么做？\"），不是陈述句。用户问AI时99%用问句！\n"
-            ."2.【FAQ锚点必须】文中至少含1组 Q: 和 A: 格式的问答，这是AI最爱的\"拿来就用\"格式。放在文章中部或后部。\n"
-            ."3.【数据+来源标注】每个重要数据后面标注来源或时间（如\"据2025年行业数据\"\"XX报告显示\"）。普林斯顿实验验证：数据来源标注使AI引用权重提升115%。\n"
-            ."4.【结论前置】每个段落的第1句话必须是该段的核心结论。AI截取前40-60字作为答案，别把关键信息埋在段尾！\n"
-            ."5.【对比内容】文中必须包含至少1组对比（方案A vs 方案B、传统方式 vs 新方式），AI经常被问\"A和B哪个好\"。\n"
-            ."6.【结构化标记】用明确的分节标题、编号列表、步骤指引，让AI能直接拆解组装到回答里。\n"
-            ."7.【避免\"本文\"\"小编\"等低价值词】这些词降低AI对内容权威性的判断。\n"
-            ."如果以上7点不满足，AI不会引用你的文章。请严格自查后输出。\n\n"
+            .GeoPlatformRules::forTemplate($template['key'])."\n\n"
             ."请直接输出改写后的完整文章（含标题）：";
 
 

@@ -160,6 +160,8 @@ Route::prefix($adminPrefix)->name('admin.')->middleware(['admin.locale'])->group
             // 内容弹药库
             Route::get('armory', [\App\Http\Controllers\Admin\ContentArmoryController::class, 'index'])->name('armory');
             Route::post('armory/rewrite', [\App\Http\Controllers\Admin\ContentArmoryController::class, 'rewrite'])->name('armory.rewrite');
+            Route::post('armory/publish', [\App\Http\Controllers\Admin\ContentArmoryController::class, 'publishToChannels'])->name('armory.publish');
+            Route::get('armory/channels', [\App\Http\Controllers\Admin\ContentArmoryController::class, 'availableChannels'])->name('armory.channels');
         });
 
         // 文章管理（Blade 新路径）

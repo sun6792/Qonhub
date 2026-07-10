@@ -65,6 +65,38 @@ return [
             'color' => '#FB7299',
             'description' => '年轻用户为主，适合教程/评测/科普',
         ],
+        [
+            'key' => 'smoothcorp',
+            'name' => '顺企网',
+            'icon' => 'M3 3h18v18H3V3zm2 2v14h14V5H5zm4 2h2v2H9V7zm4 0h2v2h-2V7zm-4 4h2v2H9v-2zm4 0h2v2h-2v-2z',
+            'login_url' => 'https://www.smoothcorp.com/',
+            'color' => '#2563EB',
+            'description' => 'B2B企业黄页，1800万企业收录，适配8个AI平台',
+        ],
+        [
+            'key' => '1688',
+            'name' => '阿里1688',
+            'icon' => 'M3 3h18v18H3V3zm2 2v14h14V5H5zm4 2h2v2H9V7zm4 0h2v2h-2V7zm-4 4h2v2H9v-2zm4 0h2v2h-2v-2z',
+            'login_url' => 'https://www.1688.com/',
+            'color' => '#FF6A00',
+            'description' => '中国最大B2B批发平台，百度搜索权重高',
+        ],
+        [
+            'key' => 'hc360',
+            'name' => '慧聪网',
+            'icon' => 'M3 3h18v18H3V3zm2 2v14h14V5H5zm4 2h2v2H9V7zm4 0h2v2h-2V7zm-4 4h2v2H9v-2zm4 0h2v2h-2v-2z',
+            'login_url' => 'https://www.hc360.com/',
+            'color' => '#DC2626',
+            'description' => '老牌B2B平台，工业品企业信息发布',
+        ],
+        [
+            'key' => 'madeinchina',
+            'name' => '中国制造网',
+            'icon' => 'M3 3h18v18H3V3zm2 2v14h14V5H5zm4 2h2v2H9V7zm4 0h2v2h-2V7zm-4 4h2v2H9v-2zm4 0h2v2h-2v-2z',
+            'login_url' => 'https://www.made-in-china.com/',
+            'color' => '#059669',
+            'description' => '外贸B2B平台，适合出口企业推广',
+        ],
 
         // ===== 按需添加更多平台（复制上面的格式） =====
         // [
