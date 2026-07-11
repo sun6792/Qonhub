@@ -69,6 +69,11 @@ class Workspace extends Model
         return $this->hasMany(AiVisibilitySnapshot::class);
     }
 
+    public function enterpriseProfile(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(EnterpriseProfile::class);
+    }
+
     /**
      * @return MorphToMany
      */

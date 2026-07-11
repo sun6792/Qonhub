@@ -35,6 +35,7 @@ Route::prefix($adminPrefix)->name('admin.')->middleware(['admin.auth', 'admin.ac
         Route::post('{slug}/toggle-platform', [WorkspaceController::class, 'togglePlatformStatus'])->name('toggle-platform');
         Route::post('{slug}/client-user/reset-password', [WorkspaceController::class, 'resetClientPassword'])->name('client-user.reset-password');
         Route::get('{slug}/client-user/{clientUserId}/reveal-password', [WorkspaceController::class, 'revealClientPassword'])->name('client-user.reveal-password')->whereNumber('clientUserId');
+        Route::post('{slug}/client-user/{clientUserId}/delete', [WorkspaceController::class, 'deleteClientUser'])->name('client-user.delete')->whereNumber('clientUserId');
         Route::post('{slug}/delete', [WorkspaceController::class, 'destroy'])->name('delete');
     });
 
@@ -58,6 +59,26 @@ Route::prefix($adminPrefix)->name('admin.')->middleware(['admin.auth', 'admin.ac
         Route::get('/', [OperatorMonitorController::class, 'index'])->name('index');
         Route::get('{adminId}', [OperatorMonitorController::class, 'detail'])->name('detail')->whereNumber('adminId');
     });
+
+    // --- 企业信息锚点管理（B2B GEO 认证） ---
+    Route::prefix('enterprise-anchor')->name('enterprise-anchor.')->group(function (): void {
+        Route::get('/', [\App\Http\Controllers\Admin\EnterpriseAnchorController::class, 'overview'])->name('overview');
+        Route::get('{slug}', [\App\Http\Controllers\Admin\EnterpriseAnchorController::class, 'manage'])->name('manage');
+        Route::post('{slug}/profile', [\App\Http\Controllers\Admin\EnterpriseAnchorController::class, 'saveProfile'])->name('save-profile');
+        Route::post('{slug}/certify', [\App\Http\Controllers\Admin\EnterpriseAnchorController::class, 'markCertified'])->name('mark-certified');
+        Route::post('{slug}/revoke', [\App\Http\Controllers\Admin\EnterpriseAnchorController::class, 'revokeCertification'])->name('revoke-certification');
+        Route::post('{slug}/napw-check', [\App\Http\Controllers\Admin\EnterpriseAnchorController::class, 'checkNapw'])->name('check-napw');
+    });
+
+    // --- 全渠道内容发布运营台 ---
+    Route::prefix('content-publish')->name('content-publish.')->group(function (): void {
+        Route::get('/', [\App\Http\Controllers\Admin\ContentPublishController::class, 'index'])->name('index');
+        Route::post('/store', [\App\Http\Controllers\Admin\ContentPublishController::class, 'store'])->name('store');
+        Route::get('/task/{taskId}', [\App\Http\Controllers\Admin\ContentPublishController::class, 'taskDetail'])->name('task')->whereNumber('taskId');
+        Route::post('/task/{taskId}/retry', [\App\Http\Controllers\Admin\ContentPublishController::class, 'retry'])->name('retry')->whereNumber('taskId');
+        Route::post('/task/{taskId}/cancel', [\App\Http\Controllers\Admin\ContentPublishController::class, 'cancel'])->name('cancel')->whereNumber('taskId');
+        Route::get('/task/{taskId}/progress', [\App\Http\Controllers\Admin\ContentPublishController::class, 'taskProgress'])->name('progress')->whereNumber('taskId');
+    });
 });
 
 }); // 关闭 web 中间件组
@@ -71,6 +92,17 @@ Route::middleware('web')->prefix('client')->name('client.')->group(function (): 
     Route::get('/', [ClientPortalController::class, 'dashboard'])->name('dashboard');
     Route::get('/articles', [ClientPortalController::class, 'articles'])->name('articles');
     Route::get('/ai-visibility', [ClientPortalController::class, 'aiVisibility'])->name('ai-visibility');
+
+    // 客户端一键发布中心
+    Route::prefix('content-publish')->name('content-publish.')->group(function (): void {
+        Route::get('/', [\App\Http\Controllers\Client\ContentPublishController::class, 'index'])->name('index');
+        Route::get('/create', [\App\Http\Controllers\Client\ContentPublishController::class, 'create'])->name('create');
+        Route::post('/store', [\App\Http\Controllers\Client\ContentPublishController::class, 'store'])->name('store');
+        // B2B 企业认证
+        Route::get('/certify', [\App\Http\Controllers\Client\ContentPublishController::class, 'certify'])->name('certify');
+        Route::post('/certify-store', [\App\Http\Controllers\Client\ContentPublishController::class, 'certifyStore'])->name('certify-store');
+        Route::get('/{taskId}', [\App\Http\Controllers\Client\ContentPublishController::class, 'show'])->name('show')->whereNumber('taskId');
+    });
 
     // 兼容旧token链接（已登录客户自动跳转）
     Route::get('{slug}', function (string $slug) {

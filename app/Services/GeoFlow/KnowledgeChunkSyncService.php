@@ -1142,13 +1142,16 @@ class KnowledgeChunkSyncService
     {
         $endpoint = rtrim((string) $embeddingMetadata['api_url'], '/').'/embeddings';
 
+        // 部分服务商（硅基流动等）不接受数组 input，仅接受字符串
+        $input = count($inputs) === 1 ? $inputs[0] : $inputs;
+
         $response = Http::acceptJson()
             ->asJson()
             ->withToken((string) $embeddingMetadata['api_key'])
             ->timeout(45)
             ->post($endpoint, [
                 'model' => (string) $embeddingMetadata['model_name'],
-                'input' => $inputs,
+                'input' => $input,
             ]);
 
         if (! $response->successful()) {

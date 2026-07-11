@@ -116,6 +116,10 @@ class ContentArmoryController extends Controller
             return response()->json(['ok' => false, 'error' => '文章不存在'], 404);
         }
 
+        // GEO 评分：改写前打分
+        $scorer = app(\App\Services\GeoFlow\GeoContentScorer::class);
+        $beforeScore = $scorer->score((string) $article->title, (string) $article->content);
+
         /** @var list<array{key:string, name:string, prompt:string, style:string}> $templates */
         $templates = config('media-templates.templates', []);
         $template = collect($templates)->firstWhere('key', $templateKey);
@@ -132,9 +136,19 @@ class ContentArmoryController extends Controller
             ], 500);
         }
 
+        // GEO 评分：改写后打分 + 对比
+        $afterScore = $scorer->score($article->title, $rewritten);
+
         return response()->json([
             'ok' => true,
             'title' => $article->title,
+            'geo_score' => [
+                'before' => $beforeScore['score'],
+                'after' => $afterScore['score'],
+                'improvement' => $afterScore['score'] - $beforeScore['score'],
+                'grade' => $beforeScore['grade'] . ' → ' . $afterScore['grade'],
+                'suggestions' => $afterScore['suggestions'],
+            ],
             'rewritten' => $rewritten,
             'template_name' => $template['name'],
         ]);
@@ -338,8 +352,25 @@ class ContentArmoryController extends Controller
         // 构建公司/品牌推广上下文
         $companyProfile = $this->buildCompanyProfile($article);
 
-        // 拼接完整 prompt：公司信息 + 原文 + GEO优化指令
+        // 知识库关键数据提取（注入改写 Prompt）
+        $kbContext = '';
+        if ($article->task_id) {
+            $kbs = \App\Models\KnowledgeBase::query()
+                ->whereIn('id', function ($q) use ($article) {
+                    $q->select('knowledge_base_id')->from('task_knowledge_bases')->where('task_id', (int) $article->task_id);
+                })
+                ->get();
+            if ($kbs->isNotEmpty()) {
+                $extractor = app(\App\Services\GeoFlow\KnowledgeKeyExtractor::class);
+                $extracted = $extractor->extract($kbs->first());
+                $kbContext = "\n=== 知识库关键数据（必须融入文章） ===\n"
+                    .$extractor->toPromptContext($extracted, 1500)."\n";
+            }
+        }
+
+        // 拼接完整 prompt：公司信息 + 知识库数据 + 原文 + GEO优化指令
         $systemPrompt = $companyProfile."\n\n"
+            .$kbContext
             ."=== 原始文章（请保留所有关键信息） ===\n"
             ."标题：{$article->title}\n"
             ."关键词：{$article->keywords}\n"
@@ -347,6 +378,12 @@ class ContentArmoryController extends Controller
             .$originalContent."\n\n"
             ."=== 改写要求 ===\n"
             .$template['prompt']."\n\n"
+            ."=== GEO 优化要求（提高 AI 搜索引擎引用率） ===\n"
+            ."1. 优先使用上文「知识库关键数据」中的统计数据、百分比、具体数值\n"
+            ."2. 使用 Q&A 结构（问答形式）提高 AI 引用概率\n"
+            ."3. 删除所有虚词（可能、大概、似乎等），改用确定性表述\n"
+            ."4. 如果有专家引言或权威数据来源，保留并加粗\n"
+            ."5. 使用 H2/H3 小标题 + 列表，让 AI 搜索引擎更容易理解\n\n"
             .GeoPlatformRules::forTemplate($template['key'])."\n\n"
             ."请直接输出改写后的完整文章（含标题）：";
 

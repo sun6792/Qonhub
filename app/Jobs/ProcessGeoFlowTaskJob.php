@@ -32,8 +32,11 @@ class ProcessGeoFlowTaskJob implements ShouldQueue
 
     /**
      * 单次执行超时（秒）。
+     *
+     * AI 写作 Agent HTTP 超时为 120 秒；开启 smart_failover 时最多尝试 3 个模型，
+     * 总耗时约 120×3=360 秒，加上知识库检索、队列延迟等，600 秒能保证不因超时而丢弃任务。
      */
-    public int $timeout = 300;
+    public int $timeout = 600;
 
     public function __construct(
         public readonly int $taskRunId

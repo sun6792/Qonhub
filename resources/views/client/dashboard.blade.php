@@ -19,6 +19,16 @@
         <div class="text-2xl font-bold text-orange-600">{{ $visibilityData['last_checked_at'] }}</div>
         <div class="text-sm text-gray-500 mt-1">AI检测更新</div>
     </div>
+    @if (($publishStats['total_tasks'] ?? 0) > 0)
+    <a href="{{ route('client.content-publish.index') }}" class="bg-white rounded-xl shadow-sm p-5 hover:shadow-md transition-shadow block">
+        <div class="text-2xl font-bold text-teal-600">{{ $publishStats['total_tasks'] }}</div>
+        <div class="text-sm text-gray-500 mt-1">发布任务
+            @if (($publishStats['recent_total'] ?? 0) > 0)
+            <span class="text-xs text-teal-500 ml-1">(近7天 {{ $publishStats['recent_success'] }}/{{ $publishStats['recent_total'] }})</span>
+            @endif
+        </div>
+    </a>
+    @endif
 </div>
 
 <!-- AI可见度总览 -->
@@ -54,6 +64,54 @@
     </div>
     @endif
 </div>
+
+{{-- B2B 信息锚点覆盖（运营团队代操作，客户只看结果） --}}
+@if ($anchorData && $anchorData['certified_count'] > 0)
+<div class="bg-white rounded-xl shadow-sm p-5 mb-6">
+    <div class="flex items-center justify-between mb-4">
+        <h3 class="font-bold text-lg">🏢 品牌信息锚点</h3>
+        <span class="text-xs font-medium px-2 py-1 rounded-full bg-emerald-50 text-emerald-700">
+            覆盖 {{ count($anchorData['llm_coverage']) }} 个大模型
+        </span>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+            <div class="flex items-center justify-between mb-2">
+                <span class="text-sm text-gray-600">B2B 平台认证</span>
+                <span class="text-sm font-bold {{ $anchorData['certified_count'] === $anchorData['total_count'] ? 'text-emerald-600' : 'text-blue-600' }}">
+                    {{ $anchorData['certified_count'] }}/{{ $anchorData['total_count'] }}
+                </span>
+            </div>
+            <div class="bg-gray-200 rounded-full h-2 mb-3">
+                <div class="h-2 rounded-full {{ $anchorData['certified_count'] === $anchorData['total_count'] ? 'bg-emerald-500' : ($anchorData['certified_count'] >= 4 ? 'bg-blue-500' : 'bg-amber-500') }}"
+                     style="width: {{ round($anchorData['certified_count'] / $anchorData['total_count'] * 100) }}%"></div>
+            </div>
+            <div class="flex flex-wrap gap-1.5">
+                @foreach ($anchorData['certified_platforms'] as $name)
+                <span class="inline-flex items-center text-xs bg-emerald-50 text-emerald-700 px-2 py-1 rounded-md">✅ {{ $name }}</span>
+                @endforeach
+            </div>
+            @if ($anchorData['nap_ok'])
+            <p class="text-xs text-gray-400 mt-2">✅ 企业信息一致性校验已通过</p>
+            @endif
+        </div>
+        <div>
+            <div class="text-sm text-gray-600 mb-2">🤖 可被以下大模型引用</div>
+            <div class="space-y-2">
+                @foreach ($anchorData['llm_coverage'] as $llm => $count)
+                <div class="flex items-center justify-between">
+                    <span class="text-sm text-gray-700">{{ $llm }}</span>
+                    <span class="text-xs text-gray-400">{{ $count }} 个信息源</span>
+                </div>
+                @endforeach
+            </div>
+            <p class="text-xs text-gray-400 mt-3">
+                💡 你的品牌已通过 B2B 平台认证，以上大模型在回答用户问题时将优先引用你的企业信息。
+            </p>
+        </div>
+    </div>
+</div>
+@endif
 
 <!-- 最新文章 -->
 <div class="bg-white rounded-xl shadow-sm p-5 mb-6">

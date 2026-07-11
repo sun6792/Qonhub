@@ -89,14 +89,22 @@
                 </div>
             </div>
 
-            {{-- 底部：管理员 + 活动 --}}
+            {{-- 底部：管理员 + 活动 + 操作 --}}
             <div class="flex items-center justify-between border-t border-gray-100 px-5 py-2.5 text-xs text-gray-400">
                 <span>
                     @if ($isSuperAdmin && $ws->owner)
                     {{ $ws->owner->display_name }}
                     @endif
                 </span>
-                <span>{{ $ws->last_activity_at ? $ws->last_activity_at->diffForHumans() : '暂无活动' }}</span>
+                <div class="flex items-center gap-2">
+                    <span>{{ $ws->last_activity_at ? $ws->last_activity_at->diffForHumans() : '暂无活动' }}</span>
+                    @if ($isSuperAdmin)
+                    <form method="POST" action="{{ route('admin.workspaces.delete', $ws->slug) }}" onsubmit="return confirm('确定删除「{{ $ws->name }}」？\n\n该操作不可恢复，将同时删除该空间下的所有文章、客户账号和数据。')" onclick="event.stopPropagation()">
+                        @csrf
+                        <button class="text-red-400 hover:text-red-600 font-medium">删除</button>
+                    </form>
+                    @endif
+                </div>
             </div>
         </a>
         @endforeach

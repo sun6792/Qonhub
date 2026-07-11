@@ -25,7 +25,8 @@ REM 记录日志
 echo [%date% %time%] Worker started (restart #%restart_count%) >> "%PROJECT%\storage\logs\watchdog.log"
 
 REM 运行 Worker，捕获退出码
-"%PHP%" artisan queue:work --queue=geoflow,distribution --sleep=3 --tries=1 --timeout=300
+REM max_execution_time=0 防止 PHP 在队列任务执行期间因超时退出
+"%PHP%" -d max_execution_time=0 artisan queue:work --queue=geoflow,distribution --sleep=3 --tries=1 --timeout=600
 
 set exit_code=%errorlevel%
 

@@ -214,6 +214,7 @@ Route::prefix($adminPrefix)->name('admin.')->middleware(['admin.locale'])->group
             Route::post('{libraryId}/keywords', [KeywordLibraryController::class, 'storeKeyword'])->name('keywords.store');
             Route::post('{libraryId}/keywords/delete', [KeywordLibraryController::class, 'destroyKeywords'])->name('keywords.delete');
             Route::post('{libraryId}/import', [KeywordLibraryController::class, 'importKeywords'])->name('import');
+            Route::post('{libraryId}/ai-generate', [KeywordLibraryController::class, 'aiGenerate'])->name('ai-generate');
             Route::put('{libraryId}/detail', [KeywordLibraryController::class, 'updateFromDetail'])->name('detail.update');
             Route::put('{libraryId}', [KeywordLibraryController::class, 'update'])->name('update');
             Route::post('{libraryId}/delete', [KeywordLibraryController::class, 'destroy'])->name('delete');

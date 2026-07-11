@@ -61,6 +61,42 @@ class ClientPortalController extends Controller
         $platforms = $this->platformAccountService->listForWorkspace((int) $workspace->id);
         $connectionStats = $this->platformAccountService->connectionStats((int) $workspace->id);
 
+        // B2B 信息锚点（只取结果给客户看，不暴露管理细节）
+        $anchorData = null;
+        $profile = $workspace->enterpriseProfile;
+        if ($profile && $profile->company_full_name) {
+            $anchorService = app(\App\Services\GeoFlow\EnterpriseAnchorService::class);
+            $summary = $anchorService->certificationSummary($profile);
+            $coverage = $anchorService->llmCoverageReport($profile);
+            $anchorData = [
+                'certified_count' => $summary['certified'],
+                'total_count' => $summary['total'],
+                'certified_platforms' => $summary['platforms']
+                    ->where('status', 'certified')
+                    ->map(fn($p) => $p['platform_info']['name'])
+                    ->values()
+                    ->all(),
+                'llm_coverage' => $coverage['cited_by_llms'],
+                'nap_ok' => $profile->nap_consistency_checked,
+            ];
+        }
+
+        // 发布统计（最近7天）
+        $publishStats = [
+            'total_tasks' => \App\Models\ContentPublishTask::query()
+                ->where('workspace_id', (int) $workspace->id)
+                ->count(),
+            'recent_success' => \App\Models\ContentPublishResult::query()
+                ->where('workspace_id', (int) $workspace->id)
+                ->where('status', 'success')
+                ->where('created_at', '>=', now()->subDays(7))
+                ->count(),
+            'recent_total' => \App\Models\ContentPublishResult::query()
+                ->where('workspace_id', (int) $workspace->id)
+                ->where('created_at', '>=', now()->subDays(7))
+                ->count(),
+        ];
+
         return view('client.dashboard', [
             'workspace' => $workspace,
             'articles' => $articles,
@@ -70,6 +106,8 @@ class ClientPortalController extends Controller
             'visibilityData' => $visibilityData,
             'platforms' => $platforms,
             'connectionStats' => $connectionStats,
+            'anchorData' => $anchorData,
+            'publishStats' => $publishStats,
         ]);
     }
 

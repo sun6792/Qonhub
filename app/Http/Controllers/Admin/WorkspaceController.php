@@ -64,21 +64,24 @@ class WorkspaceController extends Controller
             'client_email' => ['nullable', 'email', 'max:200'],
             'client_phone' => ['nullable', 'string', 'max:40'],
             'brand_keywords' => ['nullable', 'string'],
-            'owner_admin_id' => ['nullable', 'integer', 'exists:admins,id'],
+            'owner_admin_id' => ['required', 'integer', 'exists:admins,id'],
+            'operator_ids' => ['nullable', 'array'],
+            'operator_ids.*' => ['integer', 'exists:admins,id'],
         ]);
 
         $payload['brand_keywords'] = $this->parseKeywords($payload['brand_keywords'] ?? '');
 
-        /** @var Admin $admin */
-        $admin = Auth::guard('admin')->user();
-        $workspace = $this->workspaceService->create($payload, (int) $admin->id);
+        // 使用表单指定的 owner，而不是当前登录用户
+        $ownerId = (int) $payload['owner_admin_id'];
+        $workspace = $this->workspaceService->create($payload, $ownerId);
 
-        if (! empty($payload['owner_admin_id']) && (int) $payload['owner_admin_id'] !== (int) $admin->id) {
-            $this->workspaceService->assignOperator(
-                (int) $workspace->id,
-                (int) $payload['owner_admin_id'],
-                'operator'
-            );
+        // 把表单选中的其他运营也分配进去（负责人已自动在 create 中分配）
+        $operatorIds = $payload['operator_ids'] ?? [];
+        foreach ($operatorIds as $opId) {
+            $opId = (int) $opId;
+            if ($opId !== $ownerId) {
+                $this->workspaceService->assignOperator((int) $workspace->id, $opId, 'operator');
+            }
         }
 
         return redirect()
@@ -302,6 +305,26 @@ class WorkspaceController extends Controller
             'username' => $client->username,
             'password' => $plainPassword,
         ]);
+    }
+
+    /**
+     * 删除客户登录账号。
+     */
+    public function deleteClientUser(string $slug, int $clientUserId): RedirectResponse
+    {
+        $workspace = Workspace::query()->where('slug', $slug)->firstOrFail();
+
+        $client = ClientUser::query()
+            ->where('workspace_id', (int) $workspace->id)
+            ->whereKey($clientUserId)
+            ->firstOrFail();
+
+        $username = $client->username;
+        $client->delete();
+
+        return redirect()
+            ->route('admin.workspaces.show', $slug)
+            ->with('success', "客户账号 {$username} 已删除");
     }
 
     /**

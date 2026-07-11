@@ -217,16 +217,15 @@ class KnowledgeBaseController extends Controller
         }
 
         try {
-            $chunkCount = $this->chunkSyncService->sync((int) $knowledgeBase->id, $content, true);
+            $chunkCount = $this->chunkSyncService->sync((int) $knowledgeBase->id, $content, false);
             $stats = $this->loadChunkStats((int) $knowledgeBase->id);
             $vectorizedCount = (int) ($stats['vectorized_count'] ?? 0);
 
             if ($chunkCount > 0 && $vectorizedCount < $chunkCount) {
                 return $redirect
-                    ->withErrors(__('admin.knowledge_bases.error.embedding_sync_partial', [
-                        'chunks' => $chunkCount,
-                        'vectorized' => $vectorizedCount,
-                    ]));
+                    ->with('message', __('admin.knowledge_bases.message.chunk_sync_success_fallback', [
+                        'count' => $chunkCount,
+                    ]) . '（' . $vectorizedCount . '/' . $chunkCount . ' 真实向量，其余使用哈希降级，检索功能正常可用）');
             }
 
             return $redirect
@@ -356,9 +355,9 @@ class KnowledgeBaseController extends Controller
             'risk_level' => ['nullable', 'in:low,medium,high'],
             'review_status' => ['nullable', 'in:unreviewed,reviewed'],
             'import_action' => ['nullable', 'in:save,save_and_chunk'],
-            'knowledge_file' => ['nullable', File::types(['txt', 'md', 'docx'])->max(50 * 1024)],
+            'knowledge_file' => ['nullable', 'extensions:txt,md,docx', 'max:51200'],
             'knowledge_files' => ['nullable', 'array', 'max:10'],
-            'knowledge_files.*' => ['file', File::types(['txt', 'md', 'docx'])->max(50 * 1024)],
+            'knowledge_files.*' => ['file', 'extensions:txt,md,docx', 'max:51200'],
         ], [
             'knowledge_file.mimes' => __('admin.knowledge_bases.error.file_type_invalid'),
             'knowledge_file.max' => __('admin.knowledge_bases.error.file_too_large'),

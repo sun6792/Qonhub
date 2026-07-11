@@ -42,6 +42,8 @@
         'admin.operator-monitor.detail' => 'workspaces',
         'admin.ai-visibility.index' => 'workspaces',
         'admin.ai-visibility.show' => 'workspaces',
+        'admin.enterprise-anchor.overview' => 'workspaces',
+        'admin.enterprise-anchor.manage' => 'workspaces',
         'admin.system-updates.index' => 'dashboard',
         'admin.system-updates.check' => 'dashboard',
         'admin.system-updates.plan' => 'dashboard',

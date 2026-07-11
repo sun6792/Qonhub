@@ -16,13 +16,25 @@
                 <input type="text" name="name" class="w-full rounded-lg border-gray-300 px-4 py-2.5 text-sm focus:border-blue-500 focus:ring-blue-500" placeholder="如：空发科技-智能物流" required maxlength="120">
             </div>
             <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">负责人</label>
+                <label class="block text-sm font-medium text-gray-700 mb-1">负责人 <span class="text-red-500">*</span></label>
                 <select name="owner_admin_id" class="w-full rounded-lg border-gray-300 px-4 py-2.5 text-sm focus:border-blue-500 focus:ring-blue-500">
-                    <option value="">暂不指定</option>
+                    <option value="">请选择</option>
                     @foreach ($operators as $op)
-                    <option value="{{ $op->id }}">{{ $op->display_name }} ({{ $op->username }})</option>
+                    <option value="{{ $op->id }}" {{ old('owner_admin_id') == $op->id ? 'selected' : '' }}>{{ $op->display_name }} ({{ $op->username }})</option>
                     @endforeach
                 </select>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">协助运营（可多选）</label>
+                <div class="grid grid-cols-2 gap-1.5 border rounded-lg p-3 max-h-32 overflow-y-auto">
+                    @foreach ($operators as $op)
+                    <label class="flex items-center gap-1.5 text-sm cursor-pointer">
+                        <input type="checkbox" name="operator_ids[]" value="{{ $op->id }}" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                        <span>{{ $op->display_name }}</span>
+                    </label>
+                    @endforeach
+                </div>
+                <p class="text-xs text-gray-400 mt-1">选中的运营也能看到和管理这个客户的工作空间</p>
             </div>
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">描述</label>

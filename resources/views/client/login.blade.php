@@ -14,7 +14,7 @@
         </div>
 
         <div class="bg-white rounded-xl shadow-sm p-8">
-            @if ($errors->any())
+            @if (isset($errors) && $errors->any())
             <div class="bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 mb-4 text-sm">
                 {{ $errors->first() }}
             </div>

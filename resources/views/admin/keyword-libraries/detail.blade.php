@@ -239,6 +239,9 @@
                         <button type="button" onclick="showImportModal()" class="px-4 py-2 border border-blue-200 rounded-md text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100">
                             {{ __('admin.button.import') }}
                         </button>
+                        <button type="button" onclick="showAiModal()" class="px-4 py-2 border border-purple-200 rounded-md text-sm font-medium text-purple-700 bg-purple-50 hover:bg-purple-100">
+                            🤖 AI 生成关键词
+                        </button>
                         <div class="space-x-3">
                             <button type="button" onclick="hideEditModal()" class="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50">
                                 {{ __('admin.button.cancel') }}
@@ -387,6 +390,45 @@
             if (event.target === importModal) {
                 hideImportModal();
             }
+            const aiModal = document.getElementById('ai-modal');
+            if (event.target === aiModal) {
+                hideAiModal();
+            }
         };
+
+        function showAiModal() {
+            document.getElementById('ai-modal').classList.remove('hidden');
+        }
+        function hideAiModal() {
+            document.getElementById('ai-modal').classList.add('hidden');
+        }
     </script>
 @endpush
+
+{{-- AI 生成弹窗 --}}
+<div id="ai-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+    <div class="relative top-20 mx-auto max-w-lg bg-white rounded-lg shadow-xl p-6">
+        <h3 class="text-lg font-medium text-gray-900 mb-4">🤖 AI 生成关键词 <span class="text-purple-600">{{ $library->name }}</span></h3>
+        <form method="POST" action="{{ route('admin.keyword-libraries.ai-generate', ['libraryId' => (int) $library->id]) }}">
+            @csrf
+            <div class="mb-3">
+                <label class="block text-sm font-medium text-gray-700 mb-1">输入主题/行业/产品描述</label>
+                <textarea name="prompt" rows="3" required class="w-full border-gray-300 rounded-md shadow-sm focus:ring-purple-500 focus:border-purple-500 sm:text-sm"
+                    placeholder="如：运动护具、EVA材料、体育用品防护、健身器材配件"></textarea>
+            </div>
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-1">生成数量</label>
+                <select name="count" class="border-gray-300 rounded-md shadow-sm focus:ring-purple-500 focus:border-purple-500 sm:text-sm">
+                    <option value="10">10 个</option>
+                    <option value="20" selected>20 个</option>
+                    <option value="30">30 个</option>
+                    <option value="50">50 个</option>
+                </select>
+            </div>
+            <div class="flex justify-end space-x-3">
+                <button type="button" onclick="hideAiModal()" class="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50">取消</button>
+                <button type="submit" class="px-4 py-2 bg-purple-600 text-white rounded-md text-sm font-medium hover:bg-purple-700">生成</button>
+            </div>
+        </form>
+    </div>
+</div>

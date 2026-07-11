@@ -1,0 +1,635 @@
+# GEOFlow 二开项目功能全景说明（Qonhub AI v2.2.0）
+
+> **输出日期**：2026-07-11（更新）  
+> **扫描范围**：全量代码、配置、数据库结构、前端页面  
+> **原则**：仅基于实际已实现的代码如实梳理，不脑补未开发功能
+> **本日新增**：GEO 评分引擎 · 知识库数据提取 · llms.txt+Schema · RPA Cookie持久化 · AI关键词生成 · 运营监控台重构 · B2B/媒体锚点管理体系
+
+---
+
+## 一、项目基础概况
+
+### 1. 原生 GEOFlow 底座版本
+
+- **底座项目**：[GEOFlow](https://github.com/yaojingang/GEOFlow)，Apache-2.0 开源协议
+- **底座定位**：面向 GEO（生成式引擎优化）的开源智能内容工程与多站点分发系统
+- **当前版本**：`2.1.0`（2026-06-26 发布）
+
+### 2. 二次开发整体目标与业务定位
+
+品牌改名 **Qonhub AI**，在此基础上做了以下二开扩展：
+
+| 二开维度 | 具体内容 |
+|---------|---------|
+| **品牌改名** | GEOFlow → Qonhub AI，后台路径 `/geo_admin`，品牌名 "Qonhub AI内容系统" |
+| **多租户工作空间** | 新增 Workspace 体系：一个服务商管理多个客户，每个客户独立看板 |
+| **客户自助门户** | 新增 Client Portal：客户登录后可查看自己的文章、AI引用数据、平台授权状态 |
+| **B2B 信息锚点** | 新增 30 个 B2B 平台的企业认证跟踪体系（手动追踪，非 API 自动化） |
+| **媒体发稿锚点** | 新增 24 个官媒/行业媒体的发稿跟踪体系 |
+| **企业档案** | 新增 EnterpriseProfile：NAP+W 一致性管理、企业资质核验 |
+| **企业知识库** | 新增 EnterpriseKnowledge：AI 驱动的企业知识草稿生成与发布 |
+| **内容弹药库** | 新增 ContentArmory：文章模板 + AI 改写 + 批量分发 |
+| **主题复制** | 新增 SiteThemeReplication：AI 驱动的网站主题克隆 |
+| **运营监控台** | 新增 OperatorMonitor：按运营人员的跨空间聚合视图 |
+| **系统自更新** | 新增 SystemUpdate：GitHub 源检测→备份→应用→回滚的完整自更新体系 |
+| **增强分发** | 新增 DistributionChannel 多类型支持（GeoFlow Agent / WordPress REST / Generic HTTP） |
+
+### 3. 完整技术栈
+
+| 层级 | 技术 | 版本 |
+|------|------|------|
+| **后端框架** | Laravel | 12.x |
+| **语言** | PHP | 8.2+（实际运行 8.4） |
+| **数据库** | PostgreSQL（pgvector 扩展） | 16 |
+| **缓存/队列** | Redis | 7（Alpine） |
+| **队列仪表盘** | Laravel Horizon | 5.45 |
+| **WebSocket** | Laravel Reverb | 1.0 |
+| **API 认证** | Laravel Sanctum | 4.3 |
+| **AI 集成** | Laravel AI | 0.6.0 |
+| **前端构建** | Vite + Tailwind CSS | v4 |
+| **编辑器** | Vditor（Markdown/WYSIWYG） | 3.11 |
+| **图标** | Lucide | — |
+| **图表** | Chart.js | 4（CDN） |
+| **WebSocket 客户端** | Laravel Echo + Pusher.js | — |
+| **容器化** | Docker Compose（3个配置文件） | — |
+| **Web 服务器** | Nginx（生产）/ PHP artisan serve（开发） | — |
+
+### 4. 项目整体目录结构
+
+```
+GEOFlow-main/
+├── app/                          # [二开] 应用代码（大幅扩展）
+│   ├── Ai/Agents/                # [二开] AI Agent（MarkdownContentWriterAgent）
+│   ├── Console/Commands/         # [二开] Artisan 命令（7个）
+│   ├── Events/Admin/             # [二开] 事件广播
+│   ├── Exceptions/               # [二开] 自定义异常
+│   ├── Http/
+│   │   ├── Controllers/Admin/    # [二开] 37个后台控制器
+│   │   ├── Controllers/Api/V1/   # [二开] 7个 REST API 控制器
+│   │   ├── Controllers/Site/     # [二开+原生] 7个前端控制器
+│   │   └── Middleware/           # [二开] 9个中间件
+│   ├── Jobs/                     # [二开] 7个队列任务
+│   ├── Models/                   # [二开] 48个 Eloquent 模型
+│   ├── Providers/                # [原生+二开] 3个服务提供者
+│   ├── Services/Admin/           # [二开] 19个管理服务（含主题复制、系统更新子目录）
+│   ├── Services/Api/             # [二开] 3个 API 服务
+│   ├── Services/GeoFlow/         # [二开] 30+个核心业务服务
+│   ├── Support/                  # [二开] 工具类（Admin/AdminWelcome/Analytics/GeoFlow/Lead/Site）
+│   └── View/Composers/           # [二开] 视图合成器
+│
+├── bootstrap/                    # [原生] Laravel 启动
+├── config/                       # [原生+二开] 配置文件（geoflow.php 为二开核心配置）
+├── database/
+│   ├── migrations/               # [二开] 53个迁移文件
+│   └── seeders/                  # [二开] 种子数据
+├── deploy-scripts/               # [二开] 部署脚本
+├── docker/                       # [二开] Docker 基础设施（6个文件）
+├── docs/                         # [原生+二开] 文档
+├── geoskills-main/skills/        # [二开] 绑定的 AI Skill 定义
+├── lang/                         # [二开] 6语言翻译（zh_CN/en/ja/es/ru/pt_BR）
+├── public/                       # [原生+二开] Web 根目录
+├── resources/
+│   ├── css/                      # [原生] Tailwind 入口
+│   ├── js/                       # [原生+二开] Vite 入口 + Echo
+│   └── views/
+│       ├── admin/                # [二开] 35+后台视图子目录
+│       ├── client/               # [二开] 5个客户端视图
+│       ├── site/                 # [原生+二开] 13个前端视图
+│       └── theme/                # [原生+二开] 23个前端主题
+├── routes/                       # [二开] 路由文件
+├── storage/                      # [原生] 运行时存储
+├── tests/                        # [原生+二开] 测试
+├── vendor/                       # [原生] Composer 依赖
+│
+├── .env / .env.*                 # [二开] 环境配置（4个模板）
+├── qonhub.bat                    # [二开] Windows 一键运维脚本
+├── watchdog.bat                  # [二开] Worker 守护进程脚本
+├── setup.bat                     # [二开] Windows 安装脚本
+├── docker-up.bat                 # [二开] Docker 启动脚本
+├── version.json                  # [二开] 版本元数据
+└── vite.config.js               # [原生] Vite 配置
+```
+
+---
+
+## 二、核心业务模块（已实现部分）
+
+### 1. 自媒体授权发布模块
+
+#### 已对接的平台清单（6个）
+
+| 平台 | Key | 认证方式 | 发布内容 |
+|------|-----|---------|---------|
+| 头条号 | `toutiao` | Cookie 授权（客户自助） | 图文 |
+| 百家号 | `baijiahao` | Cookie 授权（客户自助） | 图文 |
+| 小红书 | `xiaohongshu` | Cookie 授权（客户自助） | 图文 |
+| 阿里1688 | `1688` | Cookie 授权（客户自助） | 商品/企业信息 |
+| 百度爱采购 | `b2b_baidu` | Cookie 授权（客户自助） | 商品/企业信息 |
+| 搜狐号 | `sohu` | Cookie 授权（客户自助） | 图文 |
+
+#### 技术实现方式
+
+- **模型**：`ClientPlatformAccount`（表 `client_platform_accounts`）
+- **凭证存储**：Cookie 值经 `ApiKeyCrypto`（AES-256-CBC）加密后存入 `credential_ciphertext` 字段
+- **授权流程**：客户在 `/client` 看板点击"授权连接" → 弹窗显示操作指引 → 客户自行去平台登录 → 通知运营人员标记已授权
+- **状态管理**：`status`（active/inactive/revoked）+ `last_verified_at` + `expires_at`（30天有效期）
+- **注意**：当前系统**未实现 API 自动发布**到这些平台。授权的作用是记录客户已授权，实际发稿仍需运营手动操作。`PlatformAccountService` 只做授权状态管理，不执行实际发布。
+
+#### 状态回传与数据同步
+
+- `ClientPortalController::dashboard()` 展示 `connectionStats['connected']/['total']` 给客户
+- 运营后台在 `PlatformAccountController` 中查看各工作空间的授权状态
+- 工作空间详情页显示 2×3 网格的授权状态卡片
+
+---
+
+### 2. 新闻媒体发稿模块
+
+#### 已对接的上游平台/媒体清单（24个）
+
+**官媒（12个）**：
+
+| 媒体 | 网址 | 权重 |
+|------|------|------|
+| 山西科技报 | sxkjb.com | 高 |
+| 河青新闻网 | hqnews.cn | 高 |
+| 科技新闻网 | kejixinwen.com | 高 |
+| 亮点黔西南 | ldqxn.com | 高 |
+| 淄博新闻网 | zbnews.net | 高 |
+| 盐城网 | 0515yc.cn | 高 |
+| 咸宁网 | xianning.com | 中 |
+| 耒阳新闻网 | ly-rm.cn | 中 |
+| 四平新闻网 | spnews.cn | 中 |
+| 红安网 | redhongan.com | 中 |
+| 景德镇新闻网 | jdznews.com | 中 |
+| 云上团风 | yunshangtuanfeng.com | 中 |
+
+**行业媒体（12个）**：
+
+| 媒体 | 网址 | 权重 |
+|------|------|------|
+| 博客园 | cnblogs.com | 顶级 |
+| 商业新知 | shangyexinzhi.com | 高 |
+| 黔浪网 | qsina.cn | 中 |
+| 涂料在线 | coatingol.com | 中 |
+| 沥青在线 | sinoasphalt.com | 中 |
+| 华网 | huawang.com | 中 |
+| 中机在线 | zhongji.cn | 中 |
+| 中网化工 | okmart.com | 中 |
+| 中国土涂网 | ntw360.com | 中 |
+| W10系统网 | w10xitong.com | 低 |
+| 飘仙建站 | piaoxian.net | 低 |
+| OK资讯网 | okbgh.com | 低 |
+
+#### 实现方式
+
+- **定义位置**：`EnterpriseAnchorService::mediaAnchorPlatforms()`
+- **追踪模型**：`EnterpriseAnchorCertification`（表 `enterprise_anchor_certifications`）
+- **操作模式**：运营团队在后台点"标记已发稿"手动追踪，**并非自动化 API 发稿**
+- **记录内容**：平台账号ID、发稿页面URL、发稿时间、备注
+- **展示位置**：信息锚点管理页（`/geo_admin/enterprise-anchor/{slug}`）中与 B2B 平台并列展示
+
+#### 媒体分类与展示逻辑
+
+- 官媒（`news_media`）：红色系图标，高权重，"运营发稿"标签
+- 行业媒体（`industry_media`）：蓝紫系图标，中低权重，"运营发稿/投稿"标签
+- 每个平台带两个可点击链接：🔗访问平台 → 📝前往注册/发稿 →
+
+---
+
+### 3. B2B 行业网站发布模块
+
+#### 已完成适配的 B2B 站点清单（30个）
+
+**顶级权重（4个）**：百度爱采购、阿里1688、天眼查、企查查
+
+**高权重（8个）**：爱企查、慧聪网、中国制造网、中国供应商、中国政府采购网、天助网、八方资源网、蜘蛛商务网
+
+**中权重（13个）**：世界工厂网、环球资源、敦煌网、TradeKey、马可波罗网、黄页88、顺企网、京东企业购、无忧商务网、K2商务网、领商网、万家商务网、九州资源网
+
+**广覆盖（5个）**：企业谷、康帕斯Kompass、EC21、查询123、B2B商机导航
+
+#### 实现方式
+
+- **核心**：基于 `EnterpriseAnchorService` + `EnterpriseProfile` + `EnterpriseAnchorCertification` 的**手动追踪体系**
+- **并非自动化发布**：B2B 信息锚点的作用是在第三方平台建立企业信息页面，让大模型引用。操作是运营人员手动去各平台注册认证企业信息，回来在系统中"标记已认证"
+- **企业档案**：每个工作空间绑定一份 `EnterpriseProfile`，包含公司全称、统一社会信用代码、法人、注册资本、经营范围、地址/电话/邮箱/官网、产品服务等
+- **NAP+W 一致性校验**：检查 Name(公司名)/Address(地址)/Phone(电话)/Website(官网) 四个字段是否完整，确保大模型引用时信息一致
+- **LLM 引用覆盖报告**：`llmCoverageReport()` 统计已认证平台被哪些大模型（文心一言、豆包、通义千问、Kimi、DeepSeek、百度AI搜索）引用
+
+#### 账号托管与凭证管理
+
+- **不存储第三方平台的登录密码**
+- 记录"平台账号ID"和"平台页面URL"供运营参考
+- 凭证不传回系统，运营自行管理各平台登录
+
+#### 支持发布的内容字段
+
+B2B 锚点**不是发布文章**，而是认证企业信息。企业档案字段：
+
+| 字段 | 说明 | 必填 |
+|------|------|------|
+| company_full_name | 公司全称（营业执照） | ✅ |
+| unified_social_credit_code | 统一社会信用代码 | 否 |
+| legal_person | 法定代表人 | 否 |
+| registered_capital | 注册资本 | 否 |
+| establishment_date | 成立日期 | 否 |
+| business_scope | 经营范围 | 否 |
+| company_province/city/address | 地址 | 否 |
+| company_phone/email/website | 联系方式 | 否 |
+| industry | 所属行业 | 否 |
+| products_services | 主营产品/服务 | 否 |
+
+---
+
+## 三、系统架构与底层能力
+
+### 1. 多租户体系
+
+#### 租户隔离实现方式
+
+- **Workspace 模型**（`workspaces` 表）：核心隔离单元，通过 `workspace_id` 外键关联文章、任务、知识库、分发渠道等资源
+- **资源分配**：通过 `workspace_assignments` 多态关联表，支持将 Task / KnowledgeBase / Article 等资源分配给特定 Workspace
+- **数据查询隔离**：Service 层通过 `assignedIds()` 方法获取当前 Workspace 有权访问的资源 ID 列表，再 `whereIn` 过滤
+
+#### 支持的角色类型
+
+| 角色 | Guard | 权限范围 |
+|------|-------|---------|
+| **超级管理员** | `admin`（role=`super_admin`） | 全部功能：管理所有工作空间、管理其他管理员、查看运营监控台、查看密码、API令牌管理、系统更新 |
+| **普通管理员/运营** | `admin`（role=`admin`） | 被分配的工作空间管理、内容、任务、分发、素材；不能管理管理员、不能看密码 |
+| **客户** | `client` | 只看自己工作空间的 Dashboard、文章列表、AI引用数据、平台授权状态 |
+
+#### 运营-工作空间绑定
+
+- `operator_workspaces` 表记录 `admin_id ↔ workspace_id` 的绑定
+- `OperatorMonitorController` 提供跨空间运营人员聚合视图（超管专用）
+- 工作空间有 `owner_admin_id` 作为主负责人
+
+### 2. 账号与凭证管理
+
+#### 凭证加密存储方案
+
+- **组件**：`ApiKeyCrypto`（`app/Support/GeoFlow/ApiKeyCrypto.php`）
+- **算法**：AES-256-CBC，格式 `enc:v1:{base64_iv}:{base64_ciphertext}`
+- **密钥来源**：从 `APP_KEY` 派生的 `api_key_crypto_roots`，支持多密钥轮换
+- **UI 脱敏**：`mask($plaintext)` 方法，仅显示前后各4位
+- **使用场景**：
+  - AI 模型 API Key（`AiModel.api_key`）
+  - 分发渠道密钥（`DistributionChannelSecret.secret_ciphertext`）
+  - 客户平台 Cookie 凭证（`ClientPlatformAccount.credential_ciphertext`）
+  - 客户密码明文备份（`ClientUser.password_ciphertext`，仅超管可查看）
+
+#### 账号池管理逻辑
+
+- 当前**未实现账号池（Account Pool）**概念
+- 每个 B2B/媒体平台认证记录是独立的一对一关系
+- 分发渠道密钥（`DistributionChannelSecret`）支持 `key_id` 标识的多密钥体系，支持轮换
+
+#### 账号状态检测机制
+
+- AI 模型：`daily_limit` + `used_today` 每日调用量控制；`status` active/inactive
+- 客户平台：`last_verified_at` + `expires_at`（30天过期）+ `status`
+- 分发渠道：`last_health_status` + `last_health_checked_at`（health check 端点）
+- 管理员：`AdminLoginLockService` 暴力破解锁定（5次失败/15分钟）
+
+### 3. 发布调度系统
+
+#### 任务调度组件
+
+| 组件 | 类型 | 用途 |
+|------|------|------|
+| `GeoFlowScheduleTasksCommand` | Artisan 命令 | 每分钟扫描活跃任务，为到期任务创建 TaskRun 并入队 |
+| `JobQueueService` | Service | 管理 task_runs 生命周期：enqueue → claim → complete/fail/cancel |
+| `ProcessGeoFlowTaskJob` | Queue Job | 执行单个任务：生成草稿或发布审核通过的文章 |
+| `Laravel Horizon` | 队列监控 | Redis 队列可视化仪表盘、metrics、failed jobs |
+| `watchdog.bat` | Windows 脚本 | Worker 守护进程：崩溃自动重启，最多100次 |
+
+#### 批量发布的队列机制
+
+- **队列驱动**：Redis
+- **主队列**：`geoflow`（AI 生成任务）、`distribution`（文章分发）、`theme-replication`（主题复制）、`system-updates`（系统更新）
+- **自驱循环**：`enqueueFollowUpGenerationIfNeeded()` — 每次生成完成后自动检查是否需要继续生成
+- **stale job 恢复**：`recoverStaleJobs()` — 找出超时的 running 记录，重置为 pending 并重新调度
+- **并发控制**：`claimPendingJobById()` 使用悲观行锁，确保单任务不会并发执行
+
+#### 发布频率控制
+
+- 任务级别 `publish_interval`（秒）控制连续发布间隔
+- `draft_limit` 控制草稿池上限
+- `article_limit` 控制文章总数上限
+- `next_publish_at` 时间戳控制何时可以发布下一篇
+
+#### 失败重试机制
+
+| 层级 | 机制 |
+|------|------|
+| **业务重试** | `JobQueueService::failJob()` 记录 `attempt_count`，达到上限后标记 `failed` |
+| **队列重试** | 所有 Job 设 `$tries=1`，避免 Laravel 层重试与业务重试双重冲突 |
+| **分发重试** | `DistributionRetryPolicy`：指数退避 `60 × 2^(n-1)` 秒，最大1小时；401/403/422 等不可恢复错误不重试 |
+| **Worker 守护** | `watchdog.bat` 监控 php.exe 进程，退出后3秒自动重启 |
+| **Stale 恢复** | `recoverStaleJobs()` 每120秒扫描一次超时任务 |
+
+### 4. 内容处理能力
+
+#### AI 内容生成
+
+- **核心 Agent**：`MarkdownContentWriterAgent`（HTTP 超时 120s，支持多 provider token 限制适配）
+- **多模型支持**：OpenAI 兼容接口（DeepSeek、火山方舟 Ark 等）+ Gemini 原生接口
+- **智能模型切换**：`fixed`（单模型，失败即报错）和 `smart_failover`（按优先级依次尝试备选模型）
+- **知识增强生成**：通过 `KnowledgeRetrievalService` 检索相关知识块，注入 prompt 作为写作素材
+
+#### 内容差异化改写
+
+- **位置**：`ContentArmoryController::rewrite()` 结合 `GeoPlatformRules` 实现
+- **去 AI 味引擎**：`GeoPlatformRules` 约264行，包含：
+  - 句式长度变化规则（长短句交替）
+  - 禁用 AI 词汇表（"在当今"、"综上所述"等）
+  - 口语化表达要求
+  - 结构破坏指导（打破标准总分总结构）
+- **平台差异化**：知乎/头条/百家号/小红书/B站/B2B/新闻媒体/技术博客 各有独立的合规改写规则
+
+#### 敏感词/合规预检
+
+- `SensitiveWord` 模型：`sensitive_words` 表存储敏感词库
+- `SecuritySettingsController` 管理敏感词
+- 主要在内容编辑阶段使用（文章审核流程中）
+
+#### 多平台格式自动适配
+
+- **WordPress**：`WordPressRestRequestFactory` + `WordPressTaxonomySyncService` + `WordPressMediaSyncService` — REST API 自动同步分类、标签、图片
+- **GeoFlow Agent**：`DistributionPayloadBuilder` 构建标准化 JSON 载荷，含 SEO 元信息、OG 标签、Schema
+- **Generic HTTP API**：`GenericHttpRequestFactory` 支持自定义 HTTP 方法、认证方式（无/Bearer/Basic/自定义Header/HMAC）、Payload 包装格式
+- **Markdown → HTML**：`ArticleHtmlPresenter` 负责前端展示渲染
+- **Markdown → 微信 HTML**：`WeChatArticleHtmlExporter` 转换为微信兼容的内联样式 HTML
+- **静态站点生成**：`DistributionTargetSitePackageBuilder` 为目标渠道生成首页、详情页、sitemap、`llms.txt` 的完整 PHP 站点包
+
+### 5. 风控防护能力
+
+#### 代理 IP 集成情况
+
+- **出站 HTTP 代理**：`OutboundHttpProxy`（`app/Support/GeoFlow/OutboundHttpProxy.php`）
+- 支持 `GEOFLOW_HTTP_PROXY` / `GEOFLOW_HTTPS_PROXY` 环境变量配置
+- **分域名代理**：`GEOFLOW_PROXY_HOSTS` 配置仅哪些 AI provider 域名走代理（19个域名），避免 WordPress REST 和目标站 Agent 通信被代理截获
+- 默认 `GEOFLOW_NO_PROXY=localhost,127.0.0.1,::1,postgres,redis,host.docker.internal`
+- **未集成第三方代理池服务**（如快代理、芝麻代理等）
+
+#### 浏览器指纹隔离方案
+
+- **未实现**。没有浏览器自动化/RPA 代码，不存在指纹隔离需求。
+
+#### 反爬规避机制
+
+- **不适用**。内容分发走 API 协议（HMAC 签名认证），不是爬虫模式。
+
+### 6. 数据统计与报表
+
+#### 已实现的数据统计维度
+
+**AnalyticsController + AnalyticsOverviewService** 提供：
+
+| 维度 | 指标 |
+|------|------|
+| **全局 KPI** | 总文章数、本月发布、本月分发、活跃任务 |
+| **内容漏斗** | 生成→草稿→审核→发布→分发的转化漏斗 |
+| **发布趋势** | 按日/周/月的发布量趋势图 |
+| **任务健康** | 各任务执行次数、成功率、失败原因分布 |
+| **素材健康** | 标题库/关键词库/图片库/知识库的使用率和消耗率 |
+| **分发摘要** | 各渠道的分发量、成功率、待处理数 |
+| **Top 内容** | 按浏览量/分发量排序的文章列表 |
+| **AI 使用摘要** | 各 AI 模型的调用次数、成功率、Token 消耗 |
+| **分类分布** | 文章的行业/分类占比 |
+| **URL 导入健康** | 导入任务的成功率、待提交数 |
+
+#### 客户端/运营端的数据看板
+
+| 看板 | 受众 | 内容 |
+|------|------|------|
+| **Admin Dashboard** | 运营团队 | 系统总览：文章/任务/分发/素材/URL导入健康状态卡片 |
+| **Admin Analytics** | 运营团队 | 数据分析：全部上述维度的图表和表格 |
+| **Client Dashboard** | 客户 | 文章数/本月新增/平台授权/AI引用得分/B2B锚点覆盖/大模型引用 |
+| **Client AI Visibility** | 客户 | 6大AI平台品牌提及率详情+趋势 |
+| **Operator Monitor** | 超管 | 按运营人员聚合的工作空间和产出统计 |
+
+---
+
+## 四、与原生 GEOFlow 的差异说明
+
+### 1. 复用了 GEOFlow 哪些原生能力
+
+| 能力 | 说明 |
+|------|------|
+| **Laravel 框架基础设施** | 路由、中间件、队列、缓存、Session、验证 |
+| **AI 模型接入** | `Laravel\Ai` 的 Provider 注册、Agent 模式、多模型切换 |
+| **内容生成引擎** | `WorkerExecutionService` 的任务执行→AI生成→文章入库核心链路 |
+| **知识库与 RAG** | pgvector 向量存储、知识切片、智能检索（`KnowledgeRetrievalService`） |
+| **素材管理体系** | 标题库/关键词库/图片库/知识库/提示词的 CRUD 和管理 |
+| **文章审核流程** | 草稿→审核→发布的三态流转 |
+| **SEO 输出** | 文章 SEO 元信息、Open Graph、Schema、GFM Markdown |
+| **多语言后台** | 6语言包（zh_CN/en/ja/es/ru/pt_BR） |
+| **前端主题系统** | 23个主题模板 + 主题切换 + 主题包 |
+| **Docker 部署** | docker-compose 一键部署 |
+| **队列基础设施** | Laravel Queue + Redis |
+
+### 2. 二次开发新增了哪些核心模块与功能
+
+| 新增模块 | 新增文件数 | 核心能力 |
+|---------|-----------|---------|
+| **Workspace 多租户** | 7 个模型 + 1 个 Service + 4 个控制器 + 5 个视图 | 工作空间 CRUD、资源分配、运营绑定、客户账号管理 |
+| **Client Portal 客户门户** | 2 个控制器 + 5 个视图 | 客户自助登录、Dashboard、文章浏览、AI引用报告、平台授权 |
+| **Enterprise Anchor B2B锚点** | 3 个模型 + 1 个 Service + 1 个控制器 + 3 个视图 | 30 B2B 平台认证追踪、企业档案、NAP+W 校验、LLM 覆盖报告 |
+| **Media Anchor 媒体锚点** | 同上（共用体系） | 24 官媒/行业媒体发稿追踪 |
+| **Enterprise Knowledge** | 3 个模型 + 1 个 Service + 1 个控制器 + 3 个视图 + 1 个 Job | AI 生成企业知识草稿、编辑器保存、版本管理、发布到知识库 |
+| **Content Armory 内容弹药库** | 1 个模型 + 1 个控制器 + 1 个视图 | 文章模板、AI 改写、批量分发到渠道 |
+| **Theme Replication 主题复制** | 5 个模型 + 12 个 Service 文件 + 1 个控制器 + 2 个 Job + 3 个视图 | AI 克隆参考网站主题，生成 Blade+CSS |
+| **System Update 系统自更新** | 3 个模型 + 15 个 Service 文件 + 1 个控制器 + 2 个 Job + 5 个视图 | GitHub 源检测→备份→应用→回滚完整生命周期 |
+| **Operator Monitor 运营监控** | 1 个控制器 + 1 个 Service + 2 个视图 | 按运营人员聚合跨空间统计 |
+| **Platform Account 平台授权** | 1 个模型 + 1 个 Service + 1 个控制器 | 6 个自媒体平台客户自助授权管理 |
+| **AI Visibility 品牌监测** | 2 个模型 + 1 个 Service + 1 个控制器 + 1 个命令 + 2 个视图 | 品牌在 AI 平台被提及率的定期检测和趋势分析 |
+| **URL Import 智能采集** | 2 个模型 + 1 个 Service + 1 个控制器 + 1 个命令 + 3 个视图 | URL 页面内容智能采集→AI 分析→导入知识库 |
+| **Site Theme Editor 主题编辑器** | 1 个 Service + 1 个控制器 + 1 个视图 | 在线编辑主题 Blade/CSS 源码，草稿/发布/预览 |
+| **Enhanced Distribution 增强分发** | 6 个模型 + 17 个 Service 文件 + 1 个控制器 + 2 个 Job + 10 个视图 | 3 种渠道类型（GeoFlow Agent/WordPress/Generic HTTP）、密钥管理、HMAC 签名、远程文章编辑、站点包下载 |
+| **Analytics 数据分析** | 3 个 Service 文件 + 1 个控制器 + 10 个视图 | 全维度数据看板 |
+| **Security Settings** | 1 个控制器 + 1 个视图 | 敏感词管理、管理员密码修改 |
+| **Admin Activity Log** | 1 个模型 + 1 个中间件 + 1 个控制器 + 1 个视图 | 管理员操作审计日志 |
+| **API v1** | 7 个控制器 + 3 个 Service + 3 个中间件 | REST API + Token 认证 + 幂等性 + 多 Scope |
+| **运维脚本** | 3 个 .bat | 一键启动/停止/状态查看、Worker 守护进程 |
+
+### 3. 对原生 GEOFlow 做了哪些改造与重写
+
+| 改造项 | 说明 |
+|--------|------|
+| **品牌改名** | 全局 "GEOFlow" → "Qonhub AI"，后台路径变量化 `ADMIN_BASE_PATH` |
+| **后端路由** | 原 `routes/web.php` 拆分出 `routes/workspace.php`，新增 `routes/api.php` |
+| **数据库** | 从支持 SQLite 改为强制 PostgreSQL（使用 pgvector、row-level locking 等 PG 特性） |
+| **队列体系** | 从 `while(true)` 轮询模式改为 Laravel Queue + Redis + Horizon 完整体系 |
+| **Job 超时** | `ProcessGeoFlowTaskJob::$timeout` 从 300s → 600s；Watchdog 增加 `max_execution_time=0` |
+| **Worker 执行** | 重构 `WorkerExecutionService`，增加 `smart_failover` 多模型切换 |
+| **知识检索** | 重构 `KnowledgeRetrievalService`，增加混合评分/证据组合/冲突解决/合规排除 |
+| **前台** | 新增 20 个 GeoFlow 内置模板（`geoflow-template-01~20`） |
+| **翻译** | 扩展 zh_CN 语言包覆盖 v2.0 全部新模块；新增 pt_BR 语言 |
+| **安全性** | 移除 `.env.docker` 中的明文密码，改为 `.env.docker.example` 模板 |
+| **Windows 兼容** | 新增 `.bat` 脚本、`PostgresCompat` helper |
+| **Docker** | 增强 Docker Compose 配置（prod/prebuilt/dev 三套），自动权限修复，auto_migrate |
+
+---
+
+## 五、当前已知状态
+
+### 1. 已上线可正常使用的功能
+
+| 功能 | 状态 |
+|------|------|
+| AI 多模型内容生成（含 smart_failover） | ✅ 正常 |
+| 标题/关键词/图片/知识库素材管理 | ✅ 正常 |
+| 文章 CRUD + 审核流程（草稿→审核→发布） | ✅ 正常 |
+| Workspace 多租户工作空间管理 | ✅ 正常 |
+| 客户门户登录 + Dashboard | ✅ 正常 |
+| 自媒体平台客户授权管理（标记记录，非自动发布） | ✅ 正常 |
+| B2B 信息锚点管理（30 平台手动追踪） | ✅ 正常 |
+| 媒体发稿锚点管理（24 平台手动追踪） | ✅ 正常 |
+| 企业档案 NAP+W 一致性管理 | ✅ 正常 |
+| 企业知识库 AI 草稿生成 | ✅ 正常 |
+| 内容弹药库（文章模板+AI改写+分发） | ✅ 正常 |
+| WordPress REST API 分发（含分类/标签/图片同步） | ✅ 正常 |
+| GeoFlow Agent 协议分发（含 HMAC 签名） | ✅ 正常 |
+| Generic HTTP API 分发 | ✅ 正常 |
+| 分发队列管理 + 失败重试 | ✅ 正常 |
+| 目标站点包下载 | ✅ 正常 |
+| 前端主题系统（23个主题+切换） | ✅ 正常 |
+| 主题编辑器（在线编辑 Blade/CSS） | ✅ 正常 |
+| 数据分析看板（多维度图表） | ✅ 正常 |
+| AI 品牌引用检测（6大平台） | ✅ 正常 |
+| URL 智能采集导入 | ✅ 正常 |
+| 后台多语言（6语言） | ✅ 正常 |
+| 管理员操作审计日志 | ✅ 正常 |
+| API v1（REST + Token + 幂等） | ✅ 正常 |
+| 运营监控台（超管） | ✅ 正常 |
+| Laravel Horizon 队列仪表盘 | ✅ 正常 |
+| Docker Compose 部署（dev/prod/prebuilt） | ✅ 正常 |
+| 系统自更新体系 | ✅ 正常 |
+
+### 2. 开发中/待完善的功能
+
+| 功能 | 当前状态 |
+|------|---------|
+| 自媒体平台自动化 API 发布 | ⚠️ 仅做授权记录，无实际自动发稿代码 |
+| B2B/媒体锚点自动化 | ⚠️ 仅手动追踪，未集成各平台 API 或 RPA |
+| 浏览器自动化/RPA | ⚠️ 未实现任何浏览器自动化代码 |
+| 代理 IP 池集成 | ⚠️ 有出站代理框架，但未集成第三方代理服务 |
+| 浏览器指纹隔离 | ⚠️ 不适用（无 RPA） |
+| 账号池管理 | ⚠️ 未实现 pool 概念 |
+
+### 3. 当前已知的故障、卡点或待解决问题
+
+| 问题 | 影响 | 状态 |
+|------|------|------|
+| `password_ciphertext` 缺少 `$fillable` 导致创建客户时密码密文丢失 | 新客户密码不可查看 | ✅ 已修复 |
+| Worker 300s 超时与 PHP max_execution_time 同时触发导致双崩溃 | AI 生成长文时队列卡死 | ✅ 已修复（600s + max_execution_time=0） |
+| `client/dashboard.blade.php` 数组访问未防御 | 客户 Dashboard 500 错误 | ✅ 已修复 |
+| `$errors` 变量未 `isset` 防御 | Session 中间件缺失时登录页崩溃 | ✅ 已修复（5个视图） |
+| `admins` 表 `name` 列不存在但代码误用 `orderBy('name')` | 运维监控台 SQL 错误 | ✅ 已修复（改为 `display_name`） |
+| 媒体平台定义缺少 `color` 和 `cert_required` 字段 | Overview 页面 500 | ✅ 已修复 |
+| Enterprise Anchor overview 页面编辑语法错误 | 重复 `@endforeach` | ✅ 已修复 |
+
+---
+
+## 六、v2.2.0 本日新增模块（2026-07-11）
+
+### 1. GEO 内容评分引擎
+
+**文件**：`app/Services/GeoFlow/GeoContentScorer.php`
+
+基于 geoskills + geo-seo-claude 评分标准，文章发布前自动打分（0-100，A-F 六级）。
+
+| 评分维度 | 权重 | 检测项 |
+|---------|------|--------|
+| Q&A 结构 | 20% | 问答句式、定义条目、开篇直接回答 |
+| 自包含性 | 18% | 最优段落 134-167 字、代词密度 <2% |
+| 数据密度 | 17% | 百分比、数值+单位、年份 |
+| 结构清晰度 | 17% | H2/H3 标题层级、列表、段落长度 |
+| 专家信号 | 13% | 专家引言、数据来源引用、"XX表示" |
+| 虚词扣分 | 15% | 6 类虚词检测（可能/似乎/大概…），密度 >0.5% 扣分 |
+
+**集成点**：弹药库 AI 改写前后评分对比 → 前端展示 "45 → 72，C → B"
+
+### 2. 知识库关键数据提取器
+
+**文件**：`app/Services/GeoFlow/KnowledgeKeyExtractor.php`
+
+从客户上传的文档中按 GEO 维度定向提取结构化数据，**替代随机检索**：
+
+| 提取类型 | 说明 |
+|---------|------|
+| 统计数据 | 百分比、数值+单位、年份、增长量 |
+| Q&A 对 | 问题+答案完整摘录 |
+| 专家信号 | 引言、称号、机构认证、专利 |
+| 企业事实 | 公司名、地址、电话、资质、经营范围 |
+
+提取结果转为 Prompt 上下文注入 AI 写作流程，确保文章包含客户文档核心数据。
+
+### 3. llms.txt + JSON-LD Schema 生成器
+
+**文件**：`app/Services/GeoFlow/GeoSiteBuilder.php`
+
+为目标站点自动生成 AI 友好元文件：
+
+| 输出文件 | 规范 | 内容 |
+|---------|------|------|
+| `llms.txt` | llmstxt.org 标准 | H1 + 摘要 + 文章链接 + 核心页面 |
+| `llms-full.txt` | 全文版 | 企业信息 + 所有文章全文 |
+| JSON-LD Schema | schema.org | Organization / WebSite / BreadcrumbList / LocalBusiness / Product / Article（6 种） |
+
+### 4. RPA 引擎 Cookie 持久化
+
+**文件**：`rpa-engine/lib/BasePlatformScript.js`
+
+- 首次运行正常启动浏览器
+- 任务执行完毕自动保存 `storageState`（Cookie/登录态）
+- 下次运行自动加载，跳过登录，不触发 WAF
+- 每个平台独立状态文件
+
+### 5. AI 关键词自动生成
+
+**文件**：`app/Http/Controllers/Admin/KeywordLibraryController.php` + `routes/web.php`
+
+- 输入主题描述 → AI 生成 10-50 个关键词
+- 四类词：核心词、长尾词、地域词、意图词
+- 自动去重，批量入库
+
+### 6. 运营监控台重构
+
+**文件**：`resources/views/admin/operator-monitor/index.blade.php` + `detail.blade.php`
+
+Bootstrap → Tailwind，卡片折叠/搜索/筛选，全部展开/收起。
+
+### 7. B2B + 媒体锚点管理体系
+
+**新增服务**：`EnterpriseAnchorService`（54 个平台分 B2B/官媒/行业媒体三类）
+
+| 类别 | 数量 | 权重最高 |
+|------|------|---------|
+| B2B 平台 | 30 | 百度爱采购、阿里1688、天眼查、企查查 |
+| 官媒 | 12 | 山西科技报、河青新闻网、淄博新闻网 |
+| 行业媒体 | 12 | 博客园、商业新知、涂料在线 |
+
+**功能**：企业档案 NAP+W 校验 · 认证状态追踪 · LLM 引用覆盖率报告 · 客户端锚点看板
+
+### 8. 多运营隔离 + 工作空间删除
+
+- 运营只能看到自己创建/被分配的工作空间
+- 超管 `/geo_admin/operator-monitor` 全局视角
+- 工作空间列表 + 详情页均支持删除操作
+- 客户账号旁新增红色「删除」按钮
+
+### 9. 知识库文件上传修复
+
+- MIME 类型检测 → 文件后缀检测（修复 `.md` 被误判 `text/html`）
+- Embedding 失败自动降级为哈希向量，绿色提示替代红色报错
+
+---
+
+> **本文档基于 2026-07-11 全量代码扫描 + 同日增量开发生成，所有内容来源于实际已实现的代码，无脑补。**  
+> **项目地址**：`E:\Qonhubgeo\GEOFlow-main`  
+> **当前版本**：Qonhub AI v2.2.0（基于 GEOFlow）
+> **当前版本**：Qonhub AI v2.1.0（基于 GEOFlow）

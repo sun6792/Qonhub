@@ -413,6 +413,32 @@
             </div>
         </div>
 
+        {{-- 运营每日快捷入口 --}}
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
+            <a href="{{ route('admin.workspaces.create') }}" class="rounded-xl border border-indigo-200 bg-indigo-50/50 p-4 hover:bg-indigo-50 transition-colors group">
+                <div class="text-2xl mb-1">🏢</div>
+                <div class="text-sm font-semibold text-indigo-700 group-hover:text-indigo-800">创建客户空间</div>
+                <div class="text-xs text-indigo-400 mt-0.5">新建工作空间，录入客户信息</div>
+            </a>
+            <a href="{{ route('admin.enterprise-anchor.overview') }}" class="rounded-xl border border-emerald-200 bg-emerald-50/50 p-4 hover:bg-emerald-50 transition-colors group">
+                <div class="text-2xl mb-1">📡</div>
+                <div class="text-sm font-semibold text-emerald-700 group-hover:text-emerald-800">信息锚点总览</div>
+                <div class="text-xs text-emerald-400 mt-0.5">B2B认证 + 媒体发稿管理</div>
+            </a>
+            <a href="{{ route('admin.tasks.create') }}" class="rounded-xl border border-blue-200 bg-blue-50/50 p-4 hover:bg-blue-50 transition-colors group">
+                <div class="text-2xl mb-1">⚙️</div>
+                <div class="text-sm font-semibold text-blue-700 group-hover:text-blue-800">创建AI任务</div>
+                <div class="text-xs text-blue-400 mt-0.5">设置自动文章生成计划</div>
+            </a>
+            <a href="{{ route('admin.content-publish.index') }}" class="rounded-xl border border-purple-200 bg-purple-50/50 p-4 hover:bg-purple-50 transition-colors group">
+                <div class="text-2xl mb-1">🚀</div>
+                <div class="text-sm font-semibold text-purple-700 group-hover:text-purple-800">全渠道分发台</div>
+                <div class="text-xs text-purple-400 mt-0.5">一键发布到所有平台</div>
+            </a>
+        </div>
+
+        </div>
+
         <section class="mb-8 overflow-hidden rounded-lg bg-white shadow-sm ring-1 ring-gray-200">
             <div class="flex flex-col gap-4 border-b border-gray-100 px-6 py-5 lg:flex-row lg:items-start lg:justify-between">
                 <div>

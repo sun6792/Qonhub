@@ -137,5 +137,22 @@ services:
         condition: service_completed_successfully
     restart: unless-stopped
 
+  # ── RPA 浏览器自动化引擎（Node.js Playwright） ──
+  rpa-engine:
+    build:
+      context: ./rpa-engine
+      dockerfile: Dockerfile
+    container_name: qonhub-rpa-engine
+    environment:
+      - RPA_PORT=9901
+      - RPA_API_KEY=${RPA_ENGINE_API_KEY:-qonhub-rpa-secret-change-me}
+      - RPA_HEADLESS=${RPA_HEADLESS:-true}
+    ports:
+      - "127.0.0.1:${RPA_EXPOSE_PORT:-9901}:9901"
+    volumes:
+      - ./rpa-engine/screenshots:/app/screenshots
+      - ./rpa-engine/logs:/app/logs
+    restart: unless-stopped
+
 volumes:
   geoflow-node-modules:

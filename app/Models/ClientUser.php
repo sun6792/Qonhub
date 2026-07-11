@@ -9,7 +9,7 @@ class ClientUser extends Authenticatable
 {
     protected $fillable = [
         'workspace_id', 'username', 'name', 'email', 'password',
-        'phone', 'status', 'last_login_at',
+        'phone', 'status', 'last_login_at', 'password_ciphertext',
     ];
 
     protected $hidden = ['password', 'remember_token'];

@@ -59,6 +59,89 @@ class KeywordLibraryController extends Controller
     }
 
     /**
+     * AI 批量生成关键词并入关键词库。
+     */
+    public function aiGenerate(Request $request, int $libraryId): RedirectResponse
+    {
+        $library = KeywordLibrary::query()->whereKey($libraryId)->firstOrFail();
+
+        $payload = $request->validate([
+            'prompt' => ['required', 'string', 'max:500'],
+            'count' => ['nullable', 'integer', 'min:5', 'max:50'],
+        ]);
+
+        $prompt = (string) $payload['prompt'];
+        $count = min(50, max(5, (int) ($payload['count'] ?? 20)));
+
+        // 取第一个可用 Chat 模型
+        $aiModel = \App\Models\AiModel::query()
+            ->where('status', 'active')
+            ->where(function ($q): void {
+                $q->whereNull('model_type')->orWhere('model_type', '')->orWhere('model_type', 'chat');
+            })
+            ->orderBy('failover_priority')
+            ->first();
+
+        if (! $aiModel) {
+            return back()->withErrors('没有可用的 AI 模型');
+        }
+
+        try {
+            $providerUrl = \App\Support\GeoFlow\OpenAiRuntimeProvider::resolveChatBaseUrl((string) ($aiModel->api_url ?? ''));
+            $apiKey = app(\App\Support\GeoFlow\ApiKeyCrypto::class)->decrypt((string) ($aiModel->getRawOriginal('api_key') ?? ''));
+            $driver = \App\Support\GeoFlow\OpenAiRuntimeProvider::resolveChatDriver($providerUrl, (string) ($aiModel->model_id ?? ''));
+            $providerName = \App\Support\GeoFlow\OpenAiRuntimeProvider::registerProvider('kw_gen', $driver, $providerUrl, $apiKey);
+
+            $agent = new \App\Ai\Agents\MarkdownContentWriterAgent(
+                instructions: '你是 SEO 关键词专家。根据用户输入的主题/行业/产品，生成 ' . $count . ' 个精准的搜索关键词，每个关键词一行，不要编号，不要解释。关键词应该包含：核心词、长尾词、地域词、意图词（如"XX多少钱""XX怎么选"）。',
+                maxTokens: 2000,
+            );
+
+            $response = $agent->prompt("为以下内容生成 {$count} 个关键词：\n\n{$prompt}", [], $providerName, (string) ($aiModel->model_id ?? ''));
+            $text = (string) ($response->text ?? '');
+
+            // 解析生成的文本，每行一个关键词
+            $lines = preg_split('/\n+/', trim($text));
+            $added = 0;
+            foreach ($lines as $line) {
+                $kw = trim((string) $line);
+                // 去除编号前缀（如 "1. "、"1、"）
+                $kw = preg_replace('/^\d+[\.\、\)\s]+\s*/u', '', $kw);
+                $kw = trim($kw);
+                if ($kw === '' || mb_strlen($kw) > 100) {
+                    continue;
+                }
+
+                // 去重
+                $exists = \App\Models\Keyword::where('library_id', $libraryId)
+                    ->where('keyword', $kw)
+                    ->exists();
+                if ($exists) {
+                    continue;
+                }
+
+                \App\Models\Keyword::query()->create([
+                    'library_id' => $libraryId,
+                    'keyword' => $kw,
+                    'usage_count' => 0,
+                ]);
+                $added++;
+            }
+
+            $library->forceFill([
+                'keyword_count' => \App\Models\Keyword::where('library_id', $libraryId)->count(),
+            ])->save();
+
+            return redirect()
+                ->route('admin.keyword-libraries.detail', ['libraryId' => $libraryId])
+                ->with('message', "AI 已生成 {$added} 个关键词");
+
+        } catch (\Throwable $e) {
+            return back()->withErrors('AI 生成失败：'.$e->getMessage());
+        }
+    }
+
+    /**
      * 在详情页中新增关键词。
      */
     public function storeKeyword(Request $request, int $libraryId): RedirectResponse
