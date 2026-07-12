@@ -52,36 +52,17 @@ class ClientPlatformAccount extends Model
     public static function supportedPlatforms(): array
     {
         return [
-            'toutiao' => [
-                'name' => '头条号', 'icon' => 'toutiao', 'color' => '#E13D3D',
-                'login_url' => 'https://mp.toutiao.com/',
-                'need_verify' => '需实名认证（身份证）',
-            ],
-            'baijiahao' => [
-                'name' => '百家号', 'icon' => 'baijiahao', 'color' => '#DE493C',
-                'login_url' => 'https://baijiahao.baidu.com/',
-                'need_verify' => '需企业认证（营业执照）',
-            ],
-            'xiaohongshu' => [
-                'name' => '小红书', 'icon' => 'xiaohongshu', 'color' => '#FF2442',
-                'login_url' => 'https://creator.xiaohongshu.com/',
-                'need_verify' => '需企业号认证（营业执照）',
-            ],
-            '1688' => [
-                'name' => '阿里1688', 'icon' => 'b2b', 'color' => '#FF6A00',
-                'login_url' => 'https://www.1688.com/',
-                'need_verify' => '需店铺认证（营业执照）',
-            ],
-            'b2b_baidu' => [
-                'name' => '百度爱采购', 'icon' => 'b2b', 'color' => '#2563EB',
-                'login_url' => 'https://b2b.baidu.com/',
-                'need_verify' => '需企业认证（营业执照）',
-            ],
-            'sohu' => [
-                'name' => '搜狐号', 'icon' => 'sohu', 'color' => '#FFD100',
-                'login_url' => 'https://mp.sohu.com/',
-                'need_verify' => '需实名认证（身份证+手机号）',
-            ],
+            'toutiao'    => ['name'=>'今日头条','login_url'=>'https://mp.toutiao.com/'],
+            'baijiahao'  => ['name'=>'百家号','login_url'=>'https://baijiahao.baidu.com/'],
+            'wechat_mp'  => ['name'=>'微信公众号','login_url'=>'https://mp.weixin.qq.com/'],
+            'sohu'       => ['name'=>'搜狐号','login_url'=>'https://mp.sohu.com/'],
+            'xiaohongshu'=> ['name'=>'小红书','login_url'=>'https://creator.xiaohongshu.com/'],
+            'wangyihao'  => ['name'=>'网易号','login_url'=>'https://mp.163.com/'],
+            'bilibili'   => ['name'=>'哔哩哔哩','login_url'=>'https://member.bilibili.com/'],
+            'qiehao'     => ['name'=>'企鹅号','login_url'=>'https://om.qq.com/'],
+            'smzdm'      => ['name'=>'值得买','login_url'=>'https://www.smzdm.com/'],
+            'douyin'     => ['name'=>'抖音','login_url'=>'https://creator.douyin.com/'],
+            'kuaishou'   => ['name'=>'快手','login_url'=>'https://cp.kuaishou.com/'],
         ];
     }
 }

@@ -203,21 +203,34 @@ class ClientPortalController extends Controller
         $payload = $request->validate([
             'platform_key' => ['required', 'string', 'max:50'],
             'platform_account_name' => ['required', 'string', 'max:200'],
-            'credential' => ['required', 'string', 'max:5000'],
+            'credential' => ['nullable', 'string', 'max:5000'],
         ]);
 
         $crypto = app(ApiKeyCrypto::class);
+        $data = [
+            'platform_account_name' => $payload['platform_account_name'],
+            'status' => 'active',
+            'last_verified_at' => now(),
+        ];
+        if (!empty($payload['credential'])) {
+            $data['credential_ciphertext'] = $crypto->encrypt($payload['credential']);
+        }
         ClientPlatformAccount::query()->updateOrCreate(
             ['workspace_id' => $workspaceId, 'platform_key' => $payload['platform_key']],
-            [
-                'platform_account_name' => $payload['platform_account_name'],
-                'credential_ciphertext' => $crypto->encrypt($payload['credential']),
-                'status' => 'active',
-                'last_verified_at' => now(),
-            ]
+            $data
         );
 
-        return redirect()->route('client.platforms')->with('message', '平台授权绑定成功！');
+        // [新增] 同步信息锚点：绑定=已认证
+        $profile = \App\Models\EnterpriseProfile::where('workspace_id', $workspaceId)->first();
+        if ($profile) {
+            \App\Models\EnterpriseAnchorCertification::updateOrCreate(
+                ['enterprise_profile_id' => (int)$profile->id, 'anchor_platform_key' => $payload['platform_key']],
+                ['certification_status' => 'certified', 'certified_at' => now(),
+                 'platform_account_id' => $payload['platform_account_name']]
+            );
+        }
+
+        return redirect()->route('client.platforms')->with('message', '平台授权绑定成功！锚点已同步');
     }
 
     /**
@@ -241,6 +254,14 @@ class ClientPortalController extends Controller
             ->where('platform_key', $payload['platform_key'])
             ->delete();
 
-        return redirect()->route('client.platforms')->with('message', '已解绑');
+        // [新增] 同步信息锚点：解绑=取消认证
+        $profile = \App\Models\EnterpriseProfile::where('workspace_id', $workspaceId)->first();
+        if ($profile) {
+            \App\Models\EnterpriseAnchorCertification::where('enterprise_profile_id', (int)$profile->id)
+                ->where('anchor_platform_key', $payload['platform_key'])
+                ->update(['certification_status' => 'pending']);
+        }
+
+        return redirect()->route('client.platforms')->with('message', '已解绑，锚点同步更新');
     }
 }

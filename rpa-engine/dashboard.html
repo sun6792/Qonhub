@@ -101,6 +101,7 @@
     <div class="card-header">
       <h2>📰 文章分发</h2>
       <button class="btn btn-outline btn-sm" onclick="loadArticles()">刷新文章</button>
+      <span id="distStatus" class="text-xs text-gray-400">0 已绑</span>
     </div>
     <div class="card-body" id="articleList">
       <div class="empty-state"><div class="icon">📭</div><p>选择客户后加载文章</p></div>
@@ -378,21 +379,23 @@ let distChannels = []; // 客户绑定的平台 + API渠道
 async function loadDistChannels() {
   if (!currentWs) { distChannels = []; return; }
   try {
-    // 1. 拉取客户绑定的平台
+    // 客户已绑平台
     const platResp = await fetch(CLOUD + "/api/v1/rpa/client-platforms?workspace_id=" + currentWs);
     const platData = await platResp.json();
     const bound = (platData.platforms || []).map(function(p) {
       return {key: p.key + '_publish', name: p.name, type: 'rpa', bound: true, hasCache: p.has_cache};
     });
 
-    // 2. 拉取API分发渠道
+    // API渠道（始终可用）
     const chResp = await fetch(CLOUD + "/api/v1/rpa/distribution-channels");
     const chData = await chResp.json();
     const apiChannels = (chData.channels || []).filter(function(c) { return c.type === 'api'; });
 
     distChannels = bound.concat(apiChannels);
-    log("渠道加载: " + bound.length + "绑定 + " + apiChannels.length + "API");
-  } catch(e) { distChannels = []; log("⚠️ 渠道加载失败: " + e.message); }
+    var bCount = bound.length;
+    h("distStatus").textContent = bCount + " 已绑 · 文章旁 [🚀一键分发]";
+    log("渠道: " + bCount + "绑定 + " + apiChannels.length + "API");
+  } catch(e) { distChannels = []; log("⚠️ " + e.message); }
 }
 
 function renderArticles(articles) {
@@ -401,14 +404,46 @@ function renderArticles(articles) {
     el.innerHTML = '<div class="empty-state"><div class="icon">📭</div><p>该客户暂无已发布文章</p></div>';
     return;
   }
-  const icons = {toutiao_publish:'📰',baijiahao_publish:'📝',xiaohongshu_publish:'📕',api_geoflow_agent:'🌐',api_wordpress_rest:'📦',api_generic_http_api:'🔗'};
   el.innerHTML = articles.map(function(a) {
-    var btns = '';
-    distChannels.forEach(function(ch) {
-      btns += '<button class="btn btn-primary btn-sm" onclick="distArticle(' + a.id + ',\'' + ch.key + '\',\'' + ch.type + '\')" title="' + ch.name + '">' + (icons[ch.key] || '📤') + '</button>';
-    });
-    return '<div class="task-item"><div style="flex:1"><div style="font-size:13px;font-weight:600">' + a.title + '</div><div style="font-size:11px;color:#64748b">' + (a.published_at || '') + '</div></div><div style="display:flex;gap:4px">' + btns + '</div></div>';
+    return '<div class="task-item"><div style="flex:1"><div style="font-size:13px;font-weight:600">' + a.title + '</div><div style="font-size:11px;color:#64748b">' + (a.published_at || '') + '</div></div><button class="btn btn-primary btn-sm" onclick="distArticleAll(' + a.id + ')">🚀 一键分发</button></div>';
   }).join("");
+}
+
+// [新增] 一键分发到所有已绑平台
+async function distArticleAll(articleId) {
+  if (!currentWs) return alert("请先选择客户");
+  const boundChannels = distChannels.filter(function(c) { return c.bound; });
+  if (boundChannels.length === 0) return alert("该客户未绑定任何平台，请先在凭证中心绑定");
+  if (!confirm("一键分发到 " + boundChannels.length + " 个已绑平台？")) return;
+  log("🚀 一键分发: 文章" + articleId + " → " + boundChannels.length + " 个平台");
+
+  // 先获取文章全文
+  var title = "", content = "";
+  try {
+    var artResp = await fetch(CLOUD + "/api/v1/rpa/articles/" + articleId);
+    var artData = await artResp.json();
+    title = artData.title || "";
+    content = artData.content || "";
+  } catch(e) { log("⚠️ 获取文章失败"); }
+
+  var done = 0;
+  for (var i = 0; i < boundChannels.length; i++) {
+    var ch = boundChannels[i];
+    try {
+      var resp = await fetch(API + "/api/v1/publish", {
+        method: "POST",
+        headers: {"Content-Type":"application/json","X-Api-Key":API_KEY},
+        body: JSON.stringify({
+          platform: ch.key.replace(/_publish$/, ""),
+          account: {},
+          content: {title: title, content: content, article_id: articleId},
+          options: {workspace_id: currentWs}
+        })
+      });
+      done++;
+    } catch(e) { log("❌ " + ch.name + ": " + e.message); }
+  }
+  log("✅ 分发完成: " + done + "/" + boundChannels.length);
 }
 
 async function distArticle(articleId, channelKey, channelType) {
