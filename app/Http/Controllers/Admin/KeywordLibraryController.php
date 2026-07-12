@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\Article;
 use App\Models\Keyword;
 use App\Models\KeywordLibrary;
+use App\Models\KnowledgeBase;
+use App\Services\GeoFlow\KnowledgeKeyExtractor;
 use App\Support\AdminWeb;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -41,6 +43,7 @@ class KeywordLibraryController extends Controller
      */
     public function detail(Request $request, int $libraryId): View|RedirectResponse
     {
+        $this->authorizeOperatorAccess($libraryId, KeywordLibrary::class);
         $library = KeywordLibrary::query()->whereKey($libraryId)->firstOrFail();
 
         $search = trim((string) $request->query('search', ''));
@@ -55,7 +58,98 @@ class KeywordLibraryController extends Controller
             'search' => $search,
             'keywords' => $keywords,
             'usageTotal' => $usageTotal,
+            'knowledgeBases' => KnowledgeBase::query()->select(['id', 'name'])->orderBy('name')->get(),
         ]);
+    }
+
+    /**
+     * 从知识库蒸馏关键词 — AI 读取知识库内容，自动提取核心词/长尾词/地域词/意图词。
+     */
+    public function aiGenerateFromKnowledge(Request $request, int $libraryId): RedirectResponse
+    {
+        $library = KeywordLibrary::query()->whereKey($libraryId)->firstOrFail();
+
+        $payload = $request->validate([
+            'knowledge_base_id' => ['required', 'integer', 'exists:knowledge_bases,id'],
+            'count' => ['nullable', 'integer', 'min:5', 'max:50'],
+        ]);
+
+        $count = min(50, max(5, (int) ($payload['count'] ?? 20)));
+        $kb = KnowledgeBase::query()->findOrFail((int) $payload['knowledge_base_id']);
+
+        // 用 KnowledgeKeyExtractor 提取知识库的结构化素材
+        $extractor = app(KnowledgeKeyExtractor::class);
+        $extracted = $extractor->extract($kb);
+        $kbContext = $extractor->toPromptContext($extracted, 3000);
+
+        if (empty(trim($kbContext))) {
+            return back()->withErrors('知识库内容为空，无法蒸馏关键词');
+        }
+
+        // 取第一个可用 Chat 模型
+        $aiModel = \App\Models\AiModel::query()
+            ->where('status', 'active')
+            ->where(function ($q): void {
+                $q->whereNull('model_type')->orWhere('model_type', '')->orWhere('model_type', 'chat');
+            })
+            ->orderBy('failover_priority')
+            ->first();
+
+        if (! $aiModel) {
+            return back()->withErrors('没有可用的 AI 模型');
+        }
+
+        try {
+            $providerUrl = \App\Support\GeoFlow\OpenAiRuntimeProvider::resolveChatBaseUrl((string) ($aiModel->api_url ?? ''));
+            $apiKey = app(\App\Support\GeoFlow\ApiKeyCrypto::class)->decrypt((string) ($aiModel->getRawOriginal('api_key') ?? ''));
+            $driver = \App\Support\GeoFlow\OpenAiRuntimeProvider::resolveChatDriver($providerUrl, (string) ($aiModel->model_id ?? ''));
+            $providerName = \App\Support\GeoFlow\OpenAiRuntimeProvider::registerProvider('kw_kb_gen', $driver, $providerUrl, $apiKey);
+
+            $agent = new \App\Ai\Agents\MarkdownContentWriterAgent(
+                instructions: '你是 GEO 关键词蒸馏专家。根据提供的企业知识库内容，蒸馏出 ' . $count . ' 个精准的搜索关键词，每个关键词一行，不要编号，不要解释。关键词应该包含四类：1）核心词（产品/服务词根，2-5字）2）长尾词（搜索意图精准的短语）3）地域词（城市+产品/服务）4）意图词（如"XX多少钱""XX怎么选""XX哪家好"）。严格基于知识库内容，不要虚构。',
+                maxTokens: 2000,
+            );
+
+            $response = $agent->prompt("请从以下企业知识库内容中蒸馏关键词：\n\n{$kbContext}", [], $providerName, (string) ($aiModel->model_id ?? ''));
+            $text = (string) ($response->text ?? '');
+
+            // 解析生成的文本，每行一个关键词（逻辑同 aiGenerate）
+            $lines = preg_split('/\n+/', trim($text));
+            $added = 0;
+            foreach ($lines as $line) {
+                $kw = trim((string) $line);
+                $kw = preg_replace('/^\d+[\.\、\)\s]+\s*/u', '', $kw);
+                $kw = trim($kw);
+                if ($kw === '' || mb_strlen($kw) > 100) {
+                    continue;
+                }
+
+                $exists = \App\Models\Keyword::where('library_id', $libraryId)
+                    ->where('keyword', $kw)
+                    ->exists();
+                if ($exists) {
+                    continue;
+                }
+
+                \App\Models\Keyword::query()->create([
+                    'library_id' => $libraryId,
+                    'keyword' => $kw,
+                    'usage_count' => 0,
+                ]);
+                $added++;
+            }
+
+            $library->forceFill([
+                'keyword_count' => \App\Models\Keyword::where('library_id', $libraryId)->count(),
+            ])->save();
+
+            return redirect()
+                ->route('admin.keyword-libraries.detail', ['libraryId' => $libraryId])
+                ->with('message', "从知识库「{$kb->name}」蒸馏出 {$added} 个关键词");
+
+        } catch (\Throwable $e) {
+            return back()->withErrors('知识库蒸馏失败：'.$e->getMessage());
+        }
     }
 
     /**
@@ -310,11 +404,13 @@ class KeywordLibraryController extends Controller
             'name.required' => __('admin.keyword_libraries.error.name_required'),
         ]);
 
-        KeywordLibrary::query()->create([
+        $library = KeywordLibrary::query()->create([
             'name' => trim((string) $payload['name']),
             'description' => trim((string) ($payload['description'] ?? '')),
             'keyword_count' => 0,
         ]);
+
+        $this->assignToOperatorWorkspaces((int) $library->id, KeywordLibrary::class);
 
         return redirect()->route('admin.keyword-libraries.index')->with('message', __('admin.keyword_libraries.message.create_success'));
     }
@@ -383,6 +479,8 @@ class KeywordLibraryController extends Controller
             ->select(['id', 'name', 'description', 'created_at', 'updated_at'])
             ->withCount('keywords as actual_count')
             ->orderByDesc('created_at');
+
+        $this->scopeByOperatorWorkspaces($query, KeywordLibrary::class);
 
         return $query->get()->map(static function (KeywordLibrary $library): array {
             return [

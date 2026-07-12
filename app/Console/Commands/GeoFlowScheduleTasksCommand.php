@@ -66,6 +66,7 @@ class GeoFlowScheduleTasksCommand extends Command
             : \Illuminate\Support\Facades\DB::table('articles')
                 ->selectRaw("
                     task_id,
+                    COUNT(*) AS total_articles,
                     SUM(CASE WHEN status = 'draft' THEN 1 ELSE 0 END) AS draft_articles,
                     SUM(CASE WHEN status = 'draft' AND review_status IN ('approved','auto_approved') THEN 1 ELSE 0 END) AS publishable_drafts
                 ")
@@ -75,6 +76,7 @@ class GeoFlowScheduleTasksCommand extends Command
                 ->get()
                 ->mapWithKeys(static fn (object $row): array => [
                     (int) $row->task_id => [
+                        'total_articles' => (int) ($row->total_articles ?? 0),
                         'draft_articles' => (int) ($row->draft_articles ?? 0),
                         'publishable_drafts' => (int) ($row->publishable_drafts ?? 0),
                     ],
@@ -90,8 +92,12 @@ class GeoFlowScheduleTasksCommand extends Command
 
             $articleLimit = max(1, (int) ($task->article_limit ?? $task->draft_limit ?? 10));
             $draftLimit = max(1, (int) ($task->draft_limit ?? 10));
-            $createdCount = (int) ($task->created_count ?? 0);
-            $stats = $articleStats->get($taskId, ['draft_articles' => 0, 'publishable_drafts' => 0]);
+            $stats = $articleStats->get($taskId, ['draft_articles' => 0, 'publishable_drafts' => 0, 'total_articles' => 0]);
+            // [修复] 用实际文章数代替 created_count（防直接删文导致计数不准）
+            $createdCount = (int) ($stats['total_articles'] ?? (int) ($task->created_count ?? 0));
+            if ((int) ($task->created_count ?? 0) !== $createdCount) {
+                Task::query()->whereKey($taskId)->update(['created_count' => $createdCount, 'updated_at' => now()]);
+            }
             $draftCount = (int) ($stats['draft_articles'] ?? 0);
             $publishableDrafts = (int) ($stats['publishable_drafts'] ?? 0);
             $nextPublishAt = $task->next_publish_at instanceof Carbon ? $task->next_publish_at : null;
@@ -124,9 +130,15 @@ class GeoFlowScheduleTasksCommand extends Command
                 continue;
             }
 
-            if (isset($busyTaskLookup[$taskId])) {
+            // [修复] 原逻辑每个任务只允许 1 个并行 TaskRun，导致多 Worker 无法并行
+            // 改为：允许草稿池剩余空位数量的并行 TaskRun（上限 10）
+            $activeCount = TaskRun::query()
+                ->where('task_id', $taskId)
+                ->whereIn('status', ['pending', 'running'])
+                ->count();
+            $slots = max(0, min(10, $draftLimit - $draftCount));
+            if ($activeCount >= $slots || $slots <= 0) {
                 $skippedCount++;
-
                 continue;
             }
 

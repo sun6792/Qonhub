@@ -189,47 +189,24 @@
                 </div>
             </div>
 
-            {{-- ② 客户平台授权（6个自媒体平台，客户自己登录） --}}
+            {{-- ② 客户平台凭证（入口） --}}
+            @php
+              $activeCount = \App\Models\ClientPlatformAccount::where('workspace_id', (int)$workspace->id)->where('status','active')->count();
+              $mediaCount = count(\App\Models\ClientPlatformAccount::supportedPlatforms());
+              $b2bCount = count(\App\Services\GeoFlow\EnterpriseAnchorService::anchorPlatforms());
+            @endphp
             <div class="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
                 <div class="border-b border-gray-100 px-5 py-3 flex items-center justify-between">
-                    <h2 class="text-sm font-semibold text-gray-800">📋 客户平台授权</h2>
-                    @php $activeCount = \App\Models\ClientPlatformAccount::where('workspace_id', (int)$workspace->id)->where('status','active')->count(); @endphp
-                    <span class="text-xs {{ $activeCount > 0 ? 'text-green-600' : 'text-gray-400' }}">{{ $activeCount }}/6</span>
+                    <h2 class="text-sm font-semibold text-gray-800">🗄️ 客户凭证中心</h2>
+                    <span class="text-xs {{ $activeCount > 0 ? 'text-green-600' : 'text-gray-400' }}">{{ $activeCount }}/{{ $mediaCount + $b2bCount }} 已绑定</span>
                 </div>
-                <div class="px-5 py-3">
-                    @php $accts = \App\Models\ClientPlatformAccount::where('workspace_id', (int)$workspace->id)->get()->keyBy('platform_key'); @endphp
-                    <div class="grid grid-cols-2 gap-2">
-                        @foreach (\App\Models\ClientPlatformAccount::supportedPlatforms() as $key => $info)
-                        @php $acc = $accts->get($key); $connected = $acc && $acc->isActive(); @endphp
-                        <div class="rounded-lg border p-2 {{ $connected ? 'border-green-200 bg-green-50/30' : 'border-gray-150 bg-gray-50/30' }}">
-                            <div class="flex items-center justify-between gap-1">
-                                <span class="text-xs font-medium text-gray-700 truncate">{{ $info['name'] }}</span>
-                                <span class="text-[10px] {{ $connected ? 'text-green-600' : 'text-gray-400' }}">{{ $connected ? '✅' : '⏳' }}</span>
-                            </div>
-                            @if ($connected && $acc->platform_account_name)
-                            <div class="text-[10px] text-green-600 mt-0.5 truncate">{{ $acc->platform_account_name }}</div>
-                            @endif
-                            @if (!$connected)
-                            <form method="POST" action="{{ route('admin.workspaces.toggle-platform', $workspace->slug) }}" class="mt-1.5 flex gap-1">
-                                @csrf
-                                <input type="hidden" name="platform_key" value="{{ $key }}">
-                                <input name="platform_account_name" class="flex-1 w-16 rounded border border-gray-300 px-1.5 py-0.5 text-[10px]" placeholder="账号名">
-                                <button class="shrink-0 text-[10px] bg-blue-600 text-white px-1.5 py-0.5 rounded hover:bg-blue-700">标记</button>
-                            </form>
-                            @else
-                            <form method="POST" action="{{ route('admin.workspaces.toggle-platform', $workspace->slug) }}" class="mt-1">
-                                @csrf
-                                <input type="hidden" name="platform_key" value="{{ $key }}">
-                                <input type="hidden" name="platform_account_name" value="">
-                                <button class="text-[10px] text-red-500 hover:text-red-700">取消授权</button>
-                            </form>
-                            @endif
-                        </div>
-                        @endforeach
-                    </div>
-                    <div class="text-[10px] text-gray-400 mt-2 pt-2 border-t">
-                        💡 以上平台需客户本人注册。B2B认证由运营操作（见上方"信息锚点"）。
-                    </div>
+                <div class="px-5 py-4 text-center">
+                    <p class="text-sm text-gray-600 mb-3">自媒体 + B2B锚点 · 全部平台集中管理</p>
+                    <a href="{{ $clientPortalUrl }}/platforms" target="_blank"
+                       class="inline-flex items-center gap-1 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">
+                       🔗 前往客户端凭证中心 →
+                    </a>
+                    <p class="text-xs text-gray-400 mt-2">或登录客户端 /client/platforms 统一管理</p>
                 </div>
             </div>
 

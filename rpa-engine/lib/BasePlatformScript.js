@@ -13,6 +13,11 @@ import { chromium } from "playwright-extra";
 import stealth from "puppeteer-extra-plugin-stealth";
 import fs from "fs";
 import path from "path";
+import { fileURLToPath } from "url";
+
+// ES module __dirname 兼容
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // 注册 stealth 插件
 chromium.use(stealth());
@@ -85,6 +90,8 @@ export class BasePlatformScript {
         this.proxy = options.bound_ip || null;
         this.timeout = options.timeout_seconds || 180;
         this.screenshotDir = options.screenshotDir || "./screenshots";
+        // [新增] workspaceId 用于缓存隔离
+        this.workspaceId = options.workspace_id || "default";
     }
 
     // ── 工具方法 ──────────────────────────────────────────
@@ -117,8 +124,10 @@ export class BasePlatformScript {
 
         const browser = await chromium.launch(launchOpts);
 
-        // storageState 持久化：加载上次保存的 Cookie/登录态
-        const stateFile = path.join(this.screenshotDir, `state_${this.constructor.platform}.json`);
+        // [改造] storageState 持久化：按 workspaceId + platform 分层隔离
+        const stateDir = path.join(__dirname, "..", "storage", "states", String(this.workspaceId));
+        if (!fs.existsSync(stateDir)) fs.mkdirSync(stateDir, { recursive: true });
+        const stateFile = path.join(stateDir, `${this.constructor.platform}.json`);
         const contextOpts = {
             userAgent: this.randomUA(),
             viewport: { width: 1366 + this.rand(-100, 100), height: 768 + this.rand(-50, 50) },

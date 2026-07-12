@@ -27,6 +27,7 @@ use App\Http\Controllers\Admin\LeadController;
 use App\Http\Controllers\Admin\LeadFormController;
 use App\Http\Controllers\Admin\LegacyController;
 use App\Http\Controllers\Admin\MaterialsController;
+use App\Http\Controllers\Admin\RpaSyncController;
 use App\Http\Controllers\Admin\SecuritySettingsController;
 use App\Http\Controllers\Admin\SiteSettingsController;
 use App\Http\Controllers\Admin\SiteThemeEditorController;
@@ -161,6 +162,7 @@ Route::prefix($adminPrefix)->name('admin.')->middleware(['admin.locale'])->group
             Route::get('armory', [\App\Http\Controllers\Admin\ContentArmoryController::class, 'index'])->name('armory');
             Route::post('armory/rewrite', [\App\Http\Controllers\Admin\ContentArmoryController::class, 'rewrite'])->name('armory.rewrite');
             Route::post('armory/publish', [\App\Http\Controllers\Admin\ContentArmoryController::class, 'publishToChannels'])->name('armory.publish');
+            Route::post('armory/publish-to-rpa', [\App\Http\Controllers\Admin\ContentArmoryController::class, 'publishToRpa'])->name('armory.publish-rpa');
             Route::get('armory/channels', [\App\Http\Controllers\Admin\ContentArmoryController::class, 'availableChannels'])->name('armory.channels');
         });
 
@@ -215,6 +217,7 @@ Route::prefix($adminPrefix)->name('admin.')->middleware(['admin.locale'])->group
             Route::post('{libraryId}/keywords/delete', [KeywordLibraryController::class, 'destroyKeywords'])->name('keywords.delete');
             Route::post('{libraryId}/import', [KeywordLibraryController::class, 'importKeywords'])->name('import');
             Route::post('{libraryId}/ai-generate', [KeywordLibraryController::class, 'aiGenerate'])->name('ai-generate');
+            Route::post('{libraryId}/ai-generate-from-kb', [KeywordLibraryController::class, 'aiGenerateFromKnowledge'])->name('ai-generate-from-knowledge');
             Route::put('{libraryId}/detail', [KeywordLibraryController::class, 'updateFromDetail'])->name('detail.update');
             Route::put('{libraryId}', [KeywordLibraryController::class, 'update'])->name('update');
             Route::post('{libraryId}/delete', [KeywordLibraryController::class, 'destroy'])->name('delete');
@@ -416,5 +419,22 @@ Route::prefix($adminPrefix)->name('admin.')->middleware(['admin.locale'])->group
                 Route::post('{tokenId}/revoke', [ApiTokenController::class, 'revoke'])->name('revoke');
             });
         });
+    });
+
+    // [新增] RPA 引擎云端同步 API（CORS开放 + X-Api-Key 认证，供本地运营助手调用）
+    Route::prefix('api/v1/rpa')->middleware('rpa.cors')->name('rpa.')->group(function () {
+        // CORS 预检请求
+        Route::options('{any}', fn () => response()->noContent(200, [
+            'Access-Control-Allow-Origin' => '*',
+            'Access-Control-Allow-Methods' => 'GET,POST,OPTIONS',
+            'Access-Control-Allow-Headers' => 'Content-Type, X-Api-Key',
+        ]))->where('any', '.*');
+        Route::get('pending-tasks', [RpaSyncController::class, 'pendingTasks'])->name('pending-tasks');
+        Route::post('report', [RpaSyncController::class, 'report'])->name('report');
+        Route::get('my-workspaces', [RpaSyncController::class, 'myWorkspaces'])->name('my-workspaces');
+        Route::get('articles', [RpaSyncController::class, 'articles'])->name('articles');
+        Route::get('distribution-channels', [RpaSyncController::class, 'distributionChannels'])->name('channels');
+        Route::get('articles/{id}', [RpaSyncController::class, 'articleDetail'])->name('article-detail')->whereNumber('id');
+        Route::get('client-platforms', [RpaSyncController::class, 'clientPlatforms'])->name('client-platforms');
     });
 });

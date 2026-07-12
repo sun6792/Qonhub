@@ -141,7 +141,9 @@
 <div class="bg-white rounded-xl shadow-sm p-5">
     <div class="flex justify-between items-center mb-4">
         <h3 class="font-bold text-lg">📡 我的分发平台</h3>
-        <span class="text-xs text-gray-400">{{ $connectionStats['connected'] }}/{{ $connectionStats['total'] }} 已授权</span>
+        <a href="{{ route('client.platforms') }}" class="text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-lg hover:bg-indigo-700 font-medium">
+          🗄️ 凭证中心（全部平台）→
+        </a>
     </div>
     <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
         @foreach ($platforms as $p)

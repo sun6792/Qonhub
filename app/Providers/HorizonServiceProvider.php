@@ -28,9 +28,8 @@ class HorizonServiceProvider extends HorizonApplicationServiceProvider
     protected function gate(): void
     {
         Gate::define('viewHorizon', function ($user = null) {
-            return in_array(optional($user)->email, [
-                //
-            ]);
+            // 允许所有已登录的后台管理员和超管访问 Horizon 面板
+            return $user !== null && in_array($user->role ?? '', ['admin', 'super_admin']);
         });
     }
 }

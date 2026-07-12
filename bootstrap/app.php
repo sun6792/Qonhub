@@ -57,11 +57,19 @@ return Application::configure(basePath: dirname(__DIR__))
             'admin.super' => EnsureSuperAdmin::class,
             // Blade 后台：写操作日志
             'admin.activity' => LogAdminActivity::class,
+            // [新增] RPA API CORS
+            'rpa.cors' => \App\Http\Middleware\RpaCorsMiddleware::class,
         ]);
 
-        // 已登录的管理员访问登录页(guest:admin)时，重定向到后台仪表盘，而不是 Laravel 默认的 "/"。
-        // 默认逻辑只认名为 dashboard/home 的路由，本项目是 admin.dashboard/site.home，匹配不到就回落到 "/"，
-        // 导致“已登录后再打开登录页”被弹到前台内容站。这里显式指向后台首页。
+        // RPA 引擎同步 API 免 CSRF（本地助手调用）
+        $middleware->validateCsrfTokens(except: [
+            'geo_admin/api/v1/rpa/*',
+            'geo_admin/distribution/armory/publish-to-rpa',
+        ]);
+
+        // 已登录的管理员访问登录页(guest:admin)时，重定向到后台仪表盘，而不是 Laravel 默认的 “/”。
+        // 默认逻辑只认名为 dashboard/home 的路由，本项目是 admin.dashboard/site.home，匹配不到就回落到 “/”，
+        // 导致”已登录后再打开登录页”被弹到前台内容站。这里显式指向后台首页。
         $middleware->redirectUsersTo(fn () => route('admin.dashboard'));
     })
     ->withExceptions(function (Exceptions $exceptions): void {

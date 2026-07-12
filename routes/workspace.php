@@ -68,6 +68,7 @@ Route::prefix($adminPrefix)->name('admin.')->middleware(['admin.auth', 'admin.ac
         Route::post('{slug}/certify', [\App\Http\Controllers\Admin\EnterpriseAnchorController::class, 'markCertified'])->name('mark-certified');
         Route::post('{slug}/revoke', [\App\Http\Controllers\Admin\EnterpriseAnchorController::class, 'revokeCertification'])->name('revoke-certification');
         Route::post('{slug}/napw-check', [\App\Http\Controllers\Admin\EnterpriseAnchorController::class, 'checkNapw'])->name('check-napw');
+        Route::post('{slug}/rpa-register/{platformKey}', [\App\Http\Controllers\Admin\EnterpriseAnchorController::class, 'rpaRegister'])->name('rpa-register');
     });
 
     // --- 全渠道内容发布运营台 ---
@@ -92,6 +93,9 @@ Route::middleware('web')->prefix('client')->name('client.')->group(function (): 
     Route::get('/', [ClientPortalController::class, 'dashboard'])->name('dashboard');
     Route::get('/articles', [ClientPortalController::class, 'articles'])->name('articles');
     Route::get('/ai-visibility', [ClientPortalController::class, 'aiVisibility'])->name('ai-visibility');
+    Route::get('/platforms', [ClientPortalController::class, 'platforms'])->name('platforms');
+    Route::post('/platforms/bind', [ClientPortalController::class, 'platformStore'])->name('platforms.bind');
+    Route::post('/platforms/unbind', [ClientPortalController::class, 'platformUnbind'])->name('platforms.unbind');
 
     // 客户端一键发布中心
     Route::prefix('content-publish')->name('content-publish.')->group(function (): void {

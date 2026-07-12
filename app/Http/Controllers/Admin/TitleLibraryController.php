@@ -49,6 +49,7 @@ class TitleLibraryController extends Controller
      */
     public function detail(Request $request, int $libraryId): View|RedirectResponse
     {
+        $this->authorizeOperatorAccess($libraryId, TitleLibrary::class);
         $library = TitleLibrary::query()->whereKey($libraryId)->firstOrFail();
 
         $titles = $this->loadDetailTitles($libraryId, '');
@@ -346,7 +347,7 @@ class TitleLibraryController extends Controller
             'name.required' => __('admin.title_libraries.error.name_required'),
         ]);
 
-        TitleLibrary::query()->create([
+        $library = TitleLibrary::query()->create([
             'name' => trim((string) $payload['name']),
             'description' => trim((string) ($payload['description'] ?? '')),
             'title_count' => 0,
@@ -354,6 +355,8 @@ class TitleLibraryController extends Controller
             'generation_rounds' => 1,
             'is_ai_generated' => 0,
         ]);
+
+        $this->assignToOperatorWorkspaces((int) $library->id, TitleLibrary::class);
 
         return redirect()->route('admin.title-libraries.index')->with('message', __('admin.title_libraries.message.create_success'));
     }
@@ -430,6 +433,8 @@ class TitleLibraryController extends Controller
                 'titles as ai_count' => fn ($builder) => $builder->where('is_ai_generated', true),
             ])
             ->orderByDesc('created_at');
+
+        $this->scopeByOperatorWorkspaces($query, TitleLibrary::class);
 
         return $query->get()->map(static function (TitleLibrary $library): array {
             return [

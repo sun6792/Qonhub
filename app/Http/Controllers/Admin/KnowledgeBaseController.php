@@ -63,6 +63,7 @@ class KnowledgeBaseController extends Controller
      */
     public function detail(int $knowledgeBaseId): View|RedirectResponse
     {
+        $this->authorizeOperatorAccess($knowledgeBaseId, KnowledgeBase::class);
         $knowledgeBase = KnowledgeBase::query()->whereKey($knowledgeBaseId)->firstOrFail();
 
         return view('admin.knowledge-bases.detail', [
@@ -269,6 +270,8 @@ class KnowledgeBaseController extends Controller
                     ->where('embedding_dimensions', '>', 0),
             ])
             ->orderByDesc('created_at');
+
+        $this->scopeByOperatorWorkspaces($query, KnowledgeBase::class);
 
         return $query->get()->map(static function (KnowledgeBase $knowledgeBase): array {
             return [
@@ -477,6 +480,8 @@ class KnowledgeBaseController extends Controller
                     'file_path' => $encodedFilePath,
                 ] + $this->knowledgeMetadataPayload($payload));
             });
+
+            $this->assignToOperatorWorkspaces((int) $knowledgeBase->id, KnowledgeBase::class);
 
             if (($payload['import_action'] ?? 'save_and_chunk') === 'save') {
                 return redirect()

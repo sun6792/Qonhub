@@ -9,8 +9,10 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
+use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\HasApiTokens;
 
 class Admin extends Authenticatable
@@ -85,5 +87,34 @@ class Admin extends Authenticatable
     public function articleReviews(): HasMany
     {
         return $this->hasMany(ArticleReview::class, 'admin_id');
+    }
+
+    /**
+     * 运营师绑定的工作空间（通过 operator_workspaces 中间表）。
+     */
+    public function operatorWorkspaces(): BelongsToMany
+    {
+        return $this->belongsToMany(Workspace::class, 'operator_workspaces', 'admin_id', 'workspace_id')
+            ->withPivot('role', 'last_accessed_at')
+            ->withTimestamps();
+    }
+
+    /**
+     * 获取需要隔离过滤的 workspace ID 列表。
+     * 超管返回空数组（无需过滤），运营师返回已绑定的 workspace ID 数组。
+     *
+     * @return list<int>|null  空数组=没有任何workspace权限，null=超管无需过滤
+     */
+    public function scopedWorkspaceIds(): ?array
+    {
+        if ($this->isSuperAdmin()) {
+            return null; // null = 不过滤，看全部
+        }
+
+        return DB::table('operator_workspaces')
+            ->where('admin_id', (int) $this->id)
+            ->pluck('workspace_id')
+            ->map(fn ($v) => (int) $v)
+            ->toArray();
     }
 }

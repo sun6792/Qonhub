@@ -14,6 +14,7 @@ use App\Models\Workspace;
 use App\Services\GeoFlow\WorkspaceService;
 use App\Services\GeoFlow\DistributionPayloadBuilder;
 use App\Services\GeoFlow\DistributionPublisherManager;
+use App\Services\GeoFlow\Publishing\RpaEngineClient;
 use App\Services\GeoFlow\WorkerExecutionService;
 use App\Support\AdminWeb;
 use App\Support\GeoFlow\ApiKeyCrypto;
@@ -24,6 +25,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
 use RuntimeException;
 use Throwable;
@@ -280,6 +282,81 @@ class ContentArmoryController extends Controller
             'results' => $results,
             'summary' => "{$successCount}/".count($results).' 个渠道推送成功',
         ]);
+    }
+
+    /**
+     * [新增] 弹药库内容推送到 RPA 引擎 → 媒体平台（头条/百家号/小红书）。
+     * POST /geo_admin/distribution/armory/publish-to-rpa
+     */
+    public function publishToRpa(Request $request): JsonResponse
+    {
+        $payload = $request->validate([
+            'article_id' => ['required', 'integer', 'min:1'],
+            'workspace_id' => ['required', 'integer', 'min:1'],
+            'platform' => ['required', 'string', 'in:toutiao_publish,baijiahao_publish,xiaohongshu_publish'],
+            'rewritten_title' => ['nullable', 'string', 'max:500'],
+            'rewritten_content' => ['nullable', 'string'],
+        ]);
+
+        $articleId = (int) $payload['article_id'];
+        $workspaceId = (int) $payload['workspace_id'];
+        $platform = $payload['platform'];
+
+        $article = Article::query()->whereKey($articleId)->first();
+        if (! $article) {
+            return response()->json(['ok' => false, 'error' => '文章不存在'], 404);
+        }
+
+        // 一键分发：未传标题/内容时自动取原文
+        $title = $payload['rewritten_title'] ?: (string) $article->title;
+        $content = $payload['rewritten_content'] ?: (string) $article->content;
+
+        $platformNames = [
+            'toutiao_publish' => '头条号',
+            'baijiahao_publish' => '百家号',
+            'xiaohongshu_publish' => '小红书',
+        ];
+
+        try {
+            $rpaClient = app(RpaEngineClient::class);
+            $result = $rpaClient->executeTask([
+                'platform' => $platform,
+                'platform_name' => $platformNames[$platform],
+                'action' => 'publish_article',
+                'account' => [],
+                'enterprise' => ['workspace_id' => $workspaceId],
+                'content' => [
+                    'title' => $title,
+                    'content' => $content,
+                    'article_id' => $articleId,
+                ],
+                'options' => [
+                    'workspace_id' => $workspaceId,
+                    'timeout_seconds' => 300,
+                ],
+            ]);
+
+            if ($result['success'] ?? false) {
+                Log::info('RPA publish success', ['platform' => $platform, 'article_id' => $articleId]);
+                return response()->json([
+                    'ok' => true,
+                    'task_id' => $result['task_id'] ?? '',
+                    'shop_url' => $result['shop_url'] ?? '',
+                    'message' => "已发布到{$platformNames[$platform]}",
+                ]);
+            }
+
+            return response()->json([
+                'ok' => false,
+                'error' => $result['error'] ?? 'RPA执行失败',
+            ]);
+        } catch (Throwable $e) {
+            Log::error('RPA publish error', ['message' => $e->getMessage()]);
+            return response()->json([
+                'ok' => false,
+                'error' => 'RPA引擎不可用，请确认本地助手已启动（cd rpa-engine && node server.js）',
+            ], 503);
+        }
     }
 
     /**

@@ -124,6 +124,22 @@
                         <label class="block text-xs font-medium text-gray-600 mb-1">企业官网</label>
                         <input name="company_website" type="url" value="{{ old('company_website', $profile->company_website) }}" class="w-full rounded-lg border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-indigo-500" placeholder="https://">
                     </div>
+                    <div class="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                        <p class="text-xs font-medium text-amber-800 mb-2">🔐 B2B注册专用信息（运营代注册用，不再反复找客户要验证码）</p>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-xs font-medium text-gray-600 mb-1">注册专用手机号</label>
+                                <input name="registration_phone" value="{{ old('registration_phone', $profile->registration_phone) }}" class="w-full rounded-lg border-gray-300 px-3 py-2 text-sm focus:border-amber-500 focus:ring-amber-500" placeholder="收验证码用的手机号">
+                            </div>
+                            <div class="flex items-end">
+                                <label class="flex items-center gap-2 cursor-pointer bg-white rounded-lg border border-gray-300 px-3 py-2 w-full">
+                                    <input type="hidden" name="registration_authorized" value="0">
+                                    <input type="checkbox" name="registration_authorized" value="1" {{ old('registration_authorized', $profile->registration_authorized) ? 'checked' : '' }} class="rounded border-gray-300 text-amber-600 focus:ring-amber-500">
+                                    <span class="text-sm text-gray-700">客户已授权代注册</span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
                     <div>
                         <label class="block text-xs font-medium text-gray-600 mb-1">主营产品/服务</label>
                         <textarea name="products_services" rows="2" class="w-full rounded-lg border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-indigo-500" placeholder="一行一个产品/服务">{{ old('products_services', is_array($profile->products_services) ? implode("\n", $profile->products_services) : ($profile->products_services ?? '')) }}</textarea>
@@ -152,8 +168,8 @@
             <div class="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
                 <div class="border-b border-gray-100 px-5 py-3.5 flex items-center justify-between">
                     <div>
-                        <h2 class="text-sm font-semibold text-gray-800">📡 B2B + 媒体 信息锚点</h2>
-                        <p class="text-xs text-gray-400 mt-0.5">B2B认证建立企业可信度 · 媒体发稿建立品牌曝光度</p>
+                        <h2 class="text-sm font-semibold text-gray-800">📡 B2B 信息锚点</h2>
+                        <p class="text-xs text-gray-400 mt-0.5">企业入驻认证，建立AI大模型品牌引用覆盖</p>
                     </div>
                     <span class="text-xs text-gray-400">{{ $summary['certified'] }}/{{ $summary['total'] }}</span>
                 </div>
@@ -174,23 +190,42 @@
                                         {{ mb_substr($info['name'], 0, 1) }}
                                     </span>
                                     <span class="text-sm font-medium text-gray-800">{{ $info['name'] }}</span>
+                                    {{-- 权重标签 --}}
                                     <span class="inline-flex items-center rounded-full px-1.5 py-0.5 text-xs font-medium
                                         {{ $info['citation_weight'] === 'highest' ? 'bg-red-50 text-red-700' : ($info['citation_weight'] === 'high' ? 'bg-amber-50 text-amber-700' : ($info['citation_weight'] === 'medium' ? 'bg-blue-50 text-blue-700' : 'bg-gray-100 text-gray-600')) }}">
                                         {{ $info['citation_weight'] === 'highest' ? '顶级权重' : ($info['citation_weight'] === 'high' ? '高权重' : ($info['citation_weight'] === 'medium' ? '中权重' : '广覆盖')) }}
                                     </span>
-                                    @php $isMedia = in_array($info['type'] ?? '', ['news_media','industry_media']); @endphp
+                                    {{-- 覆盖方式标签 --}}
+                                    @php $coverage = $info['coverage'] ?? 'manual'; @endphp
+                                    @if ($coverage === 'self')
+                                    <span class="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-xs font-medium bg-red-100 text-red-700">
+                                        🚀 聚合分发 · {{ $info['aggregator_scope'] ?? '30+站点' }}
+                                    </span>
+                                    @elseif ($coverage === 'aggregator')
+                                    <span class="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-xs font-medium bg-green-100 text-green-700">
+                                        ✅ 天助网已覆盖
+                                    </span>
+                                    @elseif ($coverage === 'rpa')
+                                    <span class="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-xs font-medium bg-purple-100 text-purple-700">
+                                        🤖 RPA可注册
+                                    </span>
+                                    @else
+                                    <span class="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-xs font-medium bg-gray-100 text-gray-500">
+                                        📝 需手动
+                                    </span>
+                                    @endif
                                     @if ($status === 'certified')
-                                    <span class="text-xs text-emerald-600 font-medium">✅ {{ $isMedia ? '已发稿' : '已认证' }}</span>
+                                    <span class="text-xs text-emerald-600 font-medium">✅ 已认证</span>
                                     @elseif ($status === 'expired')
                                     <span class="text-xs text-gray-500 font-medium">⏰ 已过期</span>
                                     @elseif ($status === 'rejected')
                                     <span class="text-xs text-red-500 font-medium">❌ 未通过</span>
                                     @else
-                                    <span class="text-xs text-gray-400">⏳ {{ $isMedia ? '待发稿' : '待认证' }}</span>
+                                    <span class="text-xs text-gray-400">⏳ 待认证</span>
                                     @endif
                                 </div>
                                 <div class="text-xs text-gray-500 ml-9">
-                                    {{ $info['cert_required'] ?? ($isMedia ? '运营团队发稿' : '企业注册认证') }}
+                                    {{ $info['cert_required'] ?? '企业注册认证' }}
                                 </div>
                                 <div class="text-xs text-gray-400 ml-9 mt-0.5">
                                     🤖 {{ implode('、', $info['cited_by_llms']) }}
@@ -209,6 +244,14 @@
                                        class="inline-flex items-center gap-1 text-xs text-orange-600 hover:text-orange-800 hover:underline">
                                         📝 前往注册 →
                                     </a>
+                                    @endif
+                                    @if ($status !== 'certified' && !empty($info['supports_rpa']))
+                                    <form method="POST" action="{{ route('admin.enterprise-anchor.rpa-register', [$workspace->slug, $info['key']]) }}" class="inline" onsubmit="return confirm('确认使用RPA自动注册 {{ $info['name'] }}？\\n\\n系统将自动：\\n1. 打开注册页面\\n2. 填写企业档案信息\\n3. 提交认证\\n\\n如遇验证码需手动输入。')">
+                                        @csrf
+                                        <button type="submit" class="inline-flex items-center gap-1 text-xs text-green-600 hover:text-green-800 hover:underline font-medium">
+                                            🤖 自动注册
+                                        </button>
+                                    </form>
                                     @endif
                                 </div>
 
@@ -242,9 +285,9 @@
                                     <button class="text-xs text-red-500 hover:text-red-700 font-medium">取消认证</button>
                                 </form>
                                 @else
-                                <button type="button" onclick="openCertifyModal('{{ $info['key'] }}', '{{ $info['name'] }}', '{{ $isMedia ? '发稿' : '认证' }}')"
+                                <button type="button" onclick="openCertifyModal('{{ $info['key'] }}', '{{ $info['name'] }}', '认证')"
                                         class="text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-lg hover:bg-indigo-700 font-medium whitespace-nowrap">
-                                    {{ $isMedia ? '标记已发稿' : '标记已认证' }}
+                                    标记已认证
                                 </button>
                                 @endif
                             </div>
@@ -256,9 +299,9 @@
                 {{-- 底部提示 --}}
                 <div class="border-t border-gray-100 px-5 py-3 bg-gray-50/50">
                     <div class="text-xs text-gray-500 space-y-1">
+                        <p>🚀 <strong>聚合分发站（天助网）：</strong>注册1个平台 → 自动分发至30+合作B2B站点，性价比最高的锚点入口，建议优先完成。</p>
                         <p>💡 <strong>B2B锚点：</strong>在企业平台注册认证 → 企业信息被大模型收录 → AI回答"XX公司怎么样"时引用你的企业页。</p>
-                        <p>📰 <strong>媒体锚点：</strong>在官媒/行业媒体发稿 → 品牌文章被大模型收录 → AI回答"XX行业有哪些品牌"时引用你的软文。</p>
-                        <p>🎯 <strong>目标：</strong>B2B + 媒体双锚点覆盖后，品牌在主流 AI 中的引用率和可信度可提升 3-5 倍。</p>
+                        <p>🎯 <strong>目标：</strong>多平台B2B覆盖后，品牌在主流 AI（文心一言/豆包/通义千问/Kimi/DeepSeek）中的引用率和可信度显著提升。</p>
                     </div>
                 </div>
             </div>

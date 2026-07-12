@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Qonhub 运营助手</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#f1f5f9;color:#1e293b;min-height:100vh}
+  .topbar{background:#fff;border-bottom:1px solid #e2e8f0;padding:12px 24px;display:flex;align-items:center;justify-content:space-between;gap:16px}
+  .topbar h1{font-size:18px;font-weight:700;color:#1e40af;white-space:nowrap}
+  .topbar .meta{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  .topbar select,.topbar input{padding:8px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;outline:none}
+  .topbar select:focus,.topbar input:focus{border-color:#6366f1;box-shadow:0 0 0 3px rgba(99,102,241,.15)}
+  .btn{padding:8px 16px;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;transition:all .15s}
+  .btn-primary{background:#6366f1;color:#fff}.btn-primary:hover{background:#4f46e5}
+  .btn-danger{background:#ef4444;color:#fff}.btn-danger:hover{background:#dc2626}
+  .btn-outline{background:#fff;border:1px solid #d1d5db;color:#374151}.btn-outline:hover{background:#f9fafb}
+  .btn-sm{padding:5px 10px;font-size:12px}
+  .container{max-width:1200px;margin:0 auto;padding:24px;display:grid;grid-template-columns:1fr 1fr;gap:20px}
+  @media(max-width:800px){.container{grid-template-columns:1fr}}
+  .card{background:#fff;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden}
+  .card-header{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid #f1f5f9}
+  .card-header h2{font-size:15px;font-weight:700}
+  .card-body{padding:16px 20px;max-height:500px;overflow-y:auto}
+  .task-item,.cache-item{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid #f8fafc;gap:12px}
+  .task-item:last-child,.cache-item:last-child{border-bottom:none}
+  .badge{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:20px;font-size:11px;font-weight:600}
+  .badge-valid{background:#dcfce7;color:#166534}
+  .badge-expired{background:#fef3c7;color:#92400e}
+  .badge-empty{background:#f1f5f9;color:#94a3b8}
+  .badge-running{background:#dbeafe;color:#1e40af}
+  .badge-done{background:#dcfce7;color:#166534}
+  .badge-fail{background:#fee2e2;color:#991b1b}
+  .stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:16px 20px;border-bottom:1px solid #f1f5f9}
+  .stat-item{text-align:center}
+  .stat-value{font-size:24px;font-weight:800}
+  .stat-label{font-size:11px;color:#64748b;margin-top:2px}
+  .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:999;align-items:center;justify-content:center}
+  .modal-overlay.active{display:flex}
+  .modal{background:#fff;border-radius:16px;padding:24px;width:360px;box-shadow:0 20px 60px rgba(0,0,0,.15)}
+  .modal h3{font-size:16px;margin-bottom:16px}
+  .modal input{width:100%;padding:10px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;margin-bottom:12px}
+  .modal input:focus{border-color:#6366f1;outline:none}
+  .modal .actions{display:flex;gap:8px;justify-content:flex-end}
+  .empty-state{text-align:center;padding:40px 20px;color:#94a3b8}
+  .empty-state .icon{font-size:40px;margin-bottom:8px}
+  .log-area{max-height:150px;overflow-y:auto;font-size:11px;font-family:monospace;background:#1e293b;color:#e2e8f0;padding:12px;border-radius:8px;margin-top:8px;white-space:pre-wrap}
+  .refresh{font-size:12px;color:#6366f1;cursor:pointer}.refresh:hover{text-decoration:underline}
+</style>
+</head>
+<body>
+
+<!-- ═══════ 顶栏 ═══════ -->
+<div class="topbar">
+  <h1>🤖 Qonhub 运营助手</h1>
+  <div class="meta">
+    <label style="font-size:13px;color:#64748b;white-space:nowrap">当前客户</label>
+    <select id="wsSelect" onchange="switchWorkspace()">
+      <option value="">-- 选择客户 --</option>
+    </select>
+    <span id="wsStats" style="font-size:12px;color:#94a3b8"></span>
+    <button class="btn btn-outline btn-sm" onclick="refreshAll()">🔄 刷新</button>
+  </div>
+</div>
+
+<!-- ═══════ 主体 ═══════ -->
+<div class="container">
+
+  <!-- 左栏：任务 -->
+  <div class="card">
+    <div class="card-header">
+      <h2>📋 待执行任务</h2>
+      <button class="btn btn-outline btn-sm" onclick="pullTasks()">从云端拉取</button>
+    </div>
+    <div class="stats-row" id="taskStats">
+      <div class="stat-item"><div class="stat-value" id="statTotal">0</div><div class="stat-label">总任务</div></div>
+      <div class="stat-item"><div class="stat-value" id="statSuccess" style="color:#16a34a">0</div><div class="stat-label">成功</div></div>
+      <div class="stat-item"><div class="stat-value" id="statFail" style="color:#dc2626">0</div><div class="stat-label">失败</div></div>
+      <div class="stat-item"><div class="stat-value" id="statPending" style="color:#6366f1">0</div><div class="stat-label">待处理</div></div>
+    </div>
+    <div class="card-body" id="taskList">
+      <div class="empty-state"><div class="icon">📭</div><p>下拉选择客户后拉取任务</p></div>
+    </div>
+  </div>
+
+  <!-- 右栏：缓存 -->
+  <div class="card">
+    <div class="card-header">
+      <h2>🔑 缓存状态</h2>
+      <button class="btn btn-outline btn-sm" onclick="loadCache()">刷新缓存</button>
+    </div>
+    <div class="card-body" id="cacheList">
+      <div class="empty-state"><div class="icon">📦</div><p>选择客户后查看缓存状态</p></div>
+    </div>
+    <div id="logArea" class="log-area" style="margin:0 20px 16px">就绪，等待操作...</div>
+  </div>
+
+  <!-- [新增] 右栏2：文章分发 -->
+  <div class="card">
+    <div class="card-header">
+      <h2>📰 文章分发</h2>
+      <button class="btn btn-outline btn-sm" onclick="loadArticles()">刷新文章</button>
+    </div>
+    <div class="card-body" id="articleList">
+      <div class="empty-state"><div class="icon">📭</div><p>选择客户后加载文章</p></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ═══════ 验证码弹窗 ═══════ -->
+<div class="modal-overlay" id="captchaModal">
+  <div class="modal">
+    <h3>🔢 请输入验证码</h3>
+    <p style="font-size:13px;color:#64748b;margin-bottom:12px" id="captchaInfo"></p>
+    <input type="text" id="captchaInput" placeholder="输入验证码" maxlength="10" autofocus>
+    <div class="actions">
+      <button class="btn btn-outline" onclick="closeCaptcha()">取消</button>
+      <button class="btn btn-primary" onclick="submitCaptcha()">确认提交</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════ CONFIG ═══════
+const API = "http://127.0.0.1:9901";
+const API_KEY = "qonhub-rpa-secret-change-me";
+const h = (sel) => document.getElementById(sel);
+
+// ═══════ WORKSPACE ═══════
+let wsList = [];
+let currentWs = "";
+
+async function loadWorkspaces() {
+  try {
+    const resp = await fetch(`${CLOUD}/api/v1/rpa/my-workspaces`);
+    const data = await resp.json();
+    wsList = data.workspaces || [];
+    if (wsList.length === 0) {
+      // fallback: localStorage backup
+      wsList = JSON.parse(localStorage.getItem("rpa_workspaces") || "[]");
+    } else {
+      localStorage.setItem("rpa_workspaces", JSON.stringify(wsList));
+    }
+  } catch (e) {
+    wsList = JSON.parse(localStorage.getItem("rpa_workspaces") || "[]");
+    log("⚠️ 云端不可达，使用本地缓存");
+  }
+  renderWsSelect();
+}
+
+function renderWsSelect() {
+  const sel = h("wsSelect");
+  sel.innerHTML = '<option value="">-- 选择客户（从云端加载）--</option>';
+  wsList.forEach(w => {
+    sel.innerHTML += `<option value="${w.id}" ${currentWs===w.id?'selected':''}>${w.name}</option>`;
+  });
+}
+
+async function switchWorkspace() {
+  const val = h("wsSelect").value;
+  currentWs = val;
+  h("wsStats").textContent = val ? `WS-${val}` : "";
+  if (val) {
+    await Promise.all([pullTasks(), loadCache()]);
+    localStorage.setItem("rpa_current_ws", val);
+  }
+}
+
+// ═══════ TASKS ═══════
+async function pullTasks() {
+  if (!currentWs) return log("请先选择客户");
+  log(`正在拉取 WS-${currentWs} 的任务...`);
+  try {
+    const resp = await fetch(`${API}/api/tasks/pull?workspace_id=${currentWs}`);
+    const data = await resp.json();
+    const tasks = data.tasks || data || [];
+    renderTasks(Array.isArray(tasks) ? tasks : []);
+    log(`拉取完成: ${tasks.length} 个任务`);
+  } catch (e) {
+    log(`❌ 拉取失败: ${e.message}（云端可能未启动）`);
+    renderTasks([]);
+  }
+}
+
+function renderTasks(tasks) {
+  const el = h("taskList");
+  if (!tasks.length) {
+    el.innerHTML = '<div class="empty-state"><div class="icon">✨</div><p>暂无待执行任务</p></div>';
+    return;
+  }
+  el.innerHTML = tasks.map(t => `
+    <div class="task-item">
+      <div style="flex:1">
+        <div style="font-size:13px;font-weight:600">${t.platform_name||t.platform||t.platform_key}</div>
+        <div style="font-size:11px;color:#64748b">${t.description||t.action||'企业认证'}</div>
+        ${t.status ? `<span class="badge badge-${t.status==='completed'?'done':t.status==='failed'?'fail':'running'}">${t.status}</span>` : ''}
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="executeTask('${t.platform||t.platform_key}','${t.action||'register_and_certify'}')">▶ 执行</button>
+    </div>
+  `).join("");
+}
+
+async function executeTask(platform, action) {
+  if (!currentWs) return alert("请先选择客户");
+  log(`▶ 执行: ${platform} (ws=${currentWs})`);
+  h("taskList").querySelectorAll("button").forEach(b => b.disabled = true);
+  try {
+    const resp = await fetch(`${API}/api/v1/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Api-Key": API_KEY },
+      body: JSON.stringify({
+        platform,
+        action,
+        account: { username: `qy_${Date.now().toString(36)}` },
+        enterprise: { company_name: `WS-${currentWs}`, workspace_id: currentWs },
+        options: { workspace_id: currentWs },
+      }),
+    });
+    const data = await resp.json();
+    log(`✅ 任务已提交: ${data.task_id}`);
+    // 轮询任务结果
+    pollTaskResult(data.task_id);
+  } catch (e) {
+    log(`❌ 提交失败: ${e.message}`);
+  } finally {
+    h("taskList").querySelectorAll("button").forEach(b => b.disabled = false);
+  }
+}
+
+async function pollTaskResult(taskId) {
+  log(`⏳ 等待任务完成: ${taskId}`);
+  let attempts = 0;
+  const maxAttempts = 60;
+  const poll = setInterval(async () => {
+    attempts++;
+    try {
+      const resp = await fetch(`${API}/api/v1/tasks/${taskId}?api_key=${API_KEY}`);
+      const t = await resp.json();
+      if (t.status === "completed") {
+        clearInterval(poll);
+        log(`✅ 任务完成! ${JSON.stringify(t.result||{})}`);
+        pullTasks();
+        updateStats();
+        return;
+      }
+      if (t.status === "failed") {
+        clearInterval(poll);
+        log(`❌ 任务失败: ${t.error}`);
+        pullTasks();
+        updateStats();
+        return;
+      }
+      if (attempts >= maxAttempts) {
+        clearInterval(poll);
+        log(`⏰ 任务超时: ${taskId}`);
+        return;
+      }
+    } catch {
+      clearInterval(poll);
+      log(`⚠️ 轮询中断`);
+    }
+  }, 2000);
+}
+
+// ═══════ CACHE ═══════
+async function loadCache() {
+  if (!currentWs) return;
+  try {
+    const resp = await fetch(`${API}/api/cache/list?workspace_id=${currentWs}`);
+    const data = await resp.json();
+    renderCache(data.caches || []);
+  } catch (e) { log(`❌ 缓存查询失败: ${e.message}`); }
+}
+
+function renderCache(caches) {
+  const el = h("cacheList");
+  if (!caches.length) {
+    el.innerHTML = '<div class="empty-state"><div class="icon">📦</div><p>无缓存数据</p></div>';
+    return;
+  }
+  el.innerHTML = caches.map(c => `
+    <div class="cache-item">
+      <div style="flex:1">
+        <div style="font-size:13px;font-weight:600">${c.platform_name}</div>
+        <div style="font-size:11px;color:#64748b">
+          ${c.created_at ? `创建于 ${new Date(c.created_at).toLocaleDateString()} (${c.age_days}天前)` : '未创建缓存'}
+        </div>
+      </div>
+      <span class="badge ${c.valid ? 'badge-valid' : (c.created_at ? 'badge-expired' : 'badge-empty')}">
+        ${c.valid ? `✅ 有效` : (c.created_at ? '⚠️ 已过期' : '📝 无缓存')}
+      </span>
+      ${c.created_at ? `<button class="btn btn-danger btn-sm" onclick="clearCache('${c.platform_key}')">清除</button>` : ''}
+    </div>
+  `).join("");
+}
+
+async function clearCache(platformKey) {
+  if (!confirm(`确认清除 ${platformKey} 的缓存？下次需要重新登录。`)) return;
+  await fetch(`${API}/api/cache/clear`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ workspace_id: currentWs, platform_key: platformKey }),
+  });
+  log(`🗑️ 已清除: ${platformKey}`);
+  loadCache();
+}
+
+// ═══════ STATS ═══════
+function updateStats() {
+  let total = 0, success = 0, fail = 0, pending = 0;
+  const items = h("taskList").querySelectorAll(".task-item");
+  items.forEach(item => {
+    total++;
+    if (item.querySelector(".badge-done")) success++;
+    else if (item.querySelector(".badge-fail")) fail++;
+    else pending++;
+  });
+  h("statTotal").textContent = total;
+  h("statSuccess").textContent = success;
+  h("statFail").textContent = fail;
+  h("statPending").textContent = pending;
+}
+
+// ═══════ CAPTCHA ═══════
+let captchaCallback = null;
+
+function showCaptcha(info, callback) {
+  h("captchaInfo").textContent = info || "请输入验证码";
+  h("captchaInput").value = "";
+  h("captchaModal").classList.add("active");
+  h("captchaInput").focus();
+  captchaCallback = callback;
+}
+
+function closeCaptcha() {
+  h("captchaModal").classList.remove("active");
+  if (captchaCallback) captchaCallback(null);
+  captchaCallback = null;
+}
+
+function submitCaptcha() {
+  const code = h("captchaInput").value.trim();
+  if (!code) return alert("请输入验证码");
+  h("captchaModal").classList.remove("active");
+  if (captchaCallback) captchaCallback(code);
+  captchaCallback = null;
+}
+
+document.getElementById("captchaInput").addEventListener("keydown", e => {
+  if (e.key === "Enter") submitCaptcha();
+  if (e.key === "Escape") closeCaptcha();
+});
+
+// ═══════ UTILS ═══════
+function log(msg) {
+  const el = h("logArea");
+  const time = new Date().toLocaleTimeString();
+  el.textContent = `[${time}] ${msg}\n` + el.textContent;
+}
+
+// [新增] 文章列表 + 分发
+const CLOUD = "http://127.0.0.1:18080/geo_admin";
+
+async function loadArticles() {
+  if (!currentWs) return;
+  try {
+    const resp = await fetch(CLOUD + "/api/v1/rpa/articles?workspace_id=" + currentWs);
+    const data = await resp.json();
+    renderArticles(data.articles || []);
+    log("文章加载完成: " + (data.articles || []).length + " 篇");
+  } catch (e) { log("❌ 文章加载失败: " + e.message); }
+}
+
+let distChannels = []; // 客户绑定的平台 + API渠道
+
+async function loadDistChannels() {
+  if (!currentWs) { distChannels = []; return; }
+  try {
+    // 1. 拉取客户绑定的平台
+    const platResp = await fetch(CLOUD + "/api/v1/rpa/client-platforms?workspace_id=" + currentWs);
+    const platData = await platResp.json();
+    const bound = (platData.platforms || []).map(function(p) {
+      return {key: p.key + '_publish', name: p.name, type: 'rpa', bound: true, hasCache: p.has_cache};
+    });
+
+    // 2. 拉取API分发渠道
+    const chResp = await fetch(CLOUD + "/api/v1/rpa/distribution-channels");
+    const chData = await chResp.json();
+    const apiChannels = (chData.channels || []).filter(function(c) { return c.type === 'api'; });
+
+    distChannels = bound.concat(apiChannels);
+    log("渠道加载: " + bound.length + "绑定 + " + apiChannels.length + "API");
+  } catch(e) { distChannels = []; log("⚠️ 渠道加载失败: " + e.message); }
+}
+
+function renderArticles(articles) {
+  const el = h("articleList");
+  if (!articles.length) {
+    el.innerHTML = '<div class="empty-state"><div class="icon">📭</div><p>该客户暂无已发布文章</p></div>';
+    return;
+  }
+  const icons = {toutiao_publish:'📰',baijiahao_publish:'📝',xiaohongshu_publish:'📕',api_geoflow_agent:'🌐',api_wordpress_rest:'📦',api_generic_http_api:'🔗'};
+  el.innerHTML = articles.map(function(a) {
+    var btns = '';
+    distChannels.forEach(function(ch) {
+      btns += '<button class="btn btn-primary btn-sm" onclick="distArticle(' + a.id + ',\'' + ch.key + '\',\'' + ch.type + '\')" title="' + ch.name + '">' + (icons[ch.key] || '📤') + '</button>';
+    });
+    return '<div class="task-item"><div style="flex:1"><div style="font-size:13px;font-weight:600">' + a.title + '</div><div style="font-size:11px;color:#64748b">' + (a.published_at || '') + '</div></div><div style="display:flex;gap:4px">' + btns + '</div></div>';
+  }).join("");
+}
+
+async function distArticle(articleId, channelKey, channelType) {
+  if (!currentWs) return alert("请先选择客户");
+  const ch = distChannels.find(c => c.key === channelKey);
+  if (!confirm("分发到 " + (ch?.name||channelKey) + "？")) return;
+  log("📤 分发中: 文章" + articleId + " → " + channelKey);
+
+  // 先获取文章全文
+  let title = "", content = "";
+  try {
+    const artResp = await fetch(CLOUD + "/api/v1/rpa/articles/" + articleId);
+    const artData = await artResp.json();
+    title = artData.title || "";
+    content = artData.content || "";
+  } catch(e) { log("⚠️ 获取文章失败: " + e.message); }
+
+  if (channelType === "rpa") {
+    try {
+      const resp = await fetch(API + "/api/v1/publish", {
+        method: "POST",
+        headers: {"Content-Type":"application/json","X-Api-Key":API_KEY},
+        body: JSON.stringify({
+          platform: channelKey,
+          account: {},
+          content: {title: title, content: content, article_id: articleId},
+          options: {workspace_id: currentWs}
+        })
+      });
+      const r = await resp.json();
+      log("✅ RPA已提交: " + r.task_id);
+    } catch(e) { log("❌ RPA失败: " + e.message); }
+  } else {
+    try {
+      const resp = await fetch(CLOUD + "/distribution/armory/publish", {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({
+          article_id: articleId,
+          template_key: "geo_optimized",
+          rewritten_title: title,
+          rewritten_content: content,
+          channel_ids: [ch?.channel_id]
+        })
+      });
+      const r = await resp.json();
+      log("✅ API分发: " + (r.summary || "已提交"));
+    } catch(e) { log("❌ API失败: " + e.message); }
+  }
+}
+
+function refreshAll() {
+  if (currentWs) { pullTasks(); loadCache(); loadArticles(); updateStats(); }
+  loadDistChannels();
+  log("🔄 已刷新");
+}
+
+// ═══════ INIT ═══════
+(async () => {
+  // 恢复上次选的 workspace
+  const saved = localStorage.getItem("rpa_current_ws");
+  // 尝试从 URL 参数获取 workspace 列表
+  const urlWs = new URLSearchParams(location.search).get("workspaces");
+  if (urlWs) {
+    try {
+      wsList = JSON.parse(decodeURIComponent(urlWs));
+      localStorage.setItem("rpa_workspaces", JSON.stringify(wsList));
+    } catch {}
+  }
+  await loadWorkspaces();
+  if (saved) {
+    currentWs = saved;
+    h("wsSelect").value = saved;
+    h("wsStats").textContent = `WS-${saved}`;
+    refreshAll();
+  }
+  log("✅ 运营助手就绪");
+})();
+</script>
+</body>
+</html>

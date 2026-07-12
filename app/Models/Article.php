@@ -105,4 +105,23 @@ class Article extends Model
     {
         return $query->where('status', 'published')->whereNull('deleted_at');
     }
+
+    /**
+     * [新增] GEO 评分（accessor，实时计算）。
+     */
+    public function getGeoScoreAttribute(): ?int
+    {
+        if (empty($this->title) && empty($this->content)) return null;
+        try {
+            $scorer = app(\App\Services\GeoFlow\GeoContentScorer::class);
+            return $scorer->quickScore($this->title ?? '', $this->content ?? '');
+        } catch (\Throwable) { return null; }
+    }
+
+    public function getGeoGradeAttribute(): string
+    {
+        $s = $this->geo_score;
+        if ($s === null) return '—';
+        return match (true) { $s >= 85 => 'A', $s >= 70 => 'B', $s >= 50 => 'C', $s >= 30 => 'D', default => 'F' };
+    }
 }

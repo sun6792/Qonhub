@@ -235,7 +235,7 @@ class WorkspaceController extends Controller
             'name' => (string) $payload['client_name'],
             'username' => (string) $payload['client_username'],
             'email' => (string) $payload['client_username'] . '@client.local',
-            'password' => bcrypt($plainPassword),
+            'password' => $plainPassword, // hashed cast 自动加密，勿手动 bcrypt
             'password_ciphertext' => $crypto->encrypt($plainPassword),
             'status' => 'active',
         ]);
@@ -270,7 +270,7 @@ class WorkspaceController extends Controller
         $crypto = app(ApiKeyCrypto::class);
 
         $client->forceFill([
-            'password' => bcrypt($plainPassword),
+            'password' => $plainPassword, // hashed cast 自动加密
             'password_ciphertext' => $crypto->encrypt($plainPassword),
         ])->save();
 

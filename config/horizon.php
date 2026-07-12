@@ -83,7 +83,7 @@ return [
     |
     */
 
-    'middleware' => ['web', 'admin.auth', 'admin.super'],
+    'middleware' => ['web', 'admin.auth'],
 
     /*
     |--------------------------------------------------------------------------

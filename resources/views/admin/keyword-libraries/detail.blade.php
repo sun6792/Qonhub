@@ -398,37 +398,133 @@
 
         function showAiModal() {
             document.getElementById('ai-modal').classList.remove('hidden');
+            switchAiTab('manual'); // 默认显示手动输入 Tab
         }
         function hideAiModal() {
             document.getElementById('ai-modal').classList.add('hidden');
         }
+        function switchAiTab(tab) {
+            const manualPanel = document.getElementById('panel-manual');
+            const kbPanel = document.getElementById('panel-kb');
+            const manualTab = document.getElementById('tab-manual');
+            const kbTab = document.getElementById('tab-kb');
+
+            const activeClasses = ['text-purple-600', 'bg-purple-50', 'border-purple-200'];
+            const inactiveClasses = ['text-gray-500', 'border-transparent'];
+
+            if (tab === 'kb') {
+                manualPanel.classList.add('hidden');
+                kbPanel.classList.remove('hidden');
+                manualTab.classList.remove(...activeClasses);
+                manualTab.classList.add(...inactiveClasses);
+                kbTab.classList.remove(...inactiveClasses);
+                kbTab.classList.add(...activeClasses);
+            } else {
+                kbPanel.classList.add('hidden');
+                manualPanel.classList.remove('hidden');
+                kbTab.classList.remove(...activeClasses);
+                kbTab.classList.add(...inactiveClasses);
+                manualTab.classList.remove(...inactiveClasses);
+                manualTab.classList.add(...activeClasses);
+            }
+        }
     </script>
 @endpush
 
-{{-- AI 生成弹窗 --}}
+{{-- AI 生成弹窗（双 Tab） --}}
 <div id="ai-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-    <div class="relative top-20 mx-auto max-w-lg bg-white rounded-lg shadow-xl p-6">
-        <h3 class="text-lg font-medium text-gray-900 mb-4">🤖 AI 生成关键词 <span class="text-purple-600">{{ $library->name }}</span></h3>
-        <form method="POST" action="{{ route('admin.keyword-libraries.ai-generate', ['libraryId' => (int) $library->id]) }}">
-            @csrf
-            <div class="mb-3">
-                <label class="block text-sm font-medium text-gray-700 mb-1">输入主题/行业/产品描述</label>
-                <textarea name="prompt" rows="3" required class="w-full border-gray-300 rounded-md shadow-sm focus:ring-purple-500 focus:border-purple-500 sm:text-sm"
-                    placeholder="如：运动护具、EVA材料、体育用品防护、健身器材配件"></textarea>
+    <div class="relative top-10 mx-auto max-w-xl bg-white rounded-lg shadow-xl">
+        {{-- 标题栏 --}}
+        <div class="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+            <h3 class="text-lg font-semibold text-gray-900">🤖 AI 生成关键词</h3>
+            <span class="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full">{{ $library->name }}</span>
+        </div>
+
+        {{-- Tab 切换 --}}
+        <div class="flex px-6 pt-4">
+            <button type="button" id="tab-manual" onclick="switchAiTab('manual')"
+                class="flex-1 py-2.5 text-sm font-medium rounded-t-lg transition-colors text-purple-600 bg-purple-50 border border-b-0 border-purple-200">
+                ✍️ 手动输入主题
+            </button>
+            <button type="button" id="tab-kb" onclick="switchAiTab('kb')"
+                class="flex-1 py-2.5 text-sm font-medium rounded-t-lg transition-colors text-gray-500 border border-b-0 border-transparent hover:bg-gray-50">
+                📚 从知识库蒸馏
+            </button>
+        </div>
+
+        {{-- Tab 面板 --}}
+        <div class="px-6 py-5 bg-white border border-t-0 border-gray-200 rounded-b-lg">
+            {{-- Tab 1: 手动输入主题 --}}
+            <div id="panel-manual">
+                <form method="POST" action="{{ route('admin.keyword-libraries.ai-generate', ['libraryId' => (int) $library->id]) }}">
+                    @csrf
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-1.5">输入主题/行业/产品描述</label>
+                        <textarea name="prompt" rows="3" required
+                            class="w-full border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500 sm:text-sm transition-shadow"
+                            placeholder="如：运动护具、EVA材料、体育用品防护、健身器材配件"></textarea>
+                        <p class="mt-1 text-xs text-gray-400">描述越具体，生成的关键词越精准</p>
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-1.5">生成数量</label>
+                        <select name="count" class="w-32 border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500 sm:text-sm">
+                            <option value="10">10 个</option>
+                            <option value="20" selected>20 个</option>
+                            <option value="30">30 个</option>
+                            <option value="50">50 个</option>
+                        </select>
+                    </div>
+                    <div class="flex justify-end space-x-3 pt-2 border-t border-gray-100">
+                        <button type="button" onclick="hideAiModal()"
+                            class="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">取消</button>
+                        <button type="submit"
+                            class="px-5 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 transition-colors shadow-sm">🚀 生成关键词</button>
+                    </div>
+                </form>
             </div>
-            <div class="mb-4">
-                <label class="block text-sm font-medium text-gray-700 mb-1">生成数量</label>
-                <select name="count" class="border-gray-300 rounded-md shadow-sm focus:ring-purple-500 focus:border-purple-500 sm:text-sm">
-                    <option value="10">10 个</option>
-                    <option value="20" selected>20 个</option>
-                    <option value="30">30 个</option>
-                    <option value="50">50 个</option>
-                </select>
+
+            {{-- Tab 2: 从知识库蒸馏 --}}
+            <div id="panel-kb" class="hidden">
+                @if(isset($knowledgeBases) && count($knowledgeBases) > 0)
+                <div class="mb-4 p-3 bg-purple-50 rounded-lg border border-purple-100">
+                    <p class="text-sm text-purple-700">💡 AI 将自动读取知识库内容，蒸馏出<strong>核心词、长尾词、地域词、意图词</strong>四类关键词</p>
+                </div>
+                <form method="POST" action="{{ route('admin.keyword-libraries.ai-generate-from-knowledge', ['libraryId' => (int) $library->id]) }}">
+                    @csrf
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-1.5">选择知识库</label>
+                        <select name="knowledge_base_id" required
+                            class="w-full border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500 sm:text-sm">
+                            <option value="">-- 请选择知识库 --</option>
+                            @foreach($knowledgeBases as $kb)
+                            <option value="{{ (int) $kb->id }}">{{ $kb->name }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-1.5">生成数量</label>
+                        <select name="count" class="w-32 border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500 sm:text-sm">
+                            <option value="10">10 个</option>
+                            <option value="20" selected>20 个</option>
+                            <option value="30">30 个</option>
+                            <option value="50">50 个</option>
+                        </select>
+                    </div>
+                    <div class="flex justify-end space-x-3 pt-2 border-t border-gray-100">
+                        <button type="button" onclick="hideAiModal()"
+                            class="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">取消</button>
+                        <button type="submit"
+                            class="px-5 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 transition-colors shadow-sm">🔬 蒸馏生成</button>
+                    </div>
+                </form>
+                @else
+                <div class="text-center py-10">
+                    <div class="text-4xl mb-3">📭</div>
+                    <p class="text-gray-500 font-medium mb-1">暂无知识库</p>
+                    <p class="text-sm text-gray-400">请先在「素材管理 → 知识库」中上传客户材料</p>
+                </div>
+                @endif
             </div>
-            <div class="flex justify-end space-x-3">
-                <button type="button" onclick="hideAiModal()" class="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50">取消</button>
-                <button type="submit" class="px-4 py-2 bg-purple-600 text-white rounded-md text-sm font-medium hover:bg-purple-700">生成</button>
-            </div>
-        </form>
+        </div>
     </div>
 </div>

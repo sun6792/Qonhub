@@ -36,6 +36,7 @@ class EnterpriseProfile extends Model
         'company_phone', 'company_email', 'company_website',
         'industry', 'products_services',
         'business_license_path', 'company_logo_path',
+        'registration_phone', 'registration_authorized',
         'nap_consistency_checked',
         'verification_status', 'verified_by', 'verified_at',
     ];
@@ -44,6 +45,7 @@ class EnterpriseProfile extends Model
         'establishment_date' => 'date',
         'verified_at' => 'datetime',
         'nap_consistency_checked' => 'boolean',
+        'registration_authorized' => 'boolean',
         'products_services' => 'array',
     ];
 

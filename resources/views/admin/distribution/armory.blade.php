@@ -108,6 +108,23 @@
                                     <span class="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2.5 py-1 text-xs font-medium text-blue-700" data-rewrite-label>改写中...</span>
                                     <span class="text-xs text-gray-400" data-rewrite-status></span>
                                 </div>
+                                {{-- GEO 评分对比卡片（geoskills 落地） --}}
+                                <div data-geo-score class="hidden mb-3 grid grid-cols-3 gap-3">
+                                    <div class="rounded-lg border border-gray-200 bg-gray-50 p-3 text-center">
+                                        <div class="text-xs text-gray-500 mb-1">改写前</div>
+                                        <div class="text-2xl font-bold text-red-500" data-geo-before>--</div>
+                                    </div>
+                                    <div class="rounded-lg border border-gray-200 bg-gray-50 p-3 text-center">
+                                        <div class="text-xs text-gray-500 mb-1">改写后</div>
+                                        <div class="text-2xl font-bold text-green-500" data-geo-after>--</div>
+                                    </div>
+                                    <div class="rounded-lg border border-gray-200 bg-gray-50 p-3 text-center">
+                                        <div class="text-xs text-gray-500 mb-1">评级提升</div>
+                                        <div class="text-lg font-bold text-purple-600" data-geo-grade>--</div>
+                                        <div class="text-xs mt-1" data-geo-improvement></div>
+                                    </div>
+                                    <div class="col-span-3 text-xs text-gray-500 bg-amber-50 rounded-lg p-2 border border-amber-100" data-geo-suggestions style="display:none"></div>
+                                </div>
                                 <div class="flex items-center gap-2">
                                     <button type="button" data-copy-btn
                                             class="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-green-50 hover:border-green-300 hover:text-green-700 transition"
@@ -270,6 +287,25 @@
                 label.className = 'inline-flex items-center gap-1 rounded-full bg-green-100 px-2.5 py-1 text-xs font-medium text-green-700';
                 copyBtn.disabled = false;
                 copyBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+
+                // GEO 评分对比卡片（geoskills 落地）[新增]
+                if (data.geo_score) {
+                    const geoCard = panel.querySelector('[data-geo-score]');
+                    geoCard.classList.remove('hidden');
+                    geoCard.querySelector('[data-geo-before]').textContent = data.geo_score.before;
+                    geoCard.querySelector('[data-geo-after]').textContent = data.geo_score.after;
+                    geoCard.querySelector('[data-geo-grade]').textContent = data.geo_score.grade;
+                    const imp = data.geo_score.improvement;
+                    const impEl = geoCard.querySelector('[data-geo-improvement]');
+                    impEl.textContent = (imp >= 0 ? '+' : '') + imp;
+                    impEl.className = 'text-xs font-bold mt-1 ' + (imp >= 0 ? 'text-green-600' : 'text-red-600');
+
+                    const suggEl = geoCard.querySelector('[data-geo-suggestions]');
+                    if (data.geo_score.suggestions && data.geo_score.suggestions.length > 0) {
+                        suggEl.style.display = 'block';
+                        suggEl.innerHTML = '<strong>💡 优化建议：</strong>' + data.geo_score.suggestions.map(s => '• ' + s).join('<br>');
+                    }
+                }
 
                 const wrapper = document.createElement('div');
                 wrapper.className = 'rewritten-text';
