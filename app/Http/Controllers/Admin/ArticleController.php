@@ -407,6 +407,9 @@ class ArticleController extends Controller
             $query->orderByDesc('created_at');
         }
 
+        // Workspace 隔离：运营师只看自己 workspace 的文章
+        $this->scopeByOperatorWorkspaces($query, Article::class);
+
         if ($filters['task_id'] > 0) {
             $query->where('task_id', $filters['task_id']);
         }

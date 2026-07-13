@@ -38,7 +38,7 @@ import { fileURLToPath } from "url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.RPA_PORT || 9901;
 const API_KEY = process.env.RPA_API_KEY || "qonhub-rpa-secret-change-me";
-const HEADLESS = process.env.RPA_HEADLESS !== "false";
+const HEADLESS = process.env.RPA_HEADLESS === "true"; // v2.4: 默认桌面模式(浏览器可见), RPA_HEADLESS=true 切回无头
 const SCREENSHOT_DIR = process.env.RPA_SCREENSHOT_DIR || path.join(__dirname, "screenshots");
 const GEOFLOW_API_URL = process.env.GEOFLOW_API_URL || "http://127.0.0.1:18080/geo_admin";
 const STORAGE_DIR = path.join(__dirname, "storage", "states");
@@ -439,6 +439,97 @@ async function reportToCloud(taskId, payload) {
         );
     }
 }
+
+// ══════════════════════════════════════════════════════════
+//  [新增] 手动登录授权 — 摘星式一键授权
+// ══════════════════════════════════════════════════════════
+
+/**
+ * POST /api/v1/auth-login
+ * 打开浏览器让用户手动登录平台，成功后自动保存 Cookie。
+ * Body: { platform, workspace_id, headless? }
+ */
+app.post("/api/v1/auth-login", auth, async (req, res) => {
+  const { platform, workspace_id, headless } = req.body;
+  if (!platform || !workspace_id) {
+    return res.status(400).json({ error: "missing platform or workspace_id" });
+  }
+
+  const platformMap = {
+    toutiao:     { url: "https://mp.toutiao.com/",          name: "今日头条" },
+    baijiahao:   { url: "https://baijiahao.baidu.com/",      name: "百家号" },
+    wechat_mp:   { url: "https://mp.weixin.qq.com/",         name: "微信公众号" },
+    sohu:        { url: "https://mp.sohu.com/",              name: "搜狐号" },
+    xiaohongshu: { url: "https://creator.xiaohongshu.com/",  name: "小红书" },
+    wangyihao:   { url: "https://mp.163.com/",               name: "网易号" },
+    bilibili:    { url: "https://member.bilibili.com/",      name: "B站" },
+    qiehao:      { url: "https://om.qq.com/",                name: "企鹅号" },
+    smzdm:       { url: "https://www.smzdm.com/",            name: "值得买" },
+    douyin:      { url: "https://creator.douyin.com/",       name: "抖音" },
+    kuaishou:    { url: "https://cp.kuaishou.com/",          name: "快手" },
+  };
+  const info = platformMap[platform];
+  if (!info) return res.status(400).json({ error: "unknown platform" });
+
+  logger.info(`Auth-login: ${info.name} for ws=${workspace_id}`);
+
+  try {
+    const browser = await chromium.launch({
+      headless: headless !== undefined ? headless : false,
+      args: ["--no-sandbox", "--disable-blink-features=AutomationControlled"],
+    });
+
+    // Load saved state if exists
+    const stateDir = path.join(STORAGE_DIR, String(workspace_id));
+    if (!fs.existsSync(stateDir)) fs.mkdirSync(stateDir, { recursive: true });
+    const stateFile = path.join(stateDir, `${platform}.json`);
+    const contextOpts = {
+      viewport: { width: 1366, height: 768 },
+      locale: "zh-CN",
+      timezoneId: "Asia/Shanghai",
+    };
+    if (fs.existsSync(stateFile)) {
+      try { contextOpts.storageState = JSON.parse(fs.readFileSync(stateFile, "utf-8")); } catch {}
+    }
+
+    const context = await browser.newContext(contextOpts);
+    const page = await context.newPage();
+    await page.goto(info.url, { waitUntil: "domcontentloaded", timeout: 20000 });
+
+    // Wait for user to complete login (max 5 min)
+    logger.info(`Waiting for user to login on ${info.name}...`);
+    let loggedIn = false;
+    const startTime = Date.now();
+    const maxWait = 5 * 60 * 1000; // 5 min
+
+    while (!loggedIn && (Date.now() - startTime) < maxWait) {
+      await new Promise(r => setTimeout(r, 3000));
+      try {
+        const url = page.url();
+        const body = await page.textContent("body").catch(() => "");
+        // Detect successful login: URL changed from login page, or page has content creation elements
+        if (platform === "toutiao" && (url.includes("/profile") || body.includes("创作") || body.includes("发布"))) loggedIn = true;
+        else if (platform === "baijiahao" && (url.includes("baijiahao.baidu.com/builder") || body.includes("内容发布"))) loggedIn = true;
+        else if (platform === "xiaohongshu" && (url.includes("creator.xiaohongshu.com") && !url.includes("/login"))) loggedIn = true;
+        else if (platform === "sohu" && (url.includes("mp.sohu.com") && !url.includes("/login"))) loggedIn = true;
+      } catch {}
+    }
+
+    if (loggedIn) {
+      const state = await context.storageState();
+      fs.writeFileSync(stateFile, JSON.stringify(state));
+      logger.info(`Auth-login SUCCESS: ${info.name} state saved`);
+      await browser.close();
+      res.json({ success: true, message: `${info.name} 登录成功，Cookie已保存` });
+    } else {
+      await browser.close();
+      res.json({ success: false, message: `登录超时（5分钟），请在浏览器中手动完成登录后重试` });
+    }
+  } catch (err) {
+    logger.error(`Auth-login error: ${err.message}`);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 // ══════════════════════════════════════════════════════════
 //  Start

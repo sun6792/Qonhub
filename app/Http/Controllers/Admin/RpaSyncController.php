@@ -154,12 +154,22 @@ class RpaSyncController extends Controller
     {
         $wsId = (int) $request->query('workspace_id', 0);
 
-        // 运营助手：返回全部已发布文章（运营管理所有客户）
-        $articles = \App\Models\Article::query()
+        $query = \App\Models\Article::query()
             ->where('status', 'published')
             ->orderByDesc('published_at')
-            ->limit(30)
-            ->get(['id', 'title', 'excerpt', 'published_at']);
+            ->limit(30);
+
+        // Workspace 隔离：只返回该客户的已发布文章
+        if ($wsId > 0) {
+            $query->whereIn('id', function ($sub) use ($wsId) {
+                $sub->select('assignable_id')
+                    ->from('workspace_assignments')
+                    ->where('assignable_type', \App\Models\Article::class)
+                    ->where('workspace_id', $wsId);
+            });
+        }
+
+        $articles = $query->get(['id', 'title', 'excerpt', 'published_at']);
 
         return response()->json([
             'workspace_id' => $wsId,
@@ -196,6 +206,45 @@ class RpaSyncController extends Controller
                 'has_cache' => file_exists(storage_path("rpa/states/{$wsId}/{$a->platform_key}.json")),
             ])->all(),
         ]);
+    }
+
+    /**
+     * [新增] GET /api/v1/rpa/credentials?workspace_id=7
+     * 返回指定workspace下所有平台的解密凭证，供运营助手登录使用。
+     * 凭证经 AES-256-CBC 解密后通过本地 API 传输（localhost:9901 ↔ localhost:18080，不经过公网）。
+     */
+    public function credentials(Request $request): JsonResponse
+    {
+        $wsId = (int) $request->query('workspace_id', 0);
+        if ($wsId <= 0) {
+            return response()->json(['credentials' => []]);
+        }
+
+        $crypto = app(\App\Support\GeoFlow\ApiKeyCrypto::class);
+        $accounts = \App\Models\ClientPlatformAccount::query()
+            ->where('workspace_id', $wsId)
+            ->where('status', 'active')
+            ->get();
+
+        $result = [];
+        foreach ($accounts as $a) {
+            $cred = null;
+            if (! empty($a->credential_ciphertext)) {
+                try {
+                    $cred = $crypto->decrypt($a->credential_ciphertext);
+                } catch (\Throwable $e) {
+                    $cred = null;
+                }
+            }
+            $result[] = [
+                'platform_key' => $a->platform_key,
+                'account_name' => $a->platform_account_name,
+                'credential' => $cred, // 解密后的明文（仅本地传输）
+                'last_verified_at' => $a->last_verified_at?->toIso8601String(),
+            ];
+        }
+
+        return response()->json(['credentials' => $result]);
     }
 
     /**
@@ -267,5 +316,51 @@ class RpaSyncController extends Controller
                 'slug' => $w->slug,
             ])->all(),
         ]);
+    }
+
+    /**
+     * POST /api/v1/rpa/bulk-distribute — P0 运营助手批量分发
+     * Body: { workspace_id, platform, article_ids[] }
+     * 自动创建 ContentPublishTask → 入队 distribution 队列
+     */
+    public function bulkDistribute(Request $request): JsonResponse
+    {
+        $payload = $request->validate([
+            'workspace_id' => ['required', 'integer', 'min:1'],
+            'platform' => ['required', 'string'],
+            'article_ids' => ['required', 'array', 'min:1'],
+            'article_ids.*' => ['integer'],
+        ]);
+
+        $wsId = (int) $payload['workspace_id'];
+        $workspace = Workspace::query()->find($wsId);
+        if (! $workspace) {
+            return response()->json(['ok' => false, 'error' => '工作空间不存在'], 404);
+        }
+
+        try {
+            $publishService = app(\App\Services\GeoFlow\Publishing\ContentPublishService::class);
+            $task = $publishService->createPublishTask(
+                workspace: $workspace,
+                articleIds: $payload['article_ids'],
+                platformKeys: [$payload['platform']],
+                options: [
+                    'task_name' => '运营助手批量分发 - ' . $payload['platform'] . ' - ' . now()->format('H:i'),
+                    'use_smart_scheduling' => true,
+                    'use_content_rewrite' => true,
+                    'rewrite_mode' => 'per_platform',
+                ],
+            );
+            $publishService->dispatchPublishTask($task);
+
+            return response()->json([
+                'ok' => true,
+                'task_id' => (int) $task->id,
+                'total_jobs' => (int) $task->total_jobs,
+                'message' => "已创建分发任务，共 {$task->total_jobs} 个作业",
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json(['ok' => false, 'error' => $e->getMessage()], 500);
+        }
     }
 }

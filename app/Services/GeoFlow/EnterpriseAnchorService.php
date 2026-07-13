@@ -395,4 +395,105 @@ class EnterpriseAnchorService
             'cited_by_llms' => $llmCounts,
         ];
     }
+
+    // ─── RPA 自动注册（P1 新增） ────────────────────────
+
+    /**
+     * 启动单平台 RPA 自动注册。
+     *
+     * @return array{rpa_task_id:string, cert_id:int}
+     * @throws \RuntimeException
+     */
+    public function startRpaRegister(int $workspaceId, string $platformKey): array
+    {
+        $profile = EnterpriseProfile::query()->where('workspace_id', $workspaceId)->first();
+        if (! $profile) {
+            throw new \RuntimeException('企业档案不存在');
+        }
+
+        $stepStatus = $profile->getRegisterStepStatus();
+        if (! $stepStatus['can_register']) {
+            throw new \RuntimeException('企业资料未完成，请先完善四步资料');
+        }
+
+        $platforms = self::anchorPlatforms();
+        $platformInfo = $platforms[$platformKey] ?? null;
+        if (! $platformInfo) {
+            throw new \RuntimeException('未知平台');
+        }
+        if (empty($platformInfo['supports_rpa'])) {
+            throw new \RuntimeException('该平台暂不支持自动注册，请手动操作');
+        }
+
+        // 调用 RPA 引擎注册
+        $rpaUrl = rtrim((string) config('geoflow.rpa_engine_url'), '/') . '/api/v1/register';
+        $apiKey = (string) config('geoflow.rpa_engine_api_key', 'qonhub-rpa-secret-change-me');
+
+        $products = is_array($profile->products_services)
+            ? implode('、', array_slice($profile->products_services, 0, 5))
+            : (string) ($profile->products_services ?? '');
+
+        $payload = [
+            'platform' => $platformKey,
+            'account' => [
+                'username' => $profile->company_full_name,
+                'credential' => null,
+            ],
+            'enterprise' => [
+                'workspace_id' => $workspaceId,
+                'company_name' => $profile->company_full_name,
+                'credit_code' => $profile->unified_social_credit_code,
+                'legal_person' => $profile->legal_person,
+                'business_scope' => $profile->business_scope,
+                'address' => $profile->company_address,
+                'province' => $profile->company_province,
+                'city' => $profile->company_city,
+                'phone' => $profile->contact_phone ?: $profile->company_phone,
+                'email' => $profile->company_email,
+                'website' => $profile->company_website,
+                'products' => $products,
+            ],
+            'options' => [
+                'workspace_id' => $workspaceId,
+                'timeout_seconds' => 180,
+            ],
+        ];
+
+        try {
+            $response = \Illuminate\Support\Facades\Http::timeout(10)
+                ->withHeaders([
+                    'X-Api-Key' => $apiKey,
+                    'Content-Type' => 'application/json',
+                ])
+                ->post($rpaUrl, $payload);
+
+            if (! $response->successful()) {
+                throw new \RuntimeException('RPA 引擎响应异常: HTTP ' . $response->status());
+            }
+
+            $result = $response->json();
+        } catch (\Illuminate\Http\Client\ConnectionException $e) {
+            throw new \RuntimeException('RPA 引擎不可达，请确认 RPA 服务已启动（端口 ' . config('geoflow.rpa_engine_url') . '）');
+        }
+
+        // 更新认证记录为进行中
+        $cert = $this->getOrInitCertification($profile, $platformKey);
+        $cert->forceFill([
+            'rpa_task_id' => $result['task_id'] ?? null,
+            'certification_status' => 'in_progress',
+            'verification_notes' => 'RPA 自动注册中...',
+        ])->save();
+
+        \Illuminate\Support\Facades\Log::info('RPA register started', [
+            'workspace_id' => $workspaceId,
+            'platform' => $platformKey,
+            'rpa_task_id' => $result['task_id'] ?? null,
+            'cert_id' => $cert->id,
+        ]);
+
+        return [
+            'rpa_task_id' => $result['task_id'] ?? '',
+            'cert_id' => $cert->id,
+        ];
+    }
 }

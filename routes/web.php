@@ -436,5 +436,7 @@ Route::prefix($adminPrefix)->name('admin.')->middleware(['admin.locale'])->group
         Route::get('distribution-channels', [RpaSyncController::class, 'distributionChannels'])->name('channels');
         Route::get('articles/{id}', [RpaSyncController::class, 'articleDetail'])->name('article-detail')->whereNumber('id');
         Route::get('client-platforms', [RpaSyncController::class, 'clientPlatforms'])->name('client-platforms');
+        Route::get('credentials', [RpaSyncController::class, 'credentials'])->name('credentials');
+        Route::post('bulk-distribute', [RpaSyncController::class, 'bulkDistribute'])->name('bulk-distribute');
     });
 });

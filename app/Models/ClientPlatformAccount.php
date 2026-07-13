@@ -52,17 +52,17 @@ class ClientPlatformAccount extends Model
     public static function supportedPlatforms(): array
     {
         return [
-            'toutiao'    => ['name'=>'今日头条','login_url'=>'https://mp.toutiao.com/'],
-            'baijiahao'  => ['name'=>'百家号','login_url'=>'https://baijiahao.baidu.com/'],
-            'wechat_mp'  => ['name'=>'微信公众号','login_url'=>'https://mp.weixin.qq.com/'],
-            'sohu'       => ['name'=>'搜狐号','login_url'=>'https://mp.sohu.com/'],
-            'xiaohongshu'=> ['name'=>'小红书','login_url'=>'https://creator.xiaohongshu.com/'],
-            'wangyihao'  => ['name'=>'网易号','login_url'=>'https://mp.163.com/'],
-            'bilibili'   => ['name'=>'哔哩哔哩','login_url'=>'https://member.bilibili.com/'],
-            'qiehao'     => ['name'=>'企鹅号','login_url'=>'https://om.qq.com/'],
-            'smzdm'      => ['name'=>'值得买','login_url'=>'https://www.smzdm.com/'],
-            'douyin'     => ['name'=>'抖音','login_url'=>'https://creator.douyin.com/'],
-            'kuaishou'   => ['name'=>'快手','login_url'=>'https://cp.kuaishou.com/'],
+            'toutiao'    => ['name'=>'今日头条', 'icon'=>'newspaper', 'color'=>'#E5332C', 'login_url'=>'https://mp.toutiao.com/'],
+            'baijiahao'  => ['name'=>'百家号',   'icon'=>'file-text', 'color'=>'#3B5998', 'login_url'=>'https://baijiahao.baidu.com/'],
+            'wechat_mp'  => ['name'=>'微信公众号', 'icon'=>'message-circle', 'color'=>'#07C160', 'login_url'=>'https://mp.weixin.qq.com/'],
+            'sohu'       => ['name'=>'搜狐号',   'icon'=>'rss', 'color'=>'#FDD000', 'login_url'=>'https://mp.sohu.com/'],
+            'xiaohongshu'=> ['name'=>'小红书',   'icon'=>'heart', 'color'=>'#FE2C55', 'login_url'=>'https://creator.xiaohongshu.com/'],
+            'wangyihao'  => ['name'=>'网易号',   'icon'=>'globe', 'color'=>'#D32F2F', 'login_url'=>'https://mp.163.com/'],
+            'bilibili'   => ['name'=>'哔哩哔哩', 'icon'=>'video', 'color'=>'#FB7299', 'login_url'=>'https://member.bilibili.com/'],
+            'qiehao'     => ['name'=>'企鹅号',   'icon'=>'send', 'color'=>'#12B7F5', 'login_url'=>'https://om.qq.com/'],
+            'smzdm'      => ['name'=>'值得买',   'icon'=>'shopping-cart', 'color'=>'#E12525', 'login_url'=>'https://www.smzdm.com/'],
+            'douyin'     => ['name'=>'抖音',     'icon'=>'music', 'color'=>'#000000', 'login_url'=>'https://creator.douyin.com/'],
+            'kuaishou'   => ['name'=>'快手',     'icon'=>'play', 'color'=>'#FF4906', 'login_url'=>'https://cp.kuaishou.com/'],
         ];
     }
 }

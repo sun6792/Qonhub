@@ -158,13 +158,91 @@ class GeoFlowScheduleTasksCommand extends Command
             $queuedCount++;
         }
 
+        // P2: 自动跑词模式
+        $autoRunCount = $this->autoKeywordRun($now);
+
         $this->info(sprintf(
-            'GeoFlow scheduler done: queued=%d, skipped=%d, recovered=%d',
+            'GeoFlow scheduler done: queued=%d, skipped=%d, recovered=%d, auto_run=%d',
             $queuedCount,
             $skippedCount,
-            $recoveredCount
+            $recoveredCount,
+            $autoRunCount
         ));
 
         return self::SUCCESS;
+    }
+
+    /**
+     * 自动跑词模式：轮转关键词，为符合条件的 auto 任务创建 TaskRun。
+     *
+     * 每分钟调用一次，遵守草稿池上限和并发上限。
+     */
+    private function autoKeywordRun(Carbon $now): int
+    {
+        $autoTasks = Task::query()
+            ->where('run_mode', 'auto')
+            ->where('status', 'active')
+            ->whereNotNull('keyword_group_id')
+            ->with(['keywordGroup.keywords', 'taskRuns' => fn($q) => $q->whereIn('status', ['pending', 'running'])])
+            ->get();
+
+        $count = 0;
+
+        foreach ($autoTasks as $task) {
+            // 发布频率控制
+            if ($task->last_auto_run_at && $task->last_auto_run_at->diffInSeconds($now) < (int) ($task->publish_interval ?? 60)) {
+                continue;
+            }
+
+            // 草稿池上限
+            $draftCount = \App\Models\Article::query()
+                ->where('task_id', (int) $task->id)
+                ->where('status', 'draft')
+                ->count();
+            $draftLimit = max(1, (int) ($task->draft_limit ?? 10));
+            if ($draftCount >= $draftLimit) {
+                continue;
+            }
+
+            // 并发上限
+            $runningCount = $task->taskRuns->count();
+            $slots = max(0, min(10, $draftLimit - $draftCount));
+            if ($runningCount >= $slots || $slots <= 0) {
+                continue;
+            }
+
+            // 轮转取关键词
+            $keywords = $task->keywordGroup?->keywords;
+            if (! $keywords || $keywords->isEmpty()) {
+                continue;
+            }
+
+            $index = ((int) ($task->last_keyword_index ?? 0)) % $keywords->count();
+            $keyword = $keywords->values()->get($index);
+            if (! $keyword) {
+                continue;
+            }
+
+            // 创建 TaskRun 并附带自动跑词元数据
+            $taskRunId = $this->jobQueueService->enqueueTaskJob(
+                taskId: (int) $task->id,
+                jobType: 'generate_article',
+                payload: [
+                    'auto_run' => true,
+                    'keyword' => $keyword->keyword ?? '',
+                    'keyword_id' => (int) $keyword->id,
+                ]
+            );
+
+            if ($taskRunId) {
+                $task->forceFill([
+                    'last_keyword_index' => $index + 1,
+                    'last_auto_run_at' => $now,
+                ])->save();
+                $count++;
+            }
+        }
+
+        return $count;
     }
 }

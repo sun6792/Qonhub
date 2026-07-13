@@ -61,10 +61,24 @@ class ContentArmoryController extends Controller
             });
         }
 
-        // 按工作空间过滤：找到该空间下所有任务 → 过滤文章
+        // 按工作空间过滤：非超管默认只看自己绑定的 workspace
         if ($workspaceId > 0) {
             $taskIds = $workspaceService->assignedIds($workspaceId, \App\Models\Task::class);
             $articlesQuery->whereIn('task_id', $taskIds ?: [0]);
+        } elseif (! Auth::guard('admin')->user()?->isSuperAdmin()) {
+            $adminWsIds = Auth::guard('admin')->user()?->scopedWorkspaceIds() ?? [];
+            if ($adminWsIds === []) {
+                $articlesQuery->whereRaw('1=0'); // 无绑定 → 看不到任何文章
+            } elseif ($adminWsIds !== null) {
+                $articlesQuery->whereIn('task_id', function ($sub) use ($adminWsIds) {
+                    $sub->select('id')->from('tasks')
+                        ->whereIn('id', function ($s2) use ($adminWsIds) {
+                            $s2->select('assignable_id')->from('workspace_assignments')
+                                ->where('assignable_type', \App\Models\Task::class)
+                                ->whereIn('workspace_id', $adminWsIds);
+                        });
+                });
+            }
         }
 
         $articles = $articlesQuery->paginate($perPage)->withQueryString();
@@ -483,7 +497,15 @@ class ContentArmoryController extends Controller
             'updated_at' => now(),
         ]);
 
-        return $content;
+        // 剥离 Markdown 标记：输出干净纯文本，兼容头条/百家号等不支持 Markdown 的平台
+        $content = preg_replace('/\*\*(.+?)\*\*/u', '$1', $content);
+        $content = preg_replace('/\*(.+?)\*/u', '$1', $content);
+        $content = preg_replace('/^#{1,6}\s+/mu', '', $content);
+        $content = preg_replace('/^[-*+]\s+/mu', '  ', $content);
+        $content = preg_replace('/\[([^\]]+)\]\([^)]+\)/u', '$1', $content);
+        $content = preg_replace('/\n{3,}/', "\n\n", $content);
+
+        return trim($content);
     }
 
     /**

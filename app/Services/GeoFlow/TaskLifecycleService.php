@@ -8,6 +8,7 @@ use App\Models\Article;
 use App\Models\Author;
 use App\Models\Category;
 use App\Models\ImageLibrary;
+use Illuminate\Support\Facades\Auth;
 use App\Models\KnowledgeBase;
 use App\Models\Prompt;
 use App\Models\Task;
@@ -103,6 +104,22 @@ class TaskLifecycleService
             ]);
 
             $taskId = (int) $task->id;
+
+            // 自动分配 workspace：取当前管理员绑定的第一个 workspace
+            $admin = Auth::guard('admin')->user();
+            if ($admin && ! $admin->isSuperAdmin()) {
+                $wsIds = $admin->scopedWorkspaceIds();
+                if (! empty($wsIds)) {
+                    DB::table('workspace_assignments')->insert([
+                        'assignable_type' => Task::class,
+                        'assignable_id' => $taskId,
+                        'workspace_id' => $wsIds[0],
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+                }
+            }
+
             $this->syncTaskKnowledgeBases($taskId, $normalized['knowledge_base_ids'] ?? []);
             $this->queueService->initializeTaskSchedule($taskId);
 

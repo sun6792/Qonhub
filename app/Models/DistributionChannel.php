@@ -43,6 +43,7 @@ class DistributionChannel extends Model
         'domain',
         'endpoint_url',
         'channel_type',
+        'distribute_type', 'platform_meta',
         'front_mode',
         'template_key',
         'site_settings',

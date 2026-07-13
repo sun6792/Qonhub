@@ -70,6 +70,8 @@ class ContentPublishService
                 'total_articles' => $articles->count(),
                 'total_platforms' => $platformCount,
                 'total_jobs' => $totalJobs,
+                'avg_geo_score' => $options['avg_geo_score'] ?? null,
+                'geo_score_details' => $options['geo_score_details'] ?? null,
                 'use_smart_scheduling' => (bool) ($options['use_smart_scheduling'] ?? true),
                 'use_content_rewrite' => (bool) ($options['use_content_rewrite'] ?? true),
                 'rewrite_mode' => (string) ($options['rewrite_mode'] ?? 'per_platform'),
@@ -293,16 +295,10 @@ class ContentPublishService
      */
     private function inferPlatformType(string $platformKey): string
     {
-        $selfMediaPlatforms = ['toutiao', 'baijiahao', 'xiaohongshu', 'sohu', 'wangyihao', 'bilibili'];
-        $newsMediaPlatforms = array_keys(\App\Services\GeoFlow\EnterpriseAnchorService::mediaAnchorPlatforms());
-
+        $selfMediaPlatforms = ['toutiao', 'baijiahao', 'xiaohongshu', 'sohu', 'wangyihao', 'bilibili', 'qiehao', 'smzdm', 'douyin', 'kuaishou', 'wechat_mp'];
         if (in_array($platformKey, $selfMediaPlatforms, true)) {
             return 'self_media';
         }
-        if (in_array($platformKey, $newsMediaPlatforms, true)) {
-            return 'news_media';
-        }
-
         return 'b2b';
     }
 }

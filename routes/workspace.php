@@ -93,6 +93,11 @@ Route::middleware('web')->prefix('client')->name('client.')->group(function (): 
     Route::get('/', [ClientPortalController::class, 'dashboard'])->name('dashboard');
     Route::get('/articles', [ClientPortalController::class, 'articles'])->name('articles');
     Route::get('/ai-visibility', [ClientPortalController::class, 'aiVisibility'])->name('ai-visibility');
+    Route::get('/competitiveness', [ClientPortalController::class, 'competitiveness'])->name('competitiveness');
+    Route::post('/content-request', [ClientPortalController::class, 'contentRequestStore'])->name('content-request.store');
+    Route::post('/enterprise-profile/save', [ClientPortalController::class, 'enterpriseProfileSave'])->name('enterprise-profile.save');
+    Route::post('/competitiveness/store', [ClientPortalController::class, 'competitorStore'])->name('competitiveness.store');
+    Route::post('/competitiveness/delete/{id}', [ClientPortalController::class, 'competitorDelete'])->name('competitiveness.delete')->whereNumber('id');
     Route::get('/platforms', [ClientPortalController::class, 'platforms'])->name('platforms');
     Route::post('/platforms/bind', [ClientPortalController::class, 'platformStore'])->name('platforms.bind');
     Route::post('/platforms/unbind', [ClientPortalController::class, 'platformUnbind'])->name('platforms.unbind');

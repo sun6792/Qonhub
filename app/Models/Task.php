@@ -47,6 +47,11 @@ class Task extends Model
         'last_error_message',
         'schedule_enabled',
         'max_retry_count',
+        'keyword_group_id',
+        'auto_distribute_channels',
+        'run_mode',
+        'last_auto_run_at',
+        'last_keyword_index',
     ];
 
     protected function casts(): array
@@ -129,6 +134,11 @@ class Task extends Model
     public function fixedCategory(): BelongsTo
     {
         return $this->belongsTo(Category::class, 'fixed_category_id');
+    }
+
+    public function keywordGroup(): BelongsTo
+    {
+        return $this->belongsTo(KeywordLibrary::class, 'keyword_group_id');
     }
 
     public function articles(): HasMany

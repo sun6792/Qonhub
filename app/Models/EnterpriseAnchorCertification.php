@@ -27,7 +27,7 @@ class EnterpriseAnchorCertification extends Model
         'certification_status',
         'certified_by', 'certified_at', 'expires_at',
         'verification_notes', 'last_sync_at',
-        'metadata',
+        'metadata', 'rpa_task_id',
     ];
 
     protected $casts = [

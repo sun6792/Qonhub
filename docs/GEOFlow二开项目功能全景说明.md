@@ -629,10 +629,9 @@ Bootstrap → Tailwind，卡片折叠/搜索/筛选，全部展开/收起。
 
 ---
 
-> **本文档基于 2026-07-11 全量代码扫描 + 同日增量开发生成，所有内容来源于实际已实现的代码，无脑补。**  
+> **本文档基于 2026-07-13 全量代码审计 + 开发记录生成，所有内容来源于实际已实现的代码。**  
 > **项目地址**：`E:\Qonhubgeo\GEOFlow-main`  
-> **当前版本**：Qonhub AI v2.2.0（基于 GEOFlow）
-> **当前版本**：Qonhub AI v2.1.0（基于 GEOFlow）
+> **当前版本**：Qonhub AI v2.4.0（基于 GEOFlow）
 
 ---
 
@@ -690,3 +689,208 @@ Bootstrap → Tailwind，卡片折叠/搜索/筛选，全部展开/收起。
 - GeoContentScorer 正则修复（Q&A 跨行匹配 + 专家信号字符类 bug）
 - 企业档案新增 B2B 注册专用字段（registration_phone / registration_authorized）
 - RPA CORS 中间件（localhost:9901 ↔ 18080 跨域）
+
+---
+
+## 八、v2.4.0 新增模块（2026-07-13）
+
+### 1. 全系统 Workspace 多租户隔离
+
+**改造范围**：任务管理、文章管理、素材库（标题库/知识库/关键词库/图库）、分发发布、AI 可见度数据
+
+| 模块 | 隔离方式 | 实现文件 |
+|------|---------|---------|
+| 任务列表 | `workspace_assignments` 过滤，运营师仅见绑定 workspace | `TaskMonitoringQueryService.php` |
+| 任务创建表单 | 标题库/知识库/图库下拉按 workspace 过滤 | `TaskController.php::loadTaskFormOptions()` |
+| 文章列表 | 运营师仅见自己 workspace 文章 | `ArticleController.php::queryArticles()` |
+| 图库管理 | 图库列表按 workspace 过滤 | `ImageLibraryController.php::loadLibraries()` |
+| 任务生成 | 新文章自动继承任务的 workspace | `WorkerExecutionService.php`（新增 `workspace_assignments` 写入） |
+| 任务创建 | 新任务自动分配当前管理员绑定 workspace | `TaskLifecycleService.php::createTask()` |
+
+**隔离逻辑**：超管看全部，运营师看绑定的 workspace，未绑定运营师看不到任何数据。
+
+### 2. 客户端发布工作台
+
+**文件**：`Client/ContentPublishController.php` + `resources/views/client/content-publish/`
+
+| 功能 | 说明 |
+|------|------|
+| 三步发布向导 | Step1选文章 → Step2选平台（级联选择器） → Step3确认提交 |
+| GEO 评分集成 | 提交前自动评分，<70 分文章自动 geoEnhance() 增强后再次评分 |
+| 筛选分页 | 任务名称/状态/日期范围筛选，分页列表 |
+| 任务详情 | 按文章聚合的平台级发布状态，GEO 评分卡片 |
+| B2B 认证向导 | 四步进度条（公司资料→联系人→地区行业→产品服务），平台卡片网格 |
+| 平台级联选择器 | 三级：发布方式 → 平台类别 → 具体平台，统一自媒体/B2B/渠道 |
+
+### 3. AI 数据大屏 + 竞争力报告
+
+**文件**：`AiVisibilityService.php`（扩展） + `client/ai-visibility.blade.php` + `client/competitiveness.blade.php`
+
+| 功能 | 说明 |
+|------|------|
+| 12 AI 平台监测 | 豆包/DeepSeek/元宝/文心一言/通义千问/Kimi/讯飞星火/纳米AI/百度AI/微信AI/抖音AI/夸克AI |
+| 平台覆盖矩阵 | 每平台 PC/移动端分开追踪，趋势箭头 + 评分进度条 |
+| 品牌词 TOP5 | 近30天提及占比排行，水平进度条 + 覆盖平台数 |
+| 30天趋势图表 | 6 主力平台柱状趋势 |
+| 监测词/收录词 | 对标摘星 running_words / collected_words，检测中 vs 已收录 |
+| 竞品对比报告 | 自身品牌 vs 最多 3 个竞品 KPI 对比卡片 + 12 平台覆盖对比进度条 |
+| 竞品管理 | 添加/删除竞品，AiCompetitor 模型 |
+
+**新增方法**：`dashboardOverview()`、`brandTop5Share()`、`brandCompare()`、`runningWords()`、`collectedWords()`
+
+### 4. 自动跑词引擎
+
+**文件**：`GeoFlowScheduleTasksCommand.php`（新增 `autoKeywordRun()`）+ `Task` 模型扩展
+
+| 功能 | 说明 |
+|------|------|
+| 关键词轮转 | Task 绑定关键词组，按 `last_keyword_index` 指针轮转取词 |
+| 自驱循环 | 生成→评分→增强→发布→下一轮，无人值守 |
+| 草稿池控制 | 达到 `draft_limit` 自动暂停，空位释放后恢复 |
+| 并发保护 | 悲观行锁 + TaskRun 串行保护，单任务最多 10 并发 |
+| 运营端开关 | 任务创建/编辑页新增"自动跑词模式"开关 + 关键词组选择 + 分发渠道选择 |
+
+**Task 模型新增字段**：`keyword_group_id`、`auto_distribute_channels`、`run_mode`、`last_auto_run_at`、`last_keyword_index`
+
+### 5. B2B 分步注册向导 + RPA 管道
+
+**文件**：`EnterpriseAnchorService.php`（新增 `startRpaRegister()`）+ `EnterpriseProfile` 扩展
+
+| 功能 | 说明 |
+|------|------|
+| 四步进度 | company→contact→region→products，`getRegisterStepStatus()` 实时计算 |
+| RPA 注册管道 | 校验资料完整 → 调 RPA `/api/v1/register` → 回写锚点认证状态 |
+| RPA 结果回写 | `RpaSyncController::report()` 自动标记 `EnterpriseAnchorCertification` 为已认证 |
+| 客户端向导 | B2B 平台卡片网格，已适配 RPA 的显示「一键注册」，未适配显示「手动注册」 |
+
+**EnterpriseProfile 新增字段**：`contact_name`、`contact_phone`
+
+### 6. 发布渠道平台树
+
+**文件**：`ChannelPlatformTree.php`（新建）+ `DistributionChannel` 模型扩展
+
+统一输出两级分类+三级平台的级联数据，所有平台数据从现有配置读取，不重复维护：
+
+```
+平台发布 → 自媒体矩阵（11平台） / B2B行业网站（10平台） / 智能体官网 / 自营媒体
+媒体发布 → 权威合作媒体 / 自媒体权威号
+```
+
+**DistributionChannel 新增字段**：`distribute_type`、`platform_meta`
+
+### 7. RPA 引擎增强
+
+**文件**：`rpa-engine/server.js` + `rpa-engine/dashboard.html`
+
+| 功能 | 说明 |
+|------|------|
+| 平台授权登录 | `POST /api/v1/auth-login` — 弹出浏览器让用户手动登录，自动保存 Cookie/storageState |
+| 11 平台统一管理 | 头条/百家号/公众号/搜狐/小红书/网易/B站/企鹅/值得买/抖音/快手 |
+| 授权状态检测 | 按 `workspace_id` 分层隔离缓存，Dashboard 实时显示授权状态 |
+| 一键分发对接 | 授权后 Cookie 持久化，发布时跳过登录直接操作 |
+
+### 8. 客户端 UI 全面升级（AI 暗色主题）
+
+**文件**：`client/layout.blade.php` + 全部子页面重写
+
+| 特效 | 说明 |
+|------|------|
+| Grainient 流体渐变背景 | 原生 WebGL2，indigo→violet 三色流体动画 |
+| FloatingLines 光线叠加 | Three.js 波浪线条，screen blend 鼠标交互 |
+| Lightfall 光雨背景 | 原生 WebGL2，登录页专用 |
+| ClickSpark 点击粒子 | 原生 Canvas，indigo 粒子爆发 |
+| BentoGlow 卡片辉光 | 鼠标跟随 radial-gradient 辉光 |
+| Magnet 磁吸 | 卡片随鼠标微位移 |
+| Markdown 自动剥离 | Worker + 弹药库 AI 改写均自动去 `#` `**` `- ` 标记 |
+
+### 9. AI 平台收录优化模板
+
+**文件**：Prompt 模型（DB 初始化）
+
+| 模板 | 用途 |
+|------|------|
+| 🤖 Kimi收录优化·QA信任型 | Kimi 爬虫偏好的 Q&A 结构，确定性表述 |
+| 📰 头条快速收录·榜单对比型 | 头条+AI爬虫双优化，榜单对比结构，无 Markdown |
+
+### 10. 关键修复汇总
+
+| 修复项 | 说明 |
+|--------|------|
+| 向量化修复 | 嵌入模型切至 `BAAI/bge-m3`（SiliconFlow 免费），解决 `bge-large-zh-v1.5` 废弃 400 错误 |
+| 任务列表卡死 | `resolveBatchStatus()` 优先显示 completed 状态，不再因 pending 始终显示"排队中" |
+| 任务状态显示 | 活跃+已完成周期 → 显示 running（而非 pending） |
+| 编辑器复制 | `mode: 'ir'` → `'wysiwyg'`，解决复制格式问题 |
+| 欢迎弹窗 | 所有管理员 `welcome_seen_version` 对齐，不再反复弹出 |
+| 文章 workspace 继承 | 生成文章自动从 Task 获取 workspace 并写入 `workspace_assignments` |
+| GEO 增强策略 | 达标文章不再追加垃圾 FAQ，仅 <70 分时触发重写 |
+
+---
+
+## 九、v2.4.0 运营端补充（2026-07-13 当日迭代）
+
+### 11. RPA 自动化脚本全覆盖（14 个脚本）
+
+**文件**：`rpa-engine/automations/`
+
+| 类别 | 脚本数 | 平台列表 |
+|------|--------|---------|
+| B2B 注册 | 10 | 天助网/八方资源网/无忧商务网/K2商务网/领商网/万家商务网/九州资源网/查询123/顺企网/全球五金网 |
+| 自媒体发布 | 4 | 头条号/百家号/小红书（搜狐号待适配） |
+
+所有 B2B 脚本复用 `BasePlatformScript.smartFill()` 通用填表逻辑，统一调用 `POST /api/v1/rpa/register` → `EnterpriseAnchorService::startRpaRegister()` 管道。
+
+### 12. 客户端内容需求提交通道
+
+**文件**：`ClientPortalController::contentRequestStore()` + `client/dashboard.blade.php`
+
+客户端可提交内容主题 + 补充说明，运营端接收日志后创建对应任务。
+
+### 13. 客户端企业资料自助编辑
+
+**文件**：`ClientPortalController::enterpriseProfileSave()` + `client/content-publish/certify.blade.php`
+
+8 个字段：公司全称/信用代码/法人/行业/地址/电话/经营范围/主营产品。保存后 B2B 注册 4 步进度实时更新，达到 4/4 即可触发 RPA 自动注册。
+
+### 14. 运营助手批量分发中心（弹药库移植）
+
+**文件**：`rpa-engine/dashboard.html` + `RpaSyncController::bulkDistribute()`
+
+| 功能 | 说明 |
+|------|------|
+| 全选文章 | 勾选 → 选目标平台 → 一键批量分发 |
+| 进度可视化 | 进度条 + 作业计数 + 完成提示 |
+| 后端管道 | `POST /api/v1/rpa/bulk-distribute` → `ContentPublishService::createPublishTask()` → 入队 distribution 队列 |
+
+### 15. 运营助手双数据源授权校验
+
+Dashboard 平台授权状态同时读取 DB（`ClientPlatformAccount`）和 RPA 缓存（`storage/states`），四态显示：
+
+| DB | 缓存 | 显示 | 操作 |
+|----|------|------|------|
+| active | valid | 🟢 可分发 | 重新授权 |
+| active | invalid | 🟡 需登录 | 授权登录 |
+| revoked | valid | 🟠 已解绑 | 清缓存 |
+| revoked | invalid | ⚪ 未绑定 | 授权登录 |
+
+### 16. 客户端平台授权简化
+
+客户端 Dashboard 平台列表改为勾选式：勾选 → 展开凭证输入（账号/密码） → 保存。不再需要跳转到独立凭证中心页面。
+
+### 17. RPA 引擎桌面模式
+
+**文件**：`rpa-engine/server.js`（默认 `headless=false`）+ `rpa-engine/start-operator.bat`
+
+对标摘星桌面客户端：浏览器操作全程可见，Cookie 存储在运营人员本地电脑，切换客户自动换 Cookie。
+
+### 18. 全项目 Workspace 账户隔离审计
+
+| 已修复 | 控制器/服务 |
+|--------|-----------|
+| TaskMonitoringQueryService | 任务列表按 workspace 过滤 |
+| TaskController::loadTaskFormOptions | 素材下拉按 workspace 过滤 |
+| ArticleController::queryArticles | 文章列表按 workspace 过滤 |
+| ImageLibraryController | 图库按 workspace 过滤 |
+| WorkerExecutionService | 新文章自动继承 workspace |
+| TaskLifecycleService | 新任务自动分配 workspace |
+| RpaSyncController::articles | 运营助手文章按 workspace 过滤 |
+| ContentArmoryController | 弹药库文章按 workspace 过滤 |

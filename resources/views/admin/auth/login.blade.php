@@ -7,27 +7,23 @@
     <script src="{{ asset('js/tailwindcss.play-cdn.js') }}"></script>
     <script src="{{ asset('js/lucide.min.js') }}"></script>
     <style>
-        body {
-            background: radial-gradient(circle at top left, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0) 32%),
-                radial-gradient(circle at bottom right, rgba(229, 231, 235, 0.72), rgba(229, 231, 235, 0) 30%),
-                linear-gradient(180deg, #f5f5f7 0%, #e5e7eb 100%);
-            min-height: 100vh;
-        }
+        body { background: #080812; min-height: 100vh; }
         .login-form {
-            background: rgba(255, 255, 255, 0.82);
-            backdrop-filter: blur(24px) saturate(180%);
-            border: 1px solid rgba(209, 213, 219, 0.9);
-            box-shadow: 0 24px 60px rgba(15, 23, 42, 0.08);
+            background: rgba(22, 24, 42, 0.94);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            border: 1px solid rgba(165,180,252,0.25);
+            box-shadow: 0 0 40px rgba(99,102,241,0.12), 0 20px 60px rgba(0,0,0,0.4);
         }
-        .login-badge {
-            background: linear-gradient(180deg, #6b7280 0%, #374151 100%);
-        }
-        .initial-admin-hint {
-            background: linear-gradient(180deg, rgba(239, 246, 255, 0.96) 0%, rgba(255, 255, 255, 0.9) 100%);
-        }
+        .login-badge { background: linear-gradient(135deg, #6366f1, #8b5cf6); }
+        .initial-admin-hint { background: rgba(99,102,241,0.1); border-color: rgba(165,180,252,0.2); }
+        .input-field { background: rgba(30,32,50,0.9); border: 1px solid rgba(165,180,252,0.25); color: #e8e4ff; }
+        .input-field:focus { border-color: rgba(165,180,252,0.6); box-shadow: 0 0 0 3px rgba(99,102,241,0.15); outline: none; }
+        .input-field::placeholder { color: rgba(200,195,225,0.35); }
     </style>
 </head>
 <body class="overflow-hidden">
+<div id="lightfall-bg"></div>
 <div class="fixed right-4 top-4 z-50">
     <select onchange="window.location.href=this.value" class="rounded-md border border-gray-300 bg-white px-2 py-1 text-xs text-gray-600 shadow-sm">
         @foreach (\App\Support\AdminWeb::supportedLocales() as $localeCode => $localeLabel)
@@ -43,8 +39,8 @@
             <div class="login-badge w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
                 <i data-lucide="shield-check" class="w-8 h-8 text-white"></i>
             </div>
-            <h1 class="text-2xl font-bold text-gray-900 mb-2">{{ __('admin.login.title') }}</h1>
-            <p class="text-gray-600">{{ __('admin.login.subtitle', ['site_name' => $adminSiteName]) }}</p>
+            <h1 class="text-2xl font-bold mb-2" style="color:#e8e4ff">{{ __('admin.login.title') }}</h1>
+            <p style="color:rgba(210,200,235,0.55)">{{ __('admin.login.subtitle', ['site_name' => $adminSiteName]) }}</p>
         </div>
         @if (session('message'))
             <div class="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm">
@@ -96,34 +92,44 @@
         <form method="POST" action="{{ route('admin.login.attempt') }}" class="space-y-6">
             @csrf
             <div>
-                <label for="username" class="block text-sm font-medium text-gray-700 mb-2">{{ __('admin.login.username') }}</label>
+                <label for="username" class="block text-sm font-medium mb-2" style="color:rgba(220,215,245,0.7)">{{ __('admin.login.username') }}</label>
                 <input type="text" id="username" name="username" required value="{{ old('username') }}"
-                       class="block w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                       class="input-field block w-full px-3 py-3 rounded-lg text-sm transition"
                        placeholder="{{ __('admin.login.username_placeholder') }}" autocomplete="username">
             </div>
             <div>
-                <label for="password" class="block text-sm font-medium text-gray-700 mb-2">{{ __('admin.login.password') }}</label>
+                <label for="password" class="block text-sm font-medium mb-2" style="color:rgba(220,215,245,0.7)">{{ __('admin.login.password') }}</label>
                 <input type="password" id="password" name="password" required
-                       class="block w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                       class="input-field block w-full px-3 py-3 rounded-lg text-sm transition"
                        placeholder="{{ __('admin.login.password_placeholder') }}" autocomplete="current-password">
             </div>
             <input type="hidden" name="remember" value="0">
-            <label class="flex items-center justify-between rounded-lg border border-gray-200 bg-white/70 px-3 py-3 text-sm text-gray-600">
+            <label class="flex items-center justify-between rounded-lg px-3 py-3 text-sm transition"
+                   style="background:rgba(14,16,28,0.5); border:1px solid rgba(165,180,252,0.1); color:rgba(210,200,235,0.55)">
                 <span class="flex items-center gap-2">
-                    <input type="checkbox" name="remember" value="1" checked class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                    <input type="checkbox" name="remember" value="1" checked class="h-4 w-4 rounded border-indigo-400/30 text-indigo-500 focus:ring-indigo-500" style="accent-color:#6366f1">
                     <span>{{ __('admin.login.remember_30_days') }}</span>
                 </span>
-                <span class="text-xs text-gray-400">{{ __('admin.login.remember_30_days_hint') }}</span>
+                <span style="color:rgba(200,195,225,0.45); font-size:.75rem">{{ __('admin.login.remember_30_days_hint') }}</span>
             </label>
-            <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-lg">
+            <button type="submit" class="w-full text-white font-medium py-3 px-4 rounded-lg transition" style="background:linear-gradient(135deg,#6366f1,#8b5cf6)">
                 {{ __('admin.login.submit') }}
             </button>
         </form>
     </div>
     <div class="text-center mt-6">
-        <a href="{{ url('/') }}" class="text-gray-600 hover:text-gray-900 text-sm">{{ __('admin.login.back_home') }}</a>
+        <a href="{{ url('/') }}" style="color:rgba(200,195,225,0.45); font-size:.875rem" class="hover:text-white transition">{{ __('admin.login.back_home') }}</a>
     </div>
 </div>
+<script src="{{ asset('js/lightfall-bg.js') }}"></script>
+<script>
+new LightfallBackground(document.getElementById('lightfall-bg'),{
+  colors:['#c4b5fd','#818cf8','#6366f1'],backgroundColor:'#080812',
+  speed:.35,streakCount:2,streakWidth:.6,streakLength:1,glow:.8,
+  density:.4,twinkle:.6,zoom:4,backgroundGlow:.2,opacity:.5,
+  mouseInteraction:true,mouseStrength:.25,mouseRadius:1.5,mouseDampening:.15
+});
+</script>
 <script>
     document.addEventListener('DOMContentLoaded', function () {
         const initialHint = document.getElementById('initial-admin-hint');

@@ -13,7 +13,10 @@ class ContentPublishTask extends Model
     protected $fillable = [
         'workspace_id', 'task_name', 'status', 'type', 'progress_percent',
         'armory_publish_log_id', 'article_ids', 'platform_keys',
-        'total_articles', 'total_platforms', 'total_jobs', 'completed_jobs', 'failed_jobs',
+        'total_articles', 'total_platforms', 'total_jobs',
+        'avg_geo_score', 'geo_score_details',
+        'completed_jobs', 'failed_jobs',
+        'keyword_group_id', 'run_mode', 'last_auto_run_at',
         'use_smart_scheduling', 'use_content_rewrite', 'rewrite_mode',
         'min_publish_interval_seconds', 'max_concurrent_accounts',
         'created_by_admin_id', 'requested_by_client_user_id',
@@ -23,8 +26,10 @@ class ContentPublishTask extends Model
     protected $casts = [
         'article_ids' => 'array',
         'platform_keys' => 'array',
+        'geo_score_details' => 'array',
         'started_at' => 'datetime',
         'completed_at' => 'datetime',
+        'last_auto_run_at' => 'datetime',
         'use_smart_scheduling' => 'boolean',
         'use_content_rewrite' => 'boolean',
     ];

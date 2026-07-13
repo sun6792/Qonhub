@@ -6,54 +6,249 @@
     <title>{{ $workspace->name ?? '客户看板' }} - Qonhub AI</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <script>
+      // Tailwind config: AI dark theme — 与 Galaxy 星空色系统一
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              'ai-bg': '#06080f',
+              'ai-surface': 'rgba(12, 14, 24, 0.88)',
+              'ai-card': 'rgba(16, 18, 30, 0.82)',
+              'ai-border': 'rgba(99,102,241,0.08)',
+              'ai-glow': 'rgba(99, 102, 241, 0.18)',
+            }
+          }
+        }
+      }
+    </script>
+    <style>
+      /* Bento card glow system */
+      .bento-card {
+        --glow-x: 50%; --glow-y: 50%; --glow-intensity: 0;
+        position: relative; border-radius: 20px;
+        border: 1px solid rgba(165,180,252,0.1);
+        background: rgba(21, 23, 38, 0.88);
+        backdrop-filter: blur(14px);
+        -webkit-backdrop-filter: blur(14px);
+        transition: transform 0.4s ease, box-shadow 0.4s ease, border-color 0.4s ease;
+        overflow: hidden;
+      }
+      .bento-card::after {
+        content: ''; position: absolute; inset: 0; padding: 1px;
+        border-radius: inherit;
+        background: radial-gradient(300px circle at var(--glow-x) var(--glow-y),
+          rgba(165,180,252, calc(var(--glow-intensity) * 0.5)) 0%,
+          rgba(139,92,246, calc(var(--glow-intensity) * 0.25)) 40%,
+          transparent 70%);
+        -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+        -webkit-mask-composite: xor; mask-composite: exclude;
+        pointer-events: none; z-index: 1;
+      }
+      .bento-card:hover {
+        transform: translateY(-1px);
+        border-color: rgba(196,181,253,0.25);
+        box-shadow: 0 6px 28px rgba(99,102,241,0.08), 0 0 50px rgba(139,92,246,0.04);
+      }
+      /* Navigation — 柔和毛玻璃 */
+      .nav-ai {
+        background: rgba(16, 18, 30, 0.92);
+        backdrop-filter: blur(24px);
+        -webkit-backdrop-filter: blur(24px);
+        border-bottom: 1px solid rgba(165,180,252,0.15);
+        box-shadow: 0 4px 24px rgba(0,0,0,0.3);
+      }
+      .nav-link {
+        transition: all 0.3s ease;
+        border-radius: 14px;
+        font-weight: 500;
+      }
+      .nav-link.active {
+        background: rgba(129,140,248,0.2);
+        color: #eee9ff;
+        border: 1px solid rgba(165,180,252,0.3);
+        box-shadow: 0 0 12px rgba(129,140,248,0.1);
+      }
+      .nav-link:not(.active) {
+        background: rgba(255,255,255,0.04);
+        color: rgba(255,255,255,0.55);
+        border: 1px solid transparent;
+      }
+      .nav-link:not(.active):hover {
+        background: rgba(129,140,248,0.1);
+        color: rgba(255,255,255,0.85);
+        border-color: rgba(165,180,252,0.15);
+      }
+      /* Text — 明亮柔和 */
+      .text-ai-primary { color: rgba(240,240,250,0.9); }
+      .text-ai-secondary { color: rgba(215,212,240,0.55); }
+      .text-ai-dim { color: rgba(200,198,225,0.5); }
+      /* Gradient accents */
+      .gradient-ai {
+        background: linear-gradient(135deg, #a5b4fc, #c4b5fd, #ddd6fe);
+        -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        background-clip: text;
+      }
+      .page-content { position: relative; z-index: 1; }
+      .footer-ai { border-top: 1px solid rgba(165,180,252,0.06); }
+      /* KPI pulse */
+      @keyframes kpiPulse {
+        0%,100% { box-shadow: 0 0 14px rgba(129,140,248,0.04); }
+        50% { box-shadow: 0 0 26px rgba(165,180,252,0.08); }
+      }
+      .kpi-card { animation: kpiPulse 5.5s ease-in-out infinite; }
+      /* Scrollbar */
+      ::-webkit-scrollbar { width: 5px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+      ::-webkit-scrollbar-thumb { background: rgba(165,180,252,0.18); border-radius: 3px; }
+      ::-webkit-scrollbar-thumb:hover { background: rgba(165,180,252,0.3); }
+    </style>
     @stack('head')
 </head>
-<body class="bg-gray-50 min-h-screen">
-    <nav class="bg-white shadow-sm border-b">
-        <div class="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center">
-            <div class="flex items-center space-x-3">
-                @if ($workspace->logo_url)
-                <img src="{{ $workspace->logo_url }}" class="h-8 w-8 rounded" alt="logo">
-                @endif
-                <div>
-                    <span class="font-bold text-lg text-gray-800">{{ $workspace->name }}</span>
-                    <span class="text-sm text-gray-400 ml-2">内容运营看板</span>
+<body class="min-h-screen text-white" style="background:#0d0e1a;">
+
+    {{-- 背景层1: Grainient 流体渐变 --}}
+    <div id="grainient-container"></div>
+    {{-- 背景层2: FloatingLines 光线叠加 (screen blend) --}}
+    <div id="floating-lines-container"></div>
+
+    {{-- Page Content --}}
+    <div class="page-content">
+
+        {{-- Navigation --}}
+        <nav class="nav-ai sticky top-0 z-50">
+            <div class="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center">
+                <div class="flex items-center space-x-3">
+                    @if ($workspace->logo_url)
+                    <img src="{{ $workspace->logo_url }}" class="h-8 w-8 rounded-lg ring-1 ring-white/10" alt="logo">
+                    @else
+                    <div class="h-8 w-8 rounded-lg flex items-center justify-center text-sm font-bold"
+                         style="background:linear-gradient(135deg,#6366f1,#8b5cf6);">Q</div>
+                    @endif
+                    <div>
+                        <span class="font-bold text-base" style="color:#f0ecff">{{ $workspace->name }}</span>
+                        <span class="text-xs ml-2" style="color:rgba(210,200,240,0.6)">AI 内容运营中心</span>
+                    </div>
+                </div>
+                <div class="text-xs" style="color:rgba(200,195,225,0.5)">
+                    Powered by <span class="gradient-ai font-semibold">Qonhub AI</span>
                 </div>
             </div>
-            <div class="text-sm text-gray-500">
-                Powered by <span class="font-semibold text-blue-600">Qonhub AI</span>
+        </nav>
+
+        {{-- Tab Navigation — 实色底衬防融合 --}}
+        <div style="background:rgba(13,14,26,0.85); backdrop-filter:blur(12px); border-bottom:1px solid rgba(165,180,252,0.08);">
+        <div class="max-w-7xl mx-auto px-4 pt-4 pb-3">
+            <div class="flex space-x-2 flex-wrap gap-y-2">
+                <a href="{{ route('client.dashboard') }}"
+                   class="nav-link px-4 py-2 rounded-xl text-sm font-medium {{ request()->routeIs('client.dashboard') ? 'active' : '' }}">
+                    📊 总览
+                </a>
+                <a href="{{ route('client.articles') }}"
+                   class="nav-link px-4 py-2 rounded-xl text-sm font-medium {{ request()->routeIs('client.articles') ? 'active' : '' }}">
+                    📝 文章
+                </a>
+                <a href="{{ route('client.ai-visibility') }}"
+                   class="nav-link px-4 py-2 rounded-xl text-sm font-medium {{ request()->routeIs('client.ai-visibility') ? 'active' : '' }}">
+                    🤖 AI搜索
+                </a>
+                <a href="{{ route('client.competitiveness') }}"
+                   class="nav-link px-4 py-2 rounded-xl text-sm font-medium {{ request()->routeIs('client.competitiveness*') ? 'active' : '' }}">
+                    📊 竞争力
+                </a>
+                <a href="{{ route('client.platforms') }}"
+                   class="nav-link px-4 py-2 rounded-xl text-sm font-medium {{ request()->routeIs('client.platforms') ? 'active' : '' }}">
+                    🔑 授权
+                </a>
+                <a href="{{ route('client.content-publish.index') }}"
+                   class="nav-link px-4 py-2 rounded-xl text-sm font-medium {{ request()->routeIs('client.content-publish.*') ? 'active' : '' }}">
+                    📡 发布
+                </a>
+                <form method="POST" action="{{ route('client.logout') }}" class="inline">
+                    @csrf
+                    <button class="nav-link px-4 py-2 rounded-xl text-sm font-medium text-red-400/70 hover:text-red-300">
+                        退出
+                    </button>
+                </form>
             </div>
         </div>
-    </nav>
-
-    <div class="max-w-7xl mx-auto px-4 py-6">
-        <div class="flex space-x-2 mb-6">
-            <a href="{{ route('client.dashboard') }}"
-               class="px-4 py-2 rounded-lg text-sm font-medium {{ request()->routeIs('client.dashboard') ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-100' }}">
-                📊 总览
-            </a>
-            <a href="{{ route('client.articles') }}"
-               class="px-4 py-2 rounded-lg text-sm font-medium {{ request()->routeIs('client.articles') ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-100' }}">
-                📝 文章列表
-            </a>
-            <a href="{{ route('client.ai-visibility') }}"
-               class="px-4 py-2 rounded-lg text-sm font-medium {{ request()->routeIs('client.ai-visibility') ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-100' }}">
-                🤖 AI可见度
-            </a>
-            <form method="POST" action="{{ route('client.logout') }}" class="inline">
-                @csrf
-                <button class="px-4 py-2 rounded-lg text-sm font-medium bg-white text-gray-500 hover:bg-red-50 hover:text-red-600">
-                    退出
-                </button>
-            </form>
         </div>
 
-        @yield('content')
+        {{-- Main Content --}}
+        <div class="max-w-7xl mx-auto px-4 pb-6">
+            @yield('content')
+        </div>
+
+        {{-- Footer --}}
+        <div class="footer-ai text-center text-ai-dim text-xs py-6">
+            &copy; {{ date('Y') }} Qonhub AI · AI 搜索营销数据实时更新
+        </div>
     </div>
 
-    <footer class="text-center text-gray-400 text-xs py-6">
-        &copy; {{ date('Y') }} Qonhub AI · 数据实时更新
-    </footer>
+    {{-- JS: Galaxy BG + ClickSpark + BentoGlow --}}
+    <script src="{{ asset('js/grainient-bg.js') }}"></script>
+    <script src="{{ asset('js/floating-lines.js') }}"></script>
+    <script src="{{ asset('js/qonhub-fx.js') }}"></script>
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      // 层1: Grainient 流体渐变
+      new GrainientBackground(document.getElementById('grainient-container'), {
+        color1: '#ddd6fe', color2: '#818cf8', color3: '#1e1b4b',
+        timeSpeed: 0.12, warpStrength: 0.6, warpFrequency: 3.0,
+        warpSpeed: 1.0, warpAmplitude: 80, blendSoftness: 0.14,
+        rotationAmount: 250, noiseScale: 1.8, grainAmount: 0.03,
+        contrast: 1.15, saturation: 1.0, zoom: 1.08
+      });
+
+      // 层2: FloatingLines 光线叠加 (screen blend, 半透明)
+      new FloatingLines(document.getElementById('floating-lines-container'), {
+        lineCount: [6, 10, 14],
+        lineDistance: [0.07, 0.05, 0.035],
+        enabledWaves: ['top', 'middle', 'bottom'],
+        animationSpeed: 0.5,
+        interactive: true,
+        bendRadius: 7.0,
+        bendStrength: -0.3,
+        mouseDamping: 0.06,
+        parallax: true,
+        parallaxStrength: 0.12,
+        linesGradient: ['#818cf8', '#a78bfa', '#c4b5fd'],
+        mixBlendMode: 'screen'
+      });
+
+      // Click sparkle
+      new QonhubFX.ClickSpark({
+        sparkColor: '#c4b5fd', sparkSize: 6, sparkRadius: 14,
+        sparkCount: 8, duration: 450
+      });
+
+      // Bento card glow
+      new QonhubFX.BentoGlow('.bento-card', {
+        glowColor: '165, 180, 252', spotlightRadius: 300
+      });
+
+      // Magnet: 单一监听器，卡片鼠标磁吸
+      const magnetEls = document.querySelectorAll('.bento-card, .nav-link');
+      document.addEventListener('mousemove', (e) => {
+        magnetEls.forEach(el => {
+          const r = el.getBoundingClientRect();
+          const cx = r.left + r.width/2, cy = r.top + r.height/2;
+          const dx = e.clientX - cx, dy = e.clientY - cy;
+          const dist = Math.hypot(dx, dy);
+          const range = Math.max(r.width, r.height) * 0.7;
+          if (dist < range) {
+            el.style.transform = `translate3d(${dx/20}px,${dy/20}px,0)`;
+            el.style.transition = 'transform 0.25s ease-out';
+          } else {
+            el.style.transform = 'translate3d(0,0,0)';
+            el.style.transition = 'transform 0.5s ease-in-out';
+          }
+        });
+      });
+    });
+    </script>
+    @stack('scripts')
 </body>
 </html>

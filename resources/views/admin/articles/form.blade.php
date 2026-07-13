@@ -1080,7 +1080,7 @@
             editor = new Vditor('content-editor', {
                 value: textarea.value || '',
                 height: 560,
-                mode: 'ir',
+                mode: 'wysiwyg',
                 cdn: @json(asset('vendor/vditor')),
                 lang: @json($vditorLang),
                 cache: {

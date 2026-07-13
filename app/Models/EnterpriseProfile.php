@@ -37,6 +37,7 @@ class EnterpriseProfile extends Model
         'industry', 'products_services',
         'business_license_path', 'company_logo_path',
         'registration_phone', 'registration_authorized',
+        'contact_name', 'contact_phone',
         'nap_consistency_checked',
         'verification_status', 'verified_by', 'verified_at',
     ];
@@ -76,6 +77,40 @@ class EnterpriseProfile extends Model
     public function isNapConsistent(): bool
     {
         return $this->nap_consistency_checked;
+    }
+
+    /**
+     * 返回四步注册完成状态，用于 B2B 分步注册向导。
+     *
+     * @return array{step1:bool, step2:bool, step3:bool, step4:bool, total:int, completed:int, can_register:bool}
+     */
+    public function getRegisterStepStatus(): array
+    {
+        $steps = [
+            'step1' => ! empty($this->company_full_name)
+                    && ! empty($this->unified_social_credit_code)
+                    && ! empty($this->legal_person)
+                    && ! empty($this->business_scope),
+            'step2' => ! empty($this->contact_name)
+                    && ! empty($this->contact_phone)
+                    && ! empty($this->company_email),
+            'step3' => ! empty($this->company_province)
+                    && ! empty($this->company_city)
+                    && ! empty($this->industry),
+            'step4' => ! empty($this->products_services),
+        ];
+
+        $completed = count(array_filter($steps));
+
+        return [
+            'step1' => $steps['step1'],
+            'step2' => $steps['step2'],
+            'step3' => $steps['step3'],
+            'step4' => $steps['step4'],
+            'total' => 4,
+            'completed' => $completed,
+            'can_register' => $completed === 4,
+        ];
     }
 
     /**

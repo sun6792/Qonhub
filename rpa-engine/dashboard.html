@@ -55,6 +55,8 @@
 <div class="topbar">
   <h1>🤖 Qonhub 运营助手</h1>
   <div class="meta">
+    <span style="font-size:12px;padding:4px 10px;border-radius:20px;background:#dcfce7;color:#166534;font-weight:600">🖥️ 桌面模式</span>
+    <span style="font-size:11px;color:#94a3b8">浏览器可见操作</span>
     <label style="font-size:13px;color:#64748b;white-space:nowrap">当前客户</label>
     <select id="wsSelect" onchange="switchWorkspace()">
       <option value="">-- 选择客户 --</option>
@@ -96,15 +98,51 @@
     <div id="logArea" class="log-area" style="margin:0 20px 16px">就绪，等待操作...</div>
   </div>
 
-  <!-- [新增] 右栏2：文章分发 -->
+  <!-- [新增] 平台授权 -->
   <div class="card">
     <div class="card-header">
-      <h2>📰 文章分发</h2>
-      <button class="btn btn-outline btn-sm" onclick="loadArticles()">刷新文章</button>
-      <span id="distStatus" class="text-xs text-gray-400">0 已绑</span>
+      <h2>🔐 平台授权</h2>
+      <span class="text-xs text-gray-400" id="authStatus">需手动登录</span>
     </div>
-    <div class="card-body" id="articleList">
+    <div class="card-body" id="authList">
+      <div class="empty-state"><div class="icon">🔑</div><p>选择客户后查看授权状态</p></div>
+    </div>
+  </div>
+
+  <!-- P0 弹药库批量分发中心 -->
+  <div class="card" style="grid-column:1/-1">
+    <div class="card-header">
+      <h2>📰 弹药库 · 批量分发</h2>
+      <div style="display:flex;align-items:center;gap:12px">
+        <select id="distPlatform" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:13px">
+          <option value="">选择平台...</option>
+          <option value="toutiao">📰 今日头条</option>
+          <option value="baijiahao">📝 百家号</option>
+          <option value="xiaohongshu">📕 小红书</option>
+          <option value="sohu">🟢 搜狐号</option>
+        </select>
+        <button class="btn btn-primary btn-sm" onclick="bulkDistribute()">🚀 全选发送</button>
+        <button class="btn btn-outline btn-sm" onclick="loadArticles()">🔄 刷新</button>
+        <span id="distStatus" style="font-size:12px;color:#94a3b8">0篇</span>
+      </div>
+    </div>
+    <div style="padding:8px 20px;background:#f8fafc;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;gap:8px">
+      <input type="checkbox" id="selectAll" onchange="toggleSelectAll(this)" style="width:16px;height:16px">
+      <label for="selectAll" style="font-size:12px;color:#64748b;cursor:pointer">全选</label>
+      <span id="selectedCount" style="font-size:11px;color:#6366f1;font-weight:600">0</span>
+      <span style="font-size:11px;color:#94a3b8">篇已选</span>
+    </div>
+    <div class="card-body" id="articleList" style="max-height:400px">
       <div class="empty-state"><div class="icon">📭</div><p>选择客户后加载文章</p></div>
+    </div>
+    <div id="publishProgress" style="display:none;padding:12px 20px;background:#eef2ff;border-top:1px solid #e0e7ff">
+      <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+        <span style="font-size:12px;font-weight:600;color:#4338ca" id="progressText">分发中...</span>
+        <span style="font-size:12px;color:#6366f1" id="progressCount">0/0</span>
+      </div>
+      <div style="background:#e0e7ff;border-radius:4px;height:6px">
+        <div id="progressBar" style="background:linear-gradient(90deg,#6366f1,#8b5cf6);height:6px;border-radius:4px;width:0%;transition:width 0.3s"></div>
+      </div>
     </div>
   </div>
 
@@ -164,7 +202,7 @@ async function switchWorkspace() {
   currentWs = val;
   h("wsStats").textContent = val ? `WS-${val}` : "";
   if (val) {
-    await Promise.all([pullTasks(), loadCache()]);
+    await Promise.all([pullTasks(), loadCache(), loadAuthPlatforms()]);
     localStorage.setItem("rpa_current_ws", val);
   }
 }
@@ -398,107 +436,187 @@ async function loadDistChannels() {
   } catch(e) { distChannels = []; log("⚠️ " + e.message); }
 }
 
+var selectedArticleIds = [];
+
+function toggleSelectAll(cb) {
+  var checks = document.querySelectorAll('.article-check');
+  checks.forEach(function(c) { c.checked = cb.checked; });
+  updateSelectedCount();
+}
+
+function updateSelectedCount() {
+  var checks = document.querySelectorAll('.article-check:checked');
+  selectedArticleIds = Array.from(checks).map(function(c) { return parseInt(c.value); });
+  h("selectedCount").textContent = selectedArticleIds.length;
+  h("selectAll").checked = checks.length > 0 && checks.length === document.querySelectorAll('.article-check').length;
+}
+
 function renderArticles(articles) {
-  const el = h("articleList");
+  var el = h("articleList");
+  h("distStatus").textContent = articles.length + '篇';
   if (!articles.length) {
     el.innerHTML = '<div class="empty-state"><div class="icon">📭</div><p>该客户暂无已发布文章</p></div>';
     return;
   }
   el.innerHTML = articles.map(function(a) {
-    return '<div class="task-item"><div style="flex:1"><div style="font-size:13px;font-weight:600">' + a.title + '</div><div style="font-size:11px;color:#64748b">' + (a.published_at || '') + '</div></div><button class="btn btn-primary btn-sm" onclick="distArticleAll(' + a.id + ')">🚀 一键分发</button></div>';
+    var title = (a.title || '').substring(0, 60);
+    return '<div class="task-item">' +
+      '<input type="checkbox" class="article-check" value="' + a.id + '" onchange="updateSelectedCount()" style="width:15px;height:15px;cursor:pointer">' +
+      '<div style="flex:1;margin-left:8px"><div style="font-size:13px;font-weight:600">' + title + '</div><div style="font-size:11px;color:#64748b">' + (a.published_at || '') + '</div></div>' +
+      '</div>';
   }).join("");
+  updateSelectedCount();
 }
 
-// [新增] 一键分发到所有已绑平台
-async function distArticleAll(articleId) {
+async function bulkDistribute() {
   if (!currentWs) return alert("请先选择客户");
-  const boundChannels = distChannels.filter(function(c) { return c.bound; });
-  if (boundChannels.length === 0) return alert("该客户未绑定任何平台，请先在凭证中心绑定");
-  if (!confirm("一键分发到 " + boundChannels.length + " 个已绑平台？")) return;
-  log("🚀 一键分发: 文章" + articleId + " → " + boundChannels.length + " 个平台");
+  var platform = h("distPlatform").value;
+  if (!platform) return alert("请先选择目标平台");
+  if (selectedArticleIds.length === 0) return alert("请至少勾选一篇文章");
 
-  // 先获取文章全文
-  var title = "", content = "";
+  var platformNames = {toutiao:'今日头条',baijiahao:'百家号',xiaohongshu:'小红书',sohu:'搜狐号'};
+  if (!confirm('将 ' + selectedArticleIds.length + ' 篇文章批量分发到「' + (platformNames[platform]||platform) + '」？')) return;
+
+  log("🚀 批量分发: " + selectedArticleIds.length + "篇 → " + platform);
+
+  // Show progress
+  var progressEl = h("publishProgress");
+  progressEl.style.display = "block";
+  h("progressText").textContent = "正在提交分发任务...";
+  h("progressBar").style.width = "10%";
+
   try {
-    var artResp = await fetch(CLOUD + "/api/v1/rpa/articles/" + articleId);
-    var artData = await artResp.json();
-    title = artData.title || "";
-    content = artData.content || "";
-  } catch(e) { log("⚠️ 获取文章失败"); }
-
-  var done = 0;
-  for (var i = 0; i < boundChannels.length; i++) {
-    var ch = boundChannels[i];
-    try {
-      var resp = await fetch(API + "/api/v1/publish", {
-        method: "POST",
-        headers: {"Content-Type":"application/json","X-Api-Key":API_KEY},
-        body: JSON.stringify({
-          platform: ch.key.replace(/_publish$/, ""),
-          account: {},
-          content: {title: title, content: content, article_id: articleId},
-          options: {workspace_id: currentWs}
-        })
-      });
-      done++;
-    } catch(e) { log("❌ " + ch.name + ": " + e.message); }
-  }
-  log("✅ 分发完成: " + done + "/" + boundChannels.length);
-}
-
-async function distArticle(articleId, channelKey, channelType) {
-  if (!currentWs) return alert("请先选择客户");
-  const ch = distChannels.find(c => c.key === channelKey);
-  if (!confirm("分发到 " + (ch?.name||channelKey) + "？")) return;
-  log("📤 分发中: 文章" + articleId + " → " + channelKey);
-
-  // 先获取文章全文
-  let title = "", content = "";
-  try {
-    const artResp = await fetch(CLOUD + "/api/v1/rpa/articles/" + articleId);
-    const artData = await artResp.json();
-    title = artData.title || "";
-    content = artData.content || "";
-  } catch(e) { log("⚠️ 获取文章失败: " + e.message); }
-
-  if (channelType === "rpa") {
-    try {
-      const resp = await fetch(API + "/api/v1/publish", {
-        method: "POST",
-        headers: {"Content-Type":"application/json","X-Api-Key":API_KEY},
-        body: JSON.stringify({
-          platform: channelKey,
-          account: {},
-          content: {title: title, content: content, article_id: articleId},
-          options: {workspace_id: currentWs}
-        })
-      });
-      const r = await resp.json();
-      log("✅ RPA已提交: " + r.task_id);
-    } catch(e) { log("❌ RPA失败: " + e.message); }
-  } else {
-    try {
-      const resp = await fetch(CLOUD + "/distribution/armory/publish", {
-        method: "POST",
-        headers: {"Content-Type":"application/json"},
-        body: JSON.stringify({
-          article_id: articleId,
-          template_key: "geo_optimized",
-          rewritten_title: title,
-          rewritten_content: content,
-          channel_ids: [ch?.channel_id]
-        })
-      });
-      const r = await resp.json();
-      log("✅ API分发: " + (r.summary || "已提交"));
-    } catch(e) { log("❌ API失败: " + e.message); }
+    var resp = await fetch(CLOUD + "/api/v1/rpa/bulk-distribute", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        workspace_id: parseInt(currentWs),
+        platform: platform,
+        article_ids: selectedArticleIds,
+      }),
+    });
+    var data = await resp.json();
+    if (data.ok) {
+      h("progressText").textContent = "✅ 分发任务已创建";
+      h("progressBar").style.width = "100%";
+      h("progressCount").textContent = data.total_jobs + " 个作业";
+      log("✅ " + data.message);
+      setTimeout(function() { progressEl.style.display = "none"; }, 3000);
+    } else {
+      h("progressText").textContent = "❌ " + (data.error || "失败");
+      h("progressBar").style.width = "0%";
+    }
+  } catch(e) {
+    h("progressText").textContent = "❌ " + e.message;
+    log("❌ 批量分发失败: " + e.message);
   }
 }
 
 function refreshAll() {
-  if (currentWs) { pullTasks(); loadCache(); loadArticles(); updateStats(); }
+  if (currentWs) { pullTasks(); loadCache(); loadArticles(); updateStats(); loadAuthPlatforms(); }
   loadDistChannels();
   log("🔄 已刷新");
+}
+
+// ═══════ 平台授权 ═══════
+const AUTH_PLATFORMS = [
+  { key: "toutiao", name: "今日头条", icon: "📰", url: "https://mp.toutiao.com/" },
+  { key: "baijiahao", name: "百家号", icon: "📝", url: "https://baijiahao.baidu.com/" },
+  { key: "wechat_mp", name: "微信公众号", icon: "💬", url: "https://mp.weixin.qq.com/" },
+  { key: "sohu", name: "搜狐号", icon: "🟢", url: "https://mp.sohu.com/" },
+  { key: "xiaohongshu", name: "小红书", icon: "📕", url: "https://creator.xiaohongshu.com/" },
+  { key: "wangyihao", name: "网易号", icon: "🌐", url: "https://mp.163.com/" },
+  { key: "bilibili", name: "B站", icon: "🎬", url: "https://member.bilibili.com/" },
+  { key: "qiehao", name: "企鹅号", icon: "🐧", url: "https://om.qq.com/" },
+  { key: "smzdm", name: "值得买", icon: "🛒", url: "https://www.smzdm.com/" },
+  { key: "douyin", name: "抖音", icon: "🎵", url: "https://creator.douyin.com/" },
+  { key: "kuaishou", name: "快手", icon: "⚡", url: "https://cp.kuaishou.com/" },
+];
+
+async function loadAuthPlatforms() {
+  if (!currentWs) return;
+  const el = h("authList");
+  el.innerHTML = '<div class="empty-state"><div class="icon">⏳</div><p>加载中...</p></div>';
+
+  // 同时读两个数据源
+  let dbPlatforms = {}, cachePlatforms = {};
+  try {
+    const dbResp = await fetch(`${CLOUD}/api/v1/rpa/client-platforms?workspace_id=${currentWs}`);
+    const dbData = await dbResp.json();
+    (dbData.platforms || []).forEach(p => { dbPlatforms[p.key] = p; });
+  } catch(e) { log("⚠️ 云端平台状态读取失败: "+e.message); }
+
+  try {
+    const cacheResp = await fetch(`${API}/api/cache/list?workspace_id=${currentWs}`);
+    const cacheData = await cacheResp.json();
+    (cacheData.caches || []).forEach(c => { cachePlatforms[c.platform_key] = c; });
+  } catch(e) { log("⚠️ RPA缓存读取失败: "+e.message); }
+
+  el.innerHTML = AUTH_PLATFORMS.map(p => {
+    const db = dbPlatforms[p.key];           // 云端DB: 客户端是否绑定
+    const cache = cachePlatforms[p.key];      // RPA缓存: 是否有Cookie
+    const dbOk = db && db.status === 'active';
+    const cacheOk = cache && cache.valid;
+
+    let statusText, statusClass, btnText, btnAction;
+    if (dbOk && cacheOk) {
+      statusText = '✅ 可分发'; statusClass = 'badge-valid';
+      btnText = '🔄 重新授权'; btnAction = `authLogin('${p.key}')`;
+    } else if (dbOk && !cacheOk) {
+      statusText = '⚠️ 需登录'; statusClass = 'badge-expired';
+      btnText = '🔑 授权登录'; btnAction = `authLogin('${p.key}')`;
+    } else if (!dbOk && cacheOk) {
+      statusText = '⚠️ 已解绑'; statusClass = 'badge-fail';
+      btnText = '🗑 清缓存'; btnAction = `clearCache('${p.key}')`;
+    } else {
+      statusText = '未绑定'; statusClass = 'badge-empty';
+      btnText = '🔑 授权登录'; btnAction = `authLogin('${p.key}')`;
+    }
+
+    return `<div class="cache-item">
+      <div style="flex:1">
+        <span style="font-size:14px;margin-right:6px">${p.icon}</span>
+        <span style="font-size:13px;font-weight:600">${p.name}</span>
+        <span class="badge ${statusClass}" style="margin-left:6px">${statusText}</span>
+        <span style="font-size:10px;color:#94a3b8;margin-left:4px">DB:${dbOk?'✓':'✗'} 缓存:${cacheOk?'✓':'✗'}</span>
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="${btnAction}">${btnText}</button>
+    </div>`;
+  }).join("");
+  h("authStatus").textContent = `WS-${currentWs} | DB+缓存双校验`;
+}
+
+async function clearCache(platform) {
+  if (!confirm(`清除 ${platform} 的本地Cookie缓存？`)) return;
+  try {
+    const resp = await fetch(`${API}/api/cache/clear`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ workspace_id: currentWs, platform_key: platform }),
+    });
+    const data = await resp.json();
+    log(data.success ? `✅ ${platform} 缓存已清除` : `⚠️ ${data.message}`);
+    loadAuthPlatforms();
+  } catch(e) { log("❌ 清除失败: "+e.message); }
+}
+
+async function authLogin(platform) {
+  if (!currentWs) return alert("请先选择客户");
+  if (!confirm(`将打开浏览器窗口，请在浏览器中手动登录${AUTH_PLATFORMS.find(p=>p.key===platform)?.name||platform}。登录成功后点击确定。`)) return;
+  log(`🔑 正在打开 ${platform} 登录页...`);
+  h("authList").querySelectorAll("button").forEach(b => b.disabled = true);
+  try {
+    const resp = await fetch(`${API}/api/v1/auth-login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Api-Key": API_KEY },
+      body: JSON.stringify({ platform, workspace_id: currentWs, headless: false }),
+    });
+    const data = await resp.json();
+    if (data.success) { log(`✅ ${data.message}`); alert(data.message); }
+    else { log(`⚠️ ${data.message}`); alert(data.message); }
+  } catch (e) { log(`❌ 授权失败: ${e.message}`); alert("授权失败: " + e.message); }
+  h("authList").querySelectorAll("button").forEach(b => b.disabled = false);
+  loadAuthPlatforms();
 }
 
 // ═══════ INIT ═══════

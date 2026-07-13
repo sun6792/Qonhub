@@ -436,7 +436,7 @@ class GeoContentScorer
         return array_slice($topics, 0, 6);
     }
 
-    private function grade(int $score): string
+    public function grade(int $score): string
     {
         return match (true) {
             $score >= 85 => 'A',

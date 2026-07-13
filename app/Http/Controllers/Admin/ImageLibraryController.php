@@ -323,6 +323,8 @@ class ImageLibraryController extends Controller
             ->withSum('images as total_size', 'file_size')
             ->orderByDesc('created_at');
 
+        $this->scopeByOperatorWorkspaces($query, ImageLibrary::class);
+
         return $query->get()->map(static function (ImageLibrary $library): array {
             return [
                 'id' => (int) $library->id,

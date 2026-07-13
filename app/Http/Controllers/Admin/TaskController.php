@@ -402,91 +402,51 @@ class TaskController extends Controller
      */
     private function loadTaskFormOptions(): array
     {
-        // 直接附带标题数，避免 Blade 层再次查询。
-        $titleLibraries = TitleLibrary::query()
-            ->select(['id', 'name'])
+        // 标题库（附带标题数，workspace 隔离）
+        $titleQ = TitleLibrary::query()->select(['id', 'name'])
             ->selectRaw('(SELECT COUNT(*) FROM titles WHERE titles.library_id = title_libraries.id) AS title_count')
-            ->orderByDesc('id')
-            ->get()
-            ->map(static function (TitleLibrary $row): array {
-                return [
-                    'id' => (int) $row->id,
-                    'name' => (string) $row->name,
-                    'count' => (int) ($row->title_count ?? 0),
-                ];
-            })
-            ->all();
+            ->orderByDesc('id');
+        $this->scopeByOperatorWorkspaces($titleQ, TitleLibrary::class);
+        $titleLibraries = $titleQ->get()->map(static function (TitleLibrary $row): array {
+            return ['id' => (int) $row->id, 'name' => (string) $row->name, 'count' => (int) ($row->title_count ?? 0)];
+        })->all();
 
-        $prompts = Prompt::query()
-            ->select(['id', 'name'])
-            ->where('type', 'content')
-            ->orderByDesc('id')
-            ->get()
-            ->map(static fn (Prompt $row): array => ['id' => (int) $row->id, 'name' => (string) $row->name])
-            ->all();
+        // 提示词（全局，不隔离）
+        $prompts = Prompt::query()->select(['id', 'name'])->where('type', 'content')->orderByDesc('id')
+            ->get()->map(static fn (Prompt $row): array => ['id' => (int) $row->id, 'name' => (string) $row->name])->all();
 
-        $aiModels = AiModel::query()
-            ->select(['id', 'name'])
-            ->where('status', 'active')
-            ->where(function ($query): void {
-                $query->whereNull('model_type')
-                    ->orWhere('model_type', '')
-                    ->orWhere('model_type', 'chat');
-            })
-            ->orderBy('failover_priority')
-            ->orderByDesc('id')
-            ->get()
-            ->map(static fn (AiModel $row): array => ['id' => (int) $row->id, 'name' => (string) $row->name])
-            ->all();
+        // AI 模型（全局，不隔离）
+        $aiModels = AiModel::query()->select(['id', 'name'])->where('status', 'active')
+            ->where(fn ($q) => $q->whereNull('model_type')->orWhere('model_type', '')->orWhere('model_type', 'chat'))
+            ->orderBy('failover_priority')->orderByDesc('id')
+            ->get()->map(static fn (AiModel $row): array => ['id' => (int) $row->id, 'name' => (string) $row->name])->all();
 
-        // 兼容上游展示：图库名称 + 图片数量。
-        $imageLibraries = ImageLibrary::query()
-            ->select(['id', 'name'])
+        // 图库（workspace 隔离）
+        $imgQ = ImageLibrary::query()->select(['id', 'name'])
             ->selectRaw('(SELECT COUNT(*) FROM images WHERE images.library_id = image_libraries.id) AS image_count')
-            ->orderBy('name')
-            ->get()
-            ->map(static function (ImageLibrary $row): array {
-                return [
-                    'id' => (int) $row->id,
-                    'name' => (string) $row->name,
-                    'count' => (int) ($row->image_count ?? 0),
-                ];
-            })
-            ->all();
+            ->orderBy('name');
+        $this->scopeByOperatorWorkspaces($imgQ, ImageLibrary::class);
+        $imageLibraries = $imgQ->get()->map(static function (ImageLibrary $row): array {
+            return ['id' => (int) $row->id, 'name' => (string) $row->name, 'count' => (int) ($row->image_count ?? 0)];
+        })->all();
 
-        $knowledgeBases = KnowledgeBase::query()
-            ->select(['id', 'name'])
-            ->orderBy('name')
-            ->get()
-            ->map(static fn (KnowledgeBase $row): array => ['id' => (int) $row->id, 'name' => (string) $row->name])
-            ->all();
+        // 知识库（workspace 隔离）
+        $kbQ = KnowledgeBase::query()->select(['id', 'name'])->orderBy('name');
+        $this->scopeByOperatorWorkspaces($kbQ, KnowledgeBase::class);
+        $knowledgeBases = $kbQ->get()->map(static fn (KnowledgeBase $row): array => ['id' => (int) $row->id, 'name' => (string) $row->name])->all();
 
-        $authors = Author::query()
-            ->select(['id', 'name'])
-            ->orderBy('name')
-            ->get()
-            ->map(static fn (Author $row): array => ['id' => (int) $row->id, 'name' => (string) $row->name])
-            ->all();
+        // 作者（全局）
+        $authors = Author::query()->select(['id', 'name'])->orderBy('name')
+            ->get()->map(static fn (Author $row): array => ['id' => (int) $row->id, 'name' => (string) $row->name])->all();
 
-        $categories = Category::query()
-            ->select(['id', 'name'])
-            ->orderBy('sort_order')
-            ->orderBy('id')
-            ->get()
-            ->map(static fn (Category $row): array => ['id' => (int) $row->id, 'name' => (string) $row->name])
-            ->all();
+        // 分类（全局）
+        $categories = Category::query()->select(['id', 'name'])->orderBy('sort_order')->orderBy('id')
+            ->get()->map(static fn (Category $row): array => ['id' => (int) $row->id, 'name' => (string) $row->name])->all();
 
-        $distributionChannels = DistributionChannel::query()
-            ->select(['id', 'name', 'domain'])
-            ->where('status', 'active')
-            ->orderBy('name')
-            ->get()
-            ->map(static fn (DistributionChannel $row): array => [
-                'id' => (int) $row->id,
-                'name' => (string) $row->name,
-                'domain' => (string) $row->domain,
-            ])
-            ->all();
+        // 分发渠道（全局）
+        $distributionChannels = DistributionChannel::query()->select(['id', 'name', 'domain'])
+            ->where('status', 'active')->orderBy('name')
+            ->get()->map(static fn (DistributionChannel $row): array => ['id' => (int) $row->id, 'name' => (string) $row->name, 'domain' => (string) $row->domain])->all();
 
         return [
             'titleLibraries' => $titleLibraries,

@@ -30,10 +30,10 @@ class PlatformAccountService
             $account = $accounts->get($key);
             $result->push([
                 'platform_key' => $key,
-                'name' => $info['name'],
-                'icon' => $info['icon'],
-                'color' => $info['color'],
-                'login_url' => $info['login_url'],
+                'name' => $info['name'] ?? $key,
+                'icon' => $info['icon'] ?? 'globe',
+                'color' => $info['color'] ?? '#6b7280',
+                'login_url' => $info['login_url'] ?? '#',
                 'connected' => $account !== null,
                 'status' => $account?->status ?? 'not_connected',
                 'account_name' => $account?->platform_account_name ?? null,

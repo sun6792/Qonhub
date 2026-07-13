@@ -6,6 +6,7 @@ use App\Models\Task;
 use App\Models\TaskRun;
 use App\Models\WorkerHeartbeat;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
@@ -106,10 +107,26 @@ class TaskMonitoringQueryService
      */
     private function listTaskMonitoringRows(): array
     {
+        $query = Task::query()->orderByDesc('created_at');
+
+        // 运营师 workspace 隔离：非超管只看自己绑定的 workspace 的任务
+        $admin = Auth::guard('admin')->user();
+        if ($admin && ! $admin->isSuperAdmin()) {
+            $workspaceIds = $admin->scopedWorkspaceIds();
+            if (empty($workspaceIds)) {
+                // 未绑定任何 workspace 的运营师，看不到任何任务
+                return [];
+            }
+            $query->whereIn('id', function ($sub) use ($workspaceIds) {
+                $sub->select('assignable_id')
+                    ->from('workspace_assignments')
+                    ->where('assignable_type', Task::class)
+                    ->whereIn('workspace_id', $workspaceIds);
+            });
+        }
+
         /** @var Collection<int, Task> $tasks */
-        $tasks = Task::query()
-            ->orderByDesc('created_at')
-            ->get();
+        $tasks = $query->get();
 
         return $this->decorateTasks($tasks)->values()->all();
     }
@@ -357,15 +374,25 @@ class TaskMonitoringQueryService
      */
     private function resolveBatchStatus(Task $task, array $runStats, ?TaskRun $latestRun, array $articleStats): string
     {
+        // 有正在执行的任务 → 运行中
         if ((int) ($runStats['running_jobs'] ?? 0) > 0) {
             return 'running';
         }
 
-        if ((int) ($runStats['pending_jobs'] ?? 0) > 0) {
+        // 活跃任务有已完成的周期 → 正常工作（即使有 pending 下一个周期）
+        $hasCompleted = ((int) ($runStats['completed_jobs'] ?? 0)) > 0;
+        $isActive = ($task->status ?? 'paused') === 'active';
+        if ($isActive && $hasCompleted) {
+            // 还有 pending 但已完成过 → 持续运行中
+            return 'running';
+        }
+
+        // 活跃但还没完成过任何周期 → 等待首次执行
+        if ($isActive && ((int) ($runStats['pending_jobs'] ?? 0) > 0)) {
             return 'pending';
         }
 
-        if (($task->status ?? 'paused') === 'paused') {
+        if (! $isActive) {
             return 'idle';
         }
 

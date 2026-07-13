@@ -87,18 +87,13 @@ class WorkerExecutionService
         $generation = $this->generateContentWithModelSelection($task, $contentPrompt);
         $aiModel = $generation['model'];
         $generatedContent = $generation['content'];
-        // [新增] GEO 自动增强 + 低于70分自动重写（最多2次）
+        // GEO 评分 + 仅在低于70分时自动增强并重写（最多2次）
         $scorer = app(\App\Services\GeoFlow\GeoContentScorer::class);
         $maxRetries = 2;
+        $geoScore = $scorer->quickScore((string) $titleRow->title, $generatedContent);
         for ($retry = 0; $retry <= $maxRetries; $retry++) {
-            // GEO 增强
-            try {
-                $generatedContent = $scorer->geoEnhance((string) $titleRow->title, $generatedContent);
-            } catch (\Throwable) { /* 增强失败不影响 */ }
-            // 评分
-            $geoScore = $scorer->quickScore((string) $titleRow->title, $generatedContent);
-            if ($geoScore >= 70 || $retry >= $maxRetries) break;
-            // 低于70分重写：追加更强的约束指令
+            if ($geoScore >= 70) break; // 已达标，不增强
+            // 低于70分：追加更强的约束指令重写
             $retryPrompt = $contentPrompt . "\n\n【重写要求——必须严格遵守】\n"
                 . "1. 必须包含至少5组 Q&A 问答（Q:...? A:...）\n"
                 . "2. 必须包含至少3处带引号的专家引用\n"
@@ -106,7 +101,11 @@ class WorkerExecutionService
                 . "4. 严禁使用虚词：可能、也许、大概、似乎、大约、通常、往往、一般\n";
             $retryGeneration = $this->generateContentWithModelSelection($task, $retryPrompt);
             $generatedContent = $retryGeneration['content'];
+            $geoScore = $scorer->quickScore((string) $titleRow->title, $generatedContent);
         }
+        // 清理 Markdown 标记：头条/百家号等平台不支持 Markdown 格式
+        $generatedContent = $this->stripMarkdown($generatedContent);
+
         $imageResult = $this->insertTaskImagesIntoContent($task, $generatedContent);
         $content = $imageResult['content'];
         $selectedImages = $imageResult['images'];
@@ -159,6 +158,21 @@ class WorkerExecutionService
                         'usage_count' => DB::raw('COALESCE(usage_count,0)+1'),
                     ]);
                 }
+            }
+
+            // 自动分配 workspace：文章继承任务的 workspace
+            $taskWs = DB::table('workspace_assignments')
+                ->where('assignable_type', Task::class)
+                ->where('assignable_id', (int) $task->id)
+                ->value('workspace_id');
+            if ($taskWs) {
+                DB::table('workspace_assignments')->insert([
+                    'assignable_type' => Article::class,
+                    'assignable_id' => (int) $article->id,
+                    'workspace_id' => (int) $taskWs,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
             }
 
             // 保持与旧逻辑一致：每次任务执行会消耗标题并累加任务计数。
@@ -1322,5 +1336,22 @@ GEO;
         }
 
         return trim(implode("\n\n", $parts));
+    }
+
+    /**
+     * 清理 Markdown 标记，输出干净纯文本。
+     * 头条、百家号等平台不支持 Markdown 渲染，需在保存前剥离。
+     */
+    private function stripMarkdown(string $text): string
+    {
+        $text = preg_replace('/\*\*(.+?)\*\*/u', '$1', $text);       // **粗体**
+        $text = preg_replace('/\*(.+?)\*/u', '$1', $text);           // *斜体*
+        $text = preg_replace('/^#{1,6}\s+/mu', '', $text);           // # 标题
+        $text = preg_replace('/^[-*+]\s+/mu', '· ', $text);          // - 列表 → ·
+        $text = preg_replace('/\[([^\]]+)\]\([^)]+\)/u', '$1', $text); // [链接](url)
+        $text = preg_replace('/`{1,3}[^`]*`{1,3}/u', '', $text);    // `代码`
+        $text = preg_replace('/^>\s+/mu', '', $text);                // > 引用
+        $text = preg_replace('/\n{3,}/', "\n\n", $text);             // 多余空行合并
+        return trim($text);
     }
 }
