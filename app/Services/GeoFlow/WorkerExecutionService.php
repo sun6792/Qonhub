@@ -92,36 +92,60 @@ class WorkerExecutionService
         $generation = $this->generateContentWithModelSelection($task, $contentPrompt);
         $aiModel = $generation['model'];
         $generatedContent = $generation['content'];
-        // GEO 评分 + 仅在低于70分时自动增强并重写（最多2次）
+        // GEO 六维评分 + 低于70分自动增强重写（最多3轮，维度定向优化）
         $scorer = app(\App\Services\GeoFlow\GeoContentScorer::class);
-        $maxRetries = 2;
-        $geoScore = $scorer->quickScore((string) $titleRow->title, $generatedContent);
-        for ($retry = 0; $retry <= $maxRetries; $retry++) {
-            if ($geoScore >= 70) break; // 已达标，不增强
-            // 低于70分：追加更强的约束指令重写
-            $retryPrompt = $contentPrompt . "\n\n【重写要求——必须严格遵守】\n"
-                . "1. 必须包含至少5组 Q&A 问答（Q:...? A:...）\n"
-                . "2. 必须包含至少3处带引号的专家引用\n"
-                . "3. 每个段落至少含2个具体数据（百分比或数值+单位）\n"
-                . "4. 严禁使用虚词：可能、也许、大概、似乎、大约、通常、往往、一般\n";
+        $maxRetries = 3;
+        $scoreResult = $scorer->score((string) $titleRow->title, $generatedContent);
+        $geoScore = $scoreResult['score'];
+        $retryLog = [];
+
+        for ($retry = 0; $retry < $maxRetries; $retry++) {
+            if ($geoScore >= 70) break;
+
+            // 定向增强：分析弱维度，生成针对性重写指令
+            $weakDims = $this->buildWeakDimensionFix(
+                $scoreResult,
+                $retry + 1,
+                $maxRetries
+            );
+
+            $retryPrompt = $contentPrompt . "\n\n" . $weakDims;
             $retryGeneration = $this->generateContentWithModelSelection($task, $retryPrompt);
             $generatedContent = $retryGeneration['content'];
-            $geoScore = $scorer->quickScore((string) $titleRow->title, $generatedContent);
+            $scoreResult = $scorer->score((string) $titleRow->title, $generatedContent);
+            $geoScore = $scoreResult['score'];
+            $retryLog[] = $geoScore;
         }
-        // 清理 Markdown 标记：头条/百家号等平台不支持 Markdown 格式
+
+        // 最终 GEO 评分持久化
+        $finalGeoScore = (string) json_encode([
+            'score' => $geoScore,
+            'grade' => $scorer->grade($geoScore),
+            'dimensions' => $scoreResult['dimensions'] ?? [],
+            'retries' => $retryLog,
+        ], JSON_UNESCAPED_UNICODE);
+
+        // 清理 Markdown 标记
         $generatedContent = $this->stripMarkdown($generatedContent);
 
         $imageResult = $this->insertTaskImagesIntoContent($task, $generatedContent);
         $content = $imageResult['content'];
         $selectedImages = $imageResult['images'];
         $excerpt = $this->buildExcerpt($content);
+        // 低分拦截：< 70 分标记为待审核，运营需人工介入
+        $geoGrade = $scorer->grade($geoScore);
+        $reviewStatus = (int) ($task->need_review ?? 1) === 1 ? 'pending' : 'approved';
+        if ($geoScore < 70) {
+            $reviewStatus = 'pending_review'; // 强制人工审核
+        }
+
         $workflow = [
             'status' => 'draft',
-            'review_status' => (int) ($task->need_review ?? 1) === 1 ? 'pending' : 'approved',
+            'review_status' => $reviewStatus,
             'published_at' => null,
         ];
 
-        $articleId = DB::transaction(function () use ($task, $titleRow, $author, $category, $keyword, $content, $excerpt, $workflow, $selectedImages): int {
+        $articleId = DB::transaction(function () use ($task, $titleRow, $author, $category, $keyword, $content, $excerpt, $workflow, $selectedImages, $geoScore, $geoGrade, $finalGeoScore): int {
             $freshTask = Task::query()
                 ->whereKey((int) $task->id)
                 ->lockForUpdate()
@@ -150,6 +174,9 @@ class WorkerExecutionService
                 'is_ai_generated' => 1,
                 'published_at' => $workflow['published_at'],
                 'view_count' => 0,
+                'geo_score' => $geoScore,
+                'geo_grade' => $geoGrade,
+                'geo_score_data' => $finalGeoScore,
             ]);
             if ($selectedImages !== []) {
                 foreach ($selectedImages as $position => $image) {
@@ -638,6 +665,59 @@ class WorkerExecutionService
      * [新增] GEO 优化指令：在每次文章生成时内置 geoskills 标准。
      * 确保 AI 生成的文章天然具有高 GEO 评分，不需要事后改写。
      */
+    /**
+     * 维度定向修复：分析低分维度，生成针对性重写提示。
+     */
+    private function buildWeakDimensionFix(array $scoreResult, int $attempt, int $maxRetries): string
+    {
+        $dims = $scoreResult['dimensions'] ?? [];
+        $score = $scoreResult['score'] ?? 0;
+        $grade = $scoreResult['grade'] ?? 'F';
+
+        $fix = [];
+        $fix[] = "【第 {$attempt}/{$maxRetries} 次 GEO 定向重写 — 当前 {$score} 分({$grade})，目标 ≥70 分(B级)——必须严格遵守以下针对性修复指令】";
+
+        // Q&A 结构弱 → 加强问答
+        $qa = (int) ($dims['answer_quality'] ?? 0);
+        if ($qa < 50) {
+            $fix[] = '【Q&A结构不足(当前'.$qa.'分)】文中必须包含 ≥5 组 Q&A 问答。格式：Q: 具体问题？ A: 分点回答（每点含数据+案例+对比）。';
+        }
+
+        // 数据密度弱 → 加强数据
+        $sd = (int) ($dims['statistical_density'] ?? 0);
+        if ($sd < 50) {
+            $fix[] = '【数据密度不足(当前'.$sd.'分)】每个段落必须包含 ≥2 个具体数字（百分比/数值+单位/年份），引用来源。';
+        }
+
+        // 专家信号弱 → 加强引用
+        $es = (int) ($dims['expertise_signals'] ?? 0);
+        if ($es < 50) {
+            $fix[] = '【专家信号不足(当前'.$es.'分)】必须包含 ≥3 处带引号的专家/技术人员直接引用，标注来源和年份。';
+        }
+
+        // 结构清晰度弱
+        $sc = (int) ($dims['structural_clarity'] ?? 0);
+        if ($sc < 50) {
+            $fix[] = '【结构不够清晰(当前'.$sc.'分)】必须使用 ## H2 / ### H3 标题层级，每段 ≤200 字，配合无序列表。';
+        }
+
+        // 虚词过多
+        $hd = (float) ($dims['hedge_density'] ?? 0);
+        if ($hd > 0.5) {
+            $fix[] = '【虚词过多(密度'.$hd.'%)】严禁使用：可能、也许、大概、似乎、大约、通常、往往、一般。用确定性表述替代。';
+        }
+
+        // 自包含性弱
+        $self = (int) ($dims['self_containment'] ?? 0);
+        if ($self < 50) {
+            $fix[] = '【自包含性不足(当前'.$self.'分)】每段独立可读，少用代词(它/他们/这个/那个)，用具体名词替代。首次出现的术语给出简短解释。';
+        }
+
+        $fix[] = '请根据以上针对性反馈，重新输出完整的优化后文章。';
+
+        return implode("\n\n", $fix);
+    }
+
     private function geoOptimizationInstruction(): string
     {
         return <<<'GEO'

@@ -29,6 +29,9 @@ class Article extends Model
         'review_status',
         'view_count',
         'is_ai_generated',
+        'geo_score',
+        'geo_grade',
+        'geo_score_data',
         'is_hot',
         'is_featured',
         'published_at',
@@ -42,6 +45,8 @@ class Article extends Model
             'task_id' => 'integer',
             'view_count' => 'integer',
             'is_ai_generated' => 'integer',
+            'geo_score' => 'integer',
+            'geo_score_data' => 'json',
             'is_hot' => 'boolean',
             'is_featured' => 'boolean',
             'published_at' => 'datetime',
@@ -107,10 +112,16 @@ class Article extends Model
     }
 
     /**
-     * [新增] GEO 评分（accessor，实时计算）。
+     * GEO 评分（优先取存储值，未有则实时计算）。
      */
     public function getGeoScoreAttribute(): ?int
     {
+        // 优先返回已持久化的评分（生成时已计算）
+        $stored = $this->attributes['geo_score'] ?? null;
+        if ($stored !== null) {
+            return (int) $stored;
+        }
+        // 旧文章无存储值，按需计算（仅此一次，后续不缓存）
         if (empty($this->title) && empty($this->content)) return null;
         try {
             $scorer = app(\App\Services\GeoFlow\GeoContentScorer::class);
@@ -120,7 +131,7 @@ class Article extends Model
 
     public function getGeoGradeAttribute(): string
     {
-        $s = $this->geo_score;
+        $s = $this->getGeoScoreAttribute();
         if ($s === null) return '—';
         return match (true) { $s >= 85 => 'A', $s >= 70 => 'B', $s >= 50 => 'C', $s >= 30 => 'D', default => 'F' };
     }
