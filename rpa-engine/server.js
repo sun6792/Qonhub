@@ -519,8 +519,15 @@ app.post("/api/v1/auth-login", auth, async (req, res) => {
       const state = await context.storageState();
       fs.writeFileSync(stateFile, JSON.stringify(state));
       logger.info(`Auth-login SUCCESS: ${info.name} state saved`);
+
+      // 通知 Laravel 后端：Cookie 已就绪，更新 DB 状态
+      reportToCloud(`auth-${platform}-${workspace_id}`, {
+        success: true, platform, workspace_id,
+        message: `${info.name} Cookie 已保存`,
+      });
+
       await browser.close();
-      res.json({ success: true, message: `${info.name} 登录成功，Cookie已保存` });
+      res.json({ success: true, message: `${info.name} 登录成功，Cookie已保存，云端已同步` });
     } else {
       await browser.close();
       res.json({ success: false, message: `登录超时（5分钟），请在浏览器中手动完成登录后重试` });
