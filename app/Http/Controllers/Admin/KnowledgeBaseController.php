@@ -82,6 +82,7 @@ class KnowledgeBaseController extends Controller
      */
     public function updateFromDetail(Request $request, int $knowledgeBaseId): RedirectResponse
     {
+        $this->authorizeOperatorAccess($knowledgeBaseId, KnowledgeBase::class);
         $knowledgeBase = KnowledgeBase::query()->whereKey($knowledgeBaseId)->firstOrFail();
 
         $payload = $request->validate([
@@ -134,6 +135,7 @@ class KnowledgeBaseController extends Controller
      */
     public function edit(int $knowledgeBaseId): View|RedirectResponse
     {
+        $this->authorizeOperatorAccess($knowledgeBaseId, KnowledgeBase::class);
         $knowledgeBase = KnowledgeBase::query()->whereKey($knowledgeBaseId)->firstOrFail();
 
         return view('admin.knowledge-bases.form', [
@@ -164,6 +166,7 @@ class KnowledgeBaseController extends Controller
      */
     public function update(Request $request, int $knowledgeBaseId): RedirectResponse
     {
+        $this->authorizeOperatorAccess($knowledgeBaseId, KnowledgeBase::class);
         $knowledgeBase = KnowledgeBase::query()->whereKey($knowledgeBaseId)->firstOrFail();
 
         $payload = $this->validateKnowledgeForm($request);
@@ -192,6 +195,7 @@ class KnowledgeBaseController extends Controller
      */
     public function destroy(int $knowledgeBaseId): RedirectResponse
     {
+        $this->authorizeOperatorAccess($knowledgeBaseId, KnowledgeBase::class);
         $knowledgeBase = KnowledgeBase::query()->whereKey($knowledgeBaseId)->firstOrFail();
 
         $taskCount = $this->knowledgeBaseTaskCount($knowledgeBaseId);
@@ -208,6 +212,7 @@ class KnowledgeBaseController extends Controller
 
     public function refreshChunks(Request $request, int $knowledgeBaseId): RedirectResponse
     {
+        $this->authorizeOperatorAccess($knowledgeBaseId, KnowledgeBase::class);
         $knowledgeBase = KnowledgeBase::query()->whereKey($knowledgeBaseId)->firstOrFail();
         $content = trim((string) ($knowledgeBase->content ?? ''));
         $redirect = $this->knowledgeChunkRefreshRedirect($request);

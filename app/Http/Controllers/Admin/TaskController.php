@@ -79,6 +79,7 @@ class TaskController extends Controller
      */
     public function toggleStatus(Request $request, int $taskId): RedirectResponse
     {
+        $this->authorizeOperatorAccess($taskId, Task::class);
         if ($taskId <= 0) {
             return back()->withErrors(__('admin.tasks.message.status_update_failed'));
         }
@@ -104,6 +105,7 @@ class TaskController extends Controller
      */
     public function destroyTask(int $taskId): RedirectResponse
     {
+        $this->authorizeOperatorAccess($taskId, Task::class);
         if ($taskId <= 0) {
             return back()->withErrors(__('admin.tasks.message.status_update_failed'));
         }
@@ -176,6 +178,7 @@ class TaskController extends Controller
      */
     public function edit(int $taskId): View|RedirectResponse
     {
+        $this->authorizeOperatorAccess($taskId, Task::class);
         try {
             $task = $this->taskLifecycleService->getTask($taskId);
         } catch (Throwable $e) {
@@ -226,6 +229,7 @@ class TaskController extends Controller
      */
     public function update(Request $request, int $taskId): RedirectResponse
     {
+        $this->authorizeOperatorAccess($taskId, Task::class);
         if (! Category::query()->exists()) {
             return redirect()
                 ->route('admin.categories.create')
@@ -284,6 +288,7 @@ class TaskController extends Controller
 
         try {
             $taskId = (int) $payload['task_id'];
+            $this->authorizeOperatorAccess($taskId, Task::class);
             $result = $payload['action'] === 'start'
                 ? $this->taskLifecycleService->startTask($taskId, true)
                 : $this->taskLifecycleService->stopTask($taskId);

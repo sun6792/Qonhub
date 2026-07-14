@@ -70,6 +70,7 @@ class TitleLibraryController extends Controller
      */
     public function aiGenerate(int $libraryId): View|RedirectResponse
     {
+        $this->authorizeOperatorAccess($libraryId, TitleLibrary::class);
         $library = TitleLibrary::query()->whereKey($libraryId)->firstOrFail();
 
         $keywordLibraries = KeywordLibrary::query()
@@ -99,6 +100,7 @@ class TitleLibraryController extends Controller
      */
     public function generateWithAi(Request $request, int $libraryId): RedirectResponse
     {
+        $this->authorizeOperatorAccess($libraryId, TitleLibrary::class);
         $library = TitleLibrary::query()->whereKey($libraryId)->firstOrFail();
 
         $payload = $request->validate([
@@ -201,6 +203,7 @@ class TitleLibraryController extends Controller
      */
     public function storeTitle(Request $request, int $libraryId): RedirectResponse
     {
+        $this->authorizeOperatorAccess($libraryId, TitleLibrary::class);
         $library = TitleLibrary::query()->whereKey($libraryId)->firstOrFail();
 
         $payload = $request->validate([
@@ -241,6 +244,7 @@ class TitleLibraryController extends Controller
      */
     public function destroyTitles(Request $request, int $libraryId): RedirectResponse
     {
+        $this->authorizeOperatorAccess($libraryId, TitleLibrary::class);
         $library = TitleLibrary::query()->whereKey($libraryId)->firstOrFail();
 
         /** @var array<int, mixed> $rawIds */
@@ -270,6 +274,7 @@ class TitleLibraryController extends Controller
      */
     public function importTitles(Request $request, int $libraryId): RedirectResponse
     {
+        $this->authorizeOperatorAccess($libraryId, TitleLibrary::class);
         $library = TitleLibrary::query()->whereKey($libraryId)->firstOrFail();
 
         $payload = $request->validate([
@@ -366,6 +371,7 @@ class TitleLibraryController extends Controller
      */
     public function edit(int $libraryId): View|RedirectResponse
     {
+        $this->authorizeOperatorAccess($libraryId, TitleLibrary::class);
         $library = TitleLibrary::query()->whereKey($libraryId)->firstOrFail();
 
         return view('admin.title-libraries.form', [
@@ -386,6 +392,7 @@ class TitleLibraryController extends Controller
      */
     public function update(Request $request, int $libraryId): RedirectResponse
     {
+        $this->authorizeOperatorAccess($libraryId, TitleLibrary::class);
         $library = TitleLibrary::query()->whereKey($libraryId)->firstOrFail();
 
         $payload = $request->validate([
@@ -408,6 +415,7 @@ class TitleLibraryController extends Controller
      */
     public function destroy(int $libraryId): RedirectResponse
     {
+        $this->authorizeOperatorAccess($libraryId, TitleLibrary::class);
         $library = TitleLibrary::query()->whereKey($libraryId)->firstOrFail();
 
         $taskCount = Task::query()->where('title_library_id', $libraryId)->count();

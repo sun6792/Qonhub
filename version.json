@@ -1,15 +1,15 @@
 {
-  "version": "2.4.0",
-  "release_date": "2026-07-13",
+  "version": "2.5.0",
+  "release_date": "2026-07-14",
   "release_type": "major",
   "archive_url": "https://github.com/yaojingang/GEOFlow/archive/refs/heads/main.zip",
   "payload": {
-    "title_zh": "Qonhub AI v2.4.0",
-    "title_en": "Qonhub AI v2.4.0",
-    "summary_zh": "Qonhub AI 2.4.0 全系统workspace多租户隔离，客户端发布工作台+AI数据大屏+竞争力报告，自动跑词引擎+B2B分步注册向导+RPA管道，AI暗色主题UI升级(WebGL流体渐变+光线叠加+磁吸卡片)，11平台统一授权管理，Kimi收录优化+头条快速收录模板。",
-    "summary_en": "Qonhub AI 2.4.0: Full workspace isolation, client publish workbench, AI data dashboard + competitiveness report, auto keyword runner, B2B step registration wizard + RPA pipeline, AI dark theme UI (WebGL gradient + floating lines + magnet cards), 11-platform unified auth management, Kimi + Toutiao indexing optimization templates.",
-    "upgrade_tip_zh": "升级后执行 php artisan migrate、php artisan optimize:clear，重启RPA引擎(node rpa-engine/server.js)，重启队列worker。新版本文章自动去Markdown标记，GEO增强仅<70分触发，欢迎弹窗不再弹出。",
-    "upgrade_tip_en": "After upgrading, run php artisan migrate, php artisan optimize:clear, restart RPA engine and queue workers. New articles auto-strip Markdown, GEO enhancement only triggers below score 70, welcome modal suppressed.",
+    "title_zh": "豆流 AI v2.5.0 — P0 安全加固与核心能力夯实",
+    "title_en": "Douluo AI v2.5.0 — P0 Security Hardening & Core Capability Solidification",
+    "summary_zh": "豆流 AI 2.5.0：36处多租户数据隔离加固、GEO评分引擎Bug修复、自动跑词关键词联动、RPA脚本补齐（搜狐发布+B2B注册）、AI监测定时调度上线、多维度AI品牌可见度评估体系完善。",
+    "summary_en": "Douluo AI 2.5.0: 36 multi-tenant isolation hardening, GEO scoring engine bugfix, auto-runner keyword passthrough, RPA script completion (Sohu publish + B2B registration), AI monitoring scheduler, brand visibility assessment enhancement.",
+    "upgrade_tip_zh": "升级后执行 php artisan migrate、php artisan optimize:clear，重启RPA引擎(node rpa-engine/server.js)，重启队列worker。新增partner_id迁移已包含。",
+    "upgrade_tip_en": "After upgrading, run php artisan migrate, php artisan optimize:clear, restart RPA engine and queue workers. New partner_id migration included.",
     "release_url": "https://github.com/yaojingang/GEOFlow",
     "changelog_url_zh": "https://github.com/yaojingang/GEOFlow/blob/main/docs/CHANGELOG.md",
     "changelog_url_en": "https://github.com/yaojingang/GEOFlow/blob/main/docs/CHANGELOG_en.md"

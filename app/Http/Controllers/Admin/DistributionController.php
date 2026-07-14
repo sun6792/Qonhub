@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Jobs\ProcessArticleDistributionJob;
 use App\Models\Admin;
+use App\Models\Article;
 use App\Models\ArticleDistribution;
 use App\Models\DistributionChannel;
 use App\Models\DistributionChannelSecret;
@@ -515,6 +516,8 @@ class DistributionController extends Controller
             return back()->withErrors(__('admin.distribution.message.job_not_found'));
         }
 
+        $this->authorizeOperatorAccess((int) $distribution->article->id, Article::class);
+
         return view('admin.distribution.article-edit', [
             'pageTitle' => __('admin.distribution.remote_article.edit_title'),
             'activeMenu' => 'distribution',
@@ -535,6 +538,8 @@ class DistributionController extends Controller
         if (! $distribution || ! $distribution->article || ! $distribution->channel) {
             return back()->withErrors(__('admin.distribution.message.job_not_found'));
         }
+
+        $this->authorizeOperatorAccess((int) $distribution->article->id, Article::class);
 
         $payload = $request->validate([
             'title' => ['required', 'string', 'max:500'],
@@ -583,6 +588,8 @@ class DistributionController extends Controller
 
             return back()->withErrors(__('admin.distribution.message.job_not_found'));
         }
+
+        $this->authorizeOperatorAccess((int) $distribution->article->id, Article::class);
 
         try {
             $this->distributionOrchestrator->deleteRemoteArticle($distribution);

@@ -34,9 +34,9 @@ class EnterpriseKnowledgeController extends Controller
     {
         $projects = EnterpriseKnowledgeProject::query()
             ->with(['publishedKnowledgeBase'])
-            ->withCount(['sources', 'revisions'])
-            ->latest()
-            ->paginate(20);
+            ->withCount(['sources', 'revisions']);
+        $this->scopeByOperatorWorkspaces($projects, EnterpriseKnowledgeProject::class);
+        $projects = $projects->latest()->paginate(20);
 
         return view('admin.enterprise-knowledge.index', [
             'pageTitle' => __('admin.enterprise_knowledge.page_title'),
@@ -100,6 +100,8 @@ class EnterpriseKnowledgeController extends Controller
                     'created_by_admin_id' => auth('admin')->id(),
                 ]);
 
+                $this->assignToOperatorWorkspaces((int) $project->id, EnterpriseKnowledgeProject::class);
+
                 $sortOrder = 0;
                 if ($manualContent !== '') {
                     EnterpriseKnowledgeSource::query()->create([
@@ -147,6 +149,7 @@ class EnterpriseKnowledgeController extends Controller
 
     public function show(int $projectId): View
     {
+        $this->authorizeOperatorAccess($projectId, EnterpriseKnowledgeProject::class);
         $project = EnterpriseKnowledgeProject::query()
             ->with(['sources', 'revisions.creator', 'publishedKnowledgeBase'])
             ->whereKey($projectId)
@@ -163,6 +166,7 @@ class EnterpriseKnowledgeController extends Controller
 
     public function status(int $projectId): JsonResponse
     {
+        $this->authorizeOperatorAccess($projectId, EnterpriseKnowledgeProject::class);
         $project = EnterpriseKnowledgeProject::query()
             ->withCount(['sources', 'revisions'])
             ->whereKey($projectId)
@@ -210,6 +214,7 @@ class EnterpriseKnowledgeController extends Controller
 
     public function autosave(Request $request, int $projectId): JsonResponse
     {
+        $this->authorizeOperatorAccess($projectId, EnterpriseKnowledgeProject::class);
         $project = EnterpriseKnowledgeProject::query()->whereKey($projectId)->firstOrFail();
         $payload = $request->validate([
             'content' => ['required', 'string'],
@@ -233,6 +238,7 @@ class EnterpriseKnowledgeController extends Controller
 
     public function validateDraft(Request $request, int $projectId): RedirectResponse|JsonResponse
     {
+        $this->authorizeOperatorAccess($projectId, EnterpriseKnowledgeProject::class);
         $project = EnterpriseKnowledgeProject::query()->whereKey($projectId)->firstOrFail();
         $content = trim((string) $request->input('content', $project->draft_content ?? ''));
         $validationItems = $this->draftService->validateDraft($content);
@@ -253,6 +259,7 @@ class EnterpriseKnowledgeController extends Controller
 
     public function uploadImage(Request $request, int $projectId): JsonResponse
     {
+        $this->authorizeOperatorAccess($projectId, EnterpriseKnowledgeProject::class);
         EnterpriseKnowledgeProject::query()->whereKey($projectId)->firstOrFail();
 
         try {
@@ -311,6 +318,7 @@ class EnterpriseKnowledgeController extends Controller
 
     public function restoreRevision(int $projectId, int $revisionId): RedirectResponse
     {
+        $this->authorizeOperatorAccess($projectId, EnterpriseKnowledgeProject::class);
         $project = EnterpriseKnowledgeProject::query()->whereKey($projectId)->firstOrFail();
         $revision = EnterpriseKnowledgeRevision::query()
             ->where('enterprise_knowledge_project_id', (int) $project->id)
@@ -330,6 +338,7 @@ class EnterpriseKnowledgeController extends Controller
 
     public function publish(int $projectId): RedirectResponse
     {
+        $this->authorizeOperatorAccess($projectId, EnterpriseKnowledgeProject::class);
         $project = EnterpriseKnowledgeProject::query()->whereKey($projectId)->firstOrFail();
         $content = trim((string) ($project->draft_content ?? ''));
         if ($content === '') {
@@ -359,6 +368,7 @@ class EnterpriseKnowledgeController extends Controller
 
     public function destroy(int $projectId): RedirectResponse
     {
+        $this->authorizeOperatorAccess($projectId, EnterpriseKnowledgeProject::class);
         $project = EnterpriseKnowledgeProject::query()->with('sources')->whereKey($projectId)->firstOrFail();
         $this->sourceParser->cleanupKnowledgeFiles($project->sources->pluck('file_path')->filter()->map(static fn ($path): string => (string) $path)->values()->all());
         Storage::disk('public')->deleteDirectory('uploads/enterprise-knowledge/'.(int) $project->id);

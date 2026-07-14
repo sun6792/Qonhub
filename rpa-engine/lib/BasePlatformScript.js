@@ -365,6 +365,24 @@ export class BasePlatformScript {
         return result;
     }
 
+    // ── Cookie/登录态持久化 ──────────────────────────────
+
+    /**
+     * 手动保存 storageState（供 publish 脚本等直接 launchBrowser 后调用）。
+     * execute() 已在 finally 块自动保存，但单独 launchBrowser() 需手动调用本方法。
+     */
+    async _saveState() {
+        if (this._stateFile && this._context) {
+            try {
+                const state = await this._context.storageState();
+                fs.writeFileSync(this._stateFile, JSON.stringify(state));
+                this.log(`Saved login state to ${this._stateFile}`);
+            } catch (e) {
+                this.log(`Failed to save state: ${e.message}`);
+            }
+        }
+    }
+
     // ── 子类必须覆盖的方法 ───────────────────────────────
 
     /**

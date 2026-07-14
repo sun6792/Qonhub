@@ -17,7 +17,7 @@
     ['redhongan','红安网','https://www.redhongan.com/','官媒'],['jdznews','景德镇新闻网','https://www.jdznews.com/','官媒'],
     ['ystf','云上团风','https://www.yunshangtuanfeng.com/','官媒'],['yancheng','盐城网','https://www.0515yc01.com/','官媒'],
     ['qsina','黔浪网','https://www.qsina.cn/','行业媒体'],['shangyexinzhi','商业新知','https://www.shangyexinzhi.com/','行业媒体'],
-    ['cnblogs','博客园','https://www.cnblogs.com/','行业媒体'],['coatingol','涂料在线','https://www.coatingol.com/','行业媒体'],
+    ['cnblogs','博客园','https://www.cnblogs.com/','行业媒体'],['csdn','CSDN','https://www.csdn.net/','⭐ 行业媒体'],['coatingol','涂料在线','https://www.coatingol.com/','行业媒体'],
     ['sinoasphalt','沥青在线','https://www.sinoasphalt.com/','行业媒体'],['huawang','华网','https://www.huawang.com/','行业媒体'],
     ['w10xitong','W10系统网','https://www.w10xitong.com/','行业媒体'],['piaoxian','飘仙建站','https://www.piaoxian.net/','行业媒体'],
     ['zhongji','中机在线','https://www.zhongji.cn/','行业媒体'],['okmart','中网化工','https://www.okmart.com/','行业媒体'],

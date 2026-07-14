@@ -1,9 +1,9 @@
 {
     "$schema": "https://getcomposer.org/schema.json",
-    "name": "laravel/laravel",
+    "name": "douluo/ai",
     "type": "project",
-    "description": "The skeleton application for the Laravel framework.",
-    "keywords": ["laravel", "framework"],
+    "description": "豆流 AI — 企业级 GEO 智能营销系统。多租户多工作空间、六维透明 GEO 评分、自研 RPA 全渠道自动化分发、12 大 AI 平台品牌可见度监测。",
+    "keywords": ["geo", "generative-engine-optimization", "ai-marketing", "multi-tenant", "rpa", "content-automation"],
     "license": "Apache-2.0",
     "require": {
         "php": "^8.2",

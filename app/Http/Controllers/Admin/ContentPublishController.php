@@ -31,6 +31,9 @@ class ContentPublishController extends Controller
     public function index(Request $request): View
     {
         $workspaceId = (int) $request->query('workspace_id', 0);
+        if ($workspaceId > 0) {
+            $this->authorizeWorkspaceAccess($workspaceId);
+        }
         $workspace = $workspaceId > 0
             ? Workspace::query()->findOrFail($workspaceId)
             : null;
@@ -78,6 +81,7 @@ class ContentPublishController extends Controller
             'use_content_rewrite' => ['boolean'],
         ]);
 
+        $this->authorizeWorkspaceAccess((int) $payload['workspace_id']);
         $workspace = Workspace::query()->findOrFail((int) $payload['workspace_id']);
 
         $task = $this->publishService->createPublishTask(
@@ -107,6 +111,8 @@ class ContentPublishController extends Controller
             ->with(['results.article', 'results.account', 'workspace'])
             ->findOrFail($taskId);
 
+        $this->authorizeWorkspaceAccess((int) $task->workspace_id);
+
         return view('admin.content-publish.task-detail', [
             'pageTitle' => "发布任务 #{$task->id}",
             'activeMenu' => 'distribution',
@@ -120,6 +126,7 @@ class ContentPublishController extends Controller
     public function retry(int $taskId): RedirectResponse
     {
         $task = ContentPublishTask::query()->findOrFail($taskId);
+        $this->authorizeWorkspaceAccess((int) $task->workspace_id);
         $this->publishService->retryFailed($task);
 
         return redirect()
@@ -132,6 +139,7 @@ class ContentPublishController extends Controller
     public function cancel(int $taskId): RedirectResponse
     {
         $task = ContentPublishTask::query()->findOrFail($taskId);
+        $this->authorizeWorkspaceAccess((int) $task->workspace_id);
         $this->publishService->cancelTask($task);
 
         return redirect()
@@ -144,6 +152,7 @@ class ContentPublishController extends Controller
     public function taskProgress(int $taskId): \Illuminate\Http\JsonResponse
     {
         $task = ContentPublishTask::query()->findOrFail($taskId);
+        $this->authorizeWorkspaceAccess((int) $task->workspace_id);
 
         return response()->json([
             'ok' => true,

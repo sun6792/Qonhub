@@ -67,6 +67,7 @@ class KeywordLibraryController extends Controller
      */
     public function aiGenerateFromKnowledge(Request $request, int $libraryId): RedirectResponse
     {
+        $this->authorizeOperatorAccess($libraryId, KeywordLibrary::class);
         $library = KeywordLibrary::query()->whereKey($libraryId)->firstOrFail();
 
         $payload = $request->validate([
@@ -157,6 +158,7 @@ class KeywordLibraryController extends Controller
      */
     public function aiGenerate(Request $request, int $libraryId): RedirectResponse
     {
+        $this->authorizeOperatorAccess($libraryId, KeywordLibrary::class);
         $library = KeywordLibrary::query()->whereKey($libraryId)->firstOrFail();
 
         $payload = $request->validate([
@@ -240,6 +242,7 @@ class KeywordLibraryController extends Controller
      */
     public function storeKeyword(Request $request, int $libraryId): RedirectResponse
     {
+        $this->authorizeOperatorAccess($libraryId, KeywordLibrary::class);
         $library = KeywordLibrary::query()->whereKey($libraryId)->firstOrFail();
 
         $payload = $request->validate([
@@ -277,6 +280,7 @@ class KeywordLibraryController extends Controller
      */
     public function destroyKeywords(Request $request, int $libraryId): RedirectResponse
     {
+        $this->authorizeOperatorAccess($libraryId, KeywordLibrary::class);
         $library = KeywordLibrary::query()->whereKey($libraryId)->firstOrFail();
 
         /** @var array<int, mixed> $rawIds */
@@ -307,6 +311,7 @@ class KeywordLibraryController extends Controller
      */
     public function updateFromDetail(Request $request, int $libraryId): RedirectResponse
     {
+        $this->authorizeOperatorAccess($libraryId, KeywordLibrary::class);
         $library = KeywordLibrary::query()->whereKey($libraryId)->firstOrFail();
 
         $payload = $request->validate([
@@ -329,6 +334,7 @@ class KeywordLibraryController extends Controller
      */
     public function importKeywords(Request $request, int $libraryId): RedirectResponse
     {
+        $this->authorizeOperatorAccess($libraryId, KeywordLibrary::class);
         $library = KeywordLibrary::query()->whereKey($libraryId)->firstOrFail();
 
         $payload = $request->validate([
@@ -420,6 +426,7 @@ class KeywordLibraryController extends Controller
      */
     public function edit(int $libraryId): View|RedirectResponse
     {
+        $this->authorizeOperatorAccess($libraryId, KeywordLibrary::class);
         $library = KeywordLibrary::query()->whereKey($libraryId)->firstOrFail();
 
         return view('admin.keyword-libraries.form', [
@@ -440,6 +447,7 @@ class KeywordLibraryController extends Controller
      */
     public function update(Request $request, int $libraryId): RedirectResponse
     {
+        $this->authorizeOperatorAccess($libraryId, KeywordLibrary::class);
         $library = KeywordLibrary::query()->whereKey($libraryId)->firstOrFail();
 
         $payload = $request->validate([
@@ -462,6 +470,7 @@ class KeywordLibraryController extends Controller
      */
     public function destroy(int $libraryId): RedirectResponse
     {
+        $this->authorizeOperatorAccess($libraryId, KeywordLibrary::class);
         $library = KeywordLibrary::query()->whereKey($libraryId)->firstOrFail();
 
         Keyword::query()->where('library_id', $libraryId)->delete();

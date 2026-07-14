@@ -119,7 +119,9 @@ class ArticleController extends Controller
         }
 
         try {
-            $count = Article::onlyTrashed()->whereIn('id', $articleIds)->restore();
+            $query = Article::onlyTrashed()->whereIn('id', $articleIds);
+            $this->scopeByOperatorWorkspaces($query, Article::class);
+            $count = $query->restore();
 
             return back()->with('message', __('admin.articles.trash.message.restore_success', ['count' => $count]));
         } catch (Throwable $e) {
@@ -138,7 +140,9 @@ class ArticleController extends Controller
         }
 
         try {
-            $models = Article::onlyTrashed()->whereIn('id', $articleIds)->get();
+            $query = Article::onlyTrashed()->whereIn('id', $articleIds);
+            $this->scopeByOperatorWorkspaces($query, Article::class);
+            $models = $query->get();
             $models->each(function (Article $article): void {
                 $article->forceDelete();
             });
@@ -155,7 +159,9 @@ class ArticleController extends Controller
     public function emptyTrash(): RedirectResponse
     {
         try {
-            $models = Article::onlyTrashed()->get();
+            $query = Article::onlyTrashed();
+            $this->scopeByOperatorWorkspaces($query, Article::class);
+            $models = $query->get();
             if ($models->isEmpty()) {
                 return back()->with('message', __('admin.articles.trash.message.empty_already'));
             }
@@ -175,6 +181,7 @@ class ArticleController extends Controller
      */
     public function restore(int $articleId): RedirectResponse
     {
+        $this->authorizeOperatorAccess($articleId, Article::class);
         $article = Article::onlyTrashed()->whereKey($articleId)->firstOrFail();
         $article->restore();
 
@@ -186,6 +193,7 @@ class ArticleController extends Controller
      */
     public function forceDelete(int $articleId): RedirectResponse
     {
+        $this->authorizeOperatorAccess($articleId, Article::class);
         $article = Article::onlyTrashed()->whereKey($articleId)->firstOrFail();
         $article->forceDelete();
 
@@ -253,6 +261,7 @@ class ArticleController extends Controller
      */
     public function edit(int $articleId): View|RedirectResponse
     {
+        $this->authorizeOperatorAccess($articleId, Article::class);
         $article = Article::query()
             ->with(['task:id,name', 'author:id,name', 'category:id,name'])
             ->whereKey($articleId)
@@ -289,6 +298,7 @@ class ArticleController extends Controller
      */
     public function update(Request $request, int $articleId): RedirectResponse
     {
+        $this->authorizeOperatorAccess($articleId, Article::class);
         $payload = $this->validateArticleForm($request, true);
         $article = Article::query()->whereKey($articleId)->firstOrFail();
 
@@ -676,8 +686,9 @@ class ArticleController extends Controller
 
         $articles = Article::query()
             ->select(['id', 'review_status', 'published_at'])
-            ->whereIn('id', $articleIds)
-            ->get();
+            ->whereIn('id', $articleIds);
+        $this->scopeByOperatorWorkspaces($articles, Article::class);
+        $articles = $articles->get();
 
         foreach ($articles as $article) {
             $workflowState = ArticleWorkflow::normalizeState(
@@ -713,8 +724,9 @@ class ArticleController extends Controller
         $articles = Article::query()
             ->with(['task:id,need_review'])
             ->select(['id', 'status', 'review_status', 'published_at', 'task_id'])
-            ->whereIn('id', $articleIds)
-            ->get();
+            ->whereIn('id', $articleIds);
+        $this->scopeByOperatorWorkspaces($articles, Article::class);
+        $articles = $articles->get();
 
         foreach ($articles as $article) {
             $desiredStatus = (string) ($article->status ?? 'draft');
@@ -748,7 +760,9 @@ class ArticleController extends Controller
      */
     private function handleBatchDelete(array $articleIds): RedirectResponse
     {
-        $articles = Article::query()->whereIn('id', $articleIds)->get();
+        $articles = Article::query()->whereIn('id', $articleIds);
+        $this->scopeByOperatorWorkspaces($articles, Article::class);
+        $articles = $articles->get();
         foreach ($articles as $article) {
             Article::query()->whereKey((int) $article->id)->delete();
         }

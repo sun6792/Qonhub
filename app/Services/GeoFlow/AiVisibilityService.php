@@ -432,7 +432,7 @@ class AiVisibilityService
         $selfStats = $this->computeBrandStats($snapshots);
         $selfScore = $snapshots->avg('visibility_score') ?: 0;
 
-        // 竞品数据（简化：竞品暂时复用自身数据×系数，后续可扩展独立检测）
+        // 竞品数据（BETA：当前为基于自身数据的算法模拟，非真实独立检测）
         $competitorResults = [];
         foreach ($competitors as $comp) {
             $competitorResults[] = [
@@ -442,6 +442,7 @@ class AiVisibilityService
                 'total_mentions' => max(0, (int) ($selfStats['total_mentioned'] * (0.3 + mt_rand(0, 70) / 100))),
                 'covered_platforms' => max(1, (int) ($selfStats['covered_platforms'] * (0.4 + mt_rand(0, 60) / 100))),
                 'top3_share' => round(max(5, $selfStats['top3_share'] * (0.5 + mt_rand(0, 50) / 100))),
+                'is_simulated' => true,  // 标记为模拟数据，前端需展示 Beta 标签
             ];
         }
 
@@ -454,6 +455,7 @@ class AiVisibilityService
                 'visibility_score' => round((float) $selfScore, 2),
             ],
             'competitors' => $competitorResults,
+            'competitor_data_simulated' => true,  // 顶层标记：竞品数据为模拟估算
             'platform_comparison' => $this->buildPlatformComparison($snapshots, $workspaceId),
         ];
     }

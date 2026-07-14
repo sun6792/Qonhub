@@ -19,7 +19,7 @@ $adminPrefix = trim((string) config('geoflow.admin_base_path', '/geo_admin'), '/
 
 Route::middleware('web')->group(function () use ($adminPrefix): void {
 
-Route::prefix($adminPrefix)->name('admin.')->middleware(['admin.auth', 'admin.activity'])->group(function (): void {
+Route::prefix($adminPrefix)->name('admin.')->middleware(['admin.auth', 'admin.locale', 'admin.activity'])->group(function (): void {
 
     // --- 工作空间 CRUD（所有登录管理员可用） ---
     Route::prefix('workspaces')->name('workspaces.')->group(function (): void {
@@ -86,31 +86,35 @@ Route::prefix($adminPrefix)->name('admin.')->middleware(['admin.auth', 'admin.ac
 
 // ===== 客户端看板路由 =====
 Route::middleware('web')->prefix('client')->name('client.')->group(function (): void {
+    // 登录/登出不需要认证
     Route::get('login', [\App\Http\Controllers\Site\ClientAuthController::class, 'showLoginForm'])->name('login');
-    Route::post('login', [\App\Http\Controllers\Site\ClientAuthController::class, 'login'])->name('login.attempt');
+    Route::post('login', [\App\Http\Controllers\Site\ClientAuthController::class, 'login'])->name('login.attempt')->middleware('throttle:10,1');
     Route::post('logout', [\App\Http\Controllers\Site\ClientAuthController::class, 'logout'])->name('logout');
 
-    Route::get('/', [ClientPortalController::class, 'dashboard'])->name('dashboard');
-    Route::get('/articles', [ClientPortalController::class, 'articles'])->name('articles');
-    Route::get('/ai-visibility', [ClientPortalController::class, 'aiVisibility'])->name('ai-visibility');
-    Route::get('/competitiveness', [ClientPortalController::class, 'competitiveness'])->name('competitiveness');
-    Route::post('/content-request', [ClientPortalController::class, 'contentRequestStore'])->name('content-request.store');
-    Route::post('/enterprise-profile/save', [ClientPortalController::class, 'enterpriseProfileSave'])->name('enterprise-profile.save');
-    Route::post('/competitiveness/store', [ClientPortalController::class, 'competitorStore'])->name('competitiveness.store');
-    Route::post('/competitiveness/delete/{id}', [ClientPortalController::class, 'competitorDelete'])->name('competitiveness.delete')->whereNumber('id');
-    Route::get('/platforms', [ClientPortalController::class, 'platforms'])->name('platforms');
-    Route::post('/platforms/bind', [ClientPortalController::class, 'platformStore'])->name('platforms.bind');
-    Route::post('/platforms/unbind', [ClientPortalController::class, 'platformUnbind'])->name('platforms.unbind');
+    // 已登录客户端路由（auth:client 中间件）
+    Route::middleware('auth:client')->group(function (): void {
+        Route::get('/', [ClientPortalController::class, 'dashboard'])->name('dashboard');
+        Route::get('/articles', [ClientPortalController::class, 'articles'])->name('articles');
+        Route::get('/ai-visibility', [ClientPortalController::class, 'aiVisibility'])->name('ai-visibility');
+        Route::get('/competitiveness', [ClientPortalController::class, 'competitiveness'])->name('competitiveness');
+        Route::post('/content-request', [ClientPortalController::class, 'contentRequestStore'])->name('content-request.store');
+        Route::post('/enterprise-profile/save', [ClientPortalController::class, 'enterpriseProfileSave'])->name('enterprise-profile.save');
+        Route::post('/competitiveness/store', [ClientPortalController::class, 'competitorStore'])->name('competitiveness.store');
+        Route::post('/competitiveness/delete/{id}', [ClientPortalController::class, 'competitorDelete'])->name('competitiveness.delete')->whereNumber('id');
+        Route::get('/platforms', [ClientPortalController::class, 'platforms'])->name('platforms');
+        Route::post('/platforms/bind', [ClientPortalController::class, 'platformStore'])->name('platforms.bind');
+        Route::post('/platforms/unbind', [ClientPortalController::class, 'platformUnbind'])->name('platforms.unbind');
 
-    // 客户端一键发布中心
-    Route::prefix('content-publish')->name('content-publish.')->group(function (): void {
-        Route::get('/', [\App\Http\Controllers\Client\ContentPublishController::class, 'index'])->name('index');
-        Route::get('/create', [\App\Http\Controllers\Client\ContentPublishController::class, 'create'])->name('create');
-        Route::post('/store', [\App\Http\Controllers\Client\ContentPublishController::class, 'store'])->name('store');
-        // B2B 企业认证
-        Route::get('/certify', [\App\Http\Controllers\Client\ContentPublishController::class, 'certify'])->name('certify');
-        Route::post('/certify-store', [\App\Http\Controllers\Client\ContentPublishController::class, 'certifyStore'])->name('certify-store');
-        Route::get('/{taskId}', [\App\Http\Controllers\Client\ContentPublishController::class, 'show'])->name('show')->whereNumber('taskId');
+        // 客户端一键发布中心
+        Route::prefix('content-publish')->name('content-publish.')->group(function (): void {
+            Route::get('/', [\App\Http\Controllers\Client\ContentPublishController::class, 'index'])->name('index');
+            Route::get('/create', [\App\Http\Controllers\Client\ContentPublishController::class, 'create'])->name('create');
+            Route::post('/store', [\App\Http\Controllers\Client\ContentPublishController::class, 'store'])->name('store');
+            // B2B 企业认证
+            Route::get('/certify', [\App\Http\Controllers\Client\ContentPublishController::class, 'certify'])->name('certify');
+            Route::post('/certify-store', [\App\Http\Controllers\Client\ContentPublishController::class, 'certifyStore'])->name('certify-store');
+            Route::get('/{taskId}', [\App\Http\Controllers\Client\ContentPublishController::class, 'show'])->name('show')->whereNumber('taskId');
+        });
     });
 
     // 兼容旧token链接（已登录客户自动跳转）

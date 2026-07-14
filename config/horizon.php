@@ -98,6 +98,9 @@ return [
 
     'waits' => [
         'redis:geoflow' => 60,
+        'redis:distribution' => 60,
+        'redis:system-updates' => 120,
+        'redis:theme-replication' => 120,
     ],
 
     /*
@@ -199,7 +202,7 @@ return [
     'defaults' => [
         'supervisor-1' => [
             'connection' => 'redis',
-            'queue' => ['geoflow', 'distribution'],
+            'queue' => ['geoflow', 'distribution', 'system-updates', 'theme-replication'],
             'balance' => 'auto',
             'autoScalingStrategy' => 'time',
             'maxProcesses' => 1,

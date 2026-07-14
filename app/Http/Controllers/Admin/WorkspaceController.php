@@ -285,12 +285,24 @@ class WorkspaceController extends Controller
 
     public function revealClientPassword(string $slug, int $clientUserId): \Illuminate\Http\JsonResponse
     {
+        // 仅超级管理员可查看明文密码（需操作审计）
+        $this->ensureSuperAdmin();
+
         $workspace = Workspace::query()->where('slug', $slug)->firstOrFail();
 
         $client = ClientUser::query()
             ->where('workspace_id', (int) $workspace->id)
             ->whereKey($clientUserId)
             ->firstOrFail();
+
+        // 记录审计日志
+        \App\Models\AdminActivityLog::log(
+            auth('admin')->user(),
+            'reveal_client_password',
+            'ClientUser',
+            $client->id,
+            ['client_username' => $client->username, 'workspace_slug' => $slug]
+        );
 
         $ciphertext = $client->password_ciphertext;
         if (empty($ciphertext)) {

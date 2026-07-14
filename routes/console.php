@@ -21,3 +21,8 @@ Schedule::command('horizon:snapshot')->everyFiveMinutes();
  * GeoFlow 任务调度：每分钟扫描一次可执行任务并入队（对齐 bak cron 逻辑）。
  */
 Schedule::command('geoflow:schedule-tasks')->everyMinute();
+
+/**
+ * AI 品牌可见度检测：每日凌晨 2:00 自动对所有活跃 Workspace 执行一轮检测。
+ */
+Schedule::command('geoflow:check-visibility')->dailyAt('02:00');

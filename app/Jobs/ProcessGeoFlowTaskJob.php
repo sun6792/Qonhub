@@ -79,9 +79,14 @@ class ProcessGeoFlowTaskJob implements ShouldQueue
             'task_run_id' => $this->taskRunId,
         ]);
 
+        // 提取自动跑词载荷（如有），传递给 WorkerExecutionService
+        $jobMeta = Arr::get($job, 'meta', []);
+        $jobMeta = is_array($jobMeta) ? $jobMeta : json_decode((string) $jobMeta, true) ?? [];
+        $jobPayload = $jobMeta['payload'] ?? [];
+
         $startedAt = microtime(true);
         try {
-            $result = $workerExecutionService->executeTask($taskId);
+            $result = $workerExecutionService->executeTask($taskId, $jobPayload);
             $durationMs = (int) round((microtime(true) - $startedAt) * 1000);
 
             $queueService->completeJob(

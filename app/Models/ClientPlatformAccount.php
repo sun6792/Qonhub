@@ -17,12 +17,14 @@ class ClientPlatformAccount extends Model
         'workspace_id', 'platform_key', 'platform_account_name',
         'credential_ciphertext', 'credential_meta',
         'status', 'last_verified_at', 'expires_at', 'last_error_message',
+        'daily_published_count', 'daily_publish_limit', 'risk_level', 'last_used_at',
     ];
 
     protected $casts = [
         'credential_meta' => 'array',
         'last_verified_at' => 'datetime',
         'expires_at' => 'datetime',
+        'last_used_at' => 'datetime',
     ];
 
     public function workspace(): BelongsTo

@@ -44,6 +44,7 @@ class ImageLibraryController extends Controller
      */
     public function detail(Request $request, int $libraryId): View|RedirectResponse
     {
+        $this->authorizeOperatorAccess($libraryId, ImageLibrary::class);
         $library = ImageLibrary::query()->whereKey($libraryId)->firstOrFail();
 
         $search = trim((string) $request->query('search', ''));
@@ -71,6 +72,7 @@ class ImageLibraryController extends Controller
      */
     public function updateFromDetail(Request $request, int $libraryId): RedirectResponse
     {
+        $this->authorizeOperatorAccess($libraryId, ImageLibrary::class);
         $library = ImageLibrary::query()->whereKey($libraryId)->firstOrFail();
 
         $payload = $request->validate([
@@ -93,6 +95,7 @@ class ImageLibraryController extends Controller
      */
     public function uploadImages(Request $request, int $libraryId): RedirectResponse
     {
+        $this->authorizeOperatorAccess($libraryId, ImageLibrary::class);
         $library = ImageLibrary::query()->whereKey($libraryId)->firstOrFail();
 
         $request->validate([
@@ -168,6 +171,7 @@ class ImageLibraryController extends Controller
      */
     public function destroyImages(Request $request, int $libraryId): RedirectResponse
     {
+        $this->authorizeOperatorAccess($libraryId, ImageLibrary::class);
         $library = ImageLibrary::query()->whereKey($libraryId)->firstOrFail();
 
         /** @var array<int, mixed> $rawIds */
@@ -234,12 +238,14 @@ class ImageLibraryController extends Controller
             'name.required' => __('admin.image_libraries.error.name_required'),
         ]);
 
-        ImageLibrary::query()->create([
+        $library = ImageLibrary::query()->create([
             'name' => trim((string) $payload['name']),
             'description' => trim((string) ($payload['description'] ?? '')),
             'image_count' => 0,
             'used_task_count' => 0,
         ]);
+
+        $this->assignToOperatorWorkspaces((int) $library->id, ImageLibrary::class);
 
         return redirect()->route('admin.image-libraries.index')->with('message', __('admin.image_libraries.message.create_success'));
     }
@@ -249,6 +255,7 @@ class ImageLibraryController extends Controller
      */
     public function edit(int $libraryId): View|RedirectResponse
     {
+        $this->authorizeOperatorAccess($libraryId, ImageLibrary::class);
         $library = ImageLibrary::query()->whereKey($libraryId)->firstOrFail();
 
         return view('admin.image-libraries.form', [
@@ -269,6 +276,7 @@ class ImageLibraryController extends Controller
      */
     public function update(Request $request, int $libraryId): RedirectResponse
     {
+        $this->authorizeOperatorAccess($libraryId, ImageLibrary::class);
         $library = ImageLibrary::query()->whereKey($libraryId)->firstOrFail();
 
         $payload = $request->validate([
@@ -291,6 +299,7 @@ class ImageLibraryController extends Controller
      */
     public function destroy(int $libraryId): RedirectResponse
     {
+        $this->authorizeOperatorAccess($libraryId, ImageLibrary::class);
         $library = ImageLibrary::query()->whereKey($libraryId)->firstOrFail();
 
         $taskCount = Task::query()->where('image_library_id', $libraryId)->count();

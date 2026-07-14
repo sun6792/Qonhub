@@ -11,6 +11,7 @@ use App\Services\GeoFlow\Publishing\ContentPublishRateLimiter;
 use App\Services\GeoFlow\Publishing\PlatformAdapterFactory;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
@@ -77,21 +78,24 @@ class ProcessContentPublishJob implements ShouldQueue
             return;
         }
 
-        // 频率控制：等待账号可用
+        // 频率控制：等待账号可用（指数退避）
         if (! $rateLimiter->canPublishNow($account)) {
-            // 延迟重试
-            $delay = $rateLimiter->waitSeconds($account);
+            $retryCount = (int) ($result->retry_count ?? 0);
+            $baseDelay = max(10, $rateLimiter->waitSeconds($account));
+            $backoff = min($baseDelay * pow(2, $retryCount), 600); // 最大 10 分钟
             static::dispatch($this->publishResultId)
-                ->delay(now()->addSeconds(max(10, $delay)))
+                ->delay(now()->addSeconds($backoff))
                 ->onQueue('distribution');
 
             return;
         }
 
-        // 获取全局锁
+        // 获取全局锁（指数退避，避免锁饥饿）
         if (! $rateLimiter->acquireGlobalLock((int) $result->workspace_id, $result->platform_key)) {
+            $retryCount = (int) ($result->retry_count ?? 0);
+            $backoff = min(5 * pow(2, $retryCount), 300); // 最大 5 分钟
             static::dispatch($this->publishResultId)
-                ->delay(now()->addSeconds(5))
+                ->delay(now()->addSeconds($backoff))
                 ->onQueue('distribution');
 
             return;
@@ -126,12 +130,14 @@ class ProcessContentPublishJob implements ShouldQueue
                 'completed_at' => now(),
             ])->save();
 
-            // 自动轮换账号
+            // 自动轮换账号（指数退避重试）
             $newAccount = $accountPool->rotateIfNeeded($account);
             if ($newAccount && $result->canRetry()) {
                 $result->forceFill(['publisher_account_id' => (int) $newAccount->id])->save();
+                $retryCount = (int) ($result->retry_count ?? 0);
+                $backoff = min(30 * pow(2, $retryCount), 900); // 最大 15 分钟
                 static::dispatch($this->publishResultId)
-                    ->delay(now()->addSeconds(30))
+                    ->delay(now()->addSeconds($backoff))
                     ->onQueue('distribution');
             }
         } finally {

@@ -61,7 +61,7 @@ class GeoContentScorer
 
         // 各维度评分
         $answerQuality = $this->scoreAnswerQuality($content, $title);
-        $selfContainment = $this->scoreSelfContainment($paragraphs, $wordCount);
+        $selfContainment = $this->scoreSelfContainment($paragraphs, $wordCount, $content);
         $statisticalDensity = $this->scoreStatisticalDensity($fullText, $wordCount);
         $structuralClarity = $this->scoreStructuralClarity($content, $paragraphs);
         $expertiseSignals = $this->scoreExpertiseSignals($fullText);
@@ -152,7 +152,7 @@ class GeoContentScorer
         return min(100, $score);
     }
 
-    private function scoreSelfContainment(array $paragraphs, int $wordCount): int
+    private function scoreSelfContainment(array $paragraphs, int $wordCount, string $content): int
     {
         if (empty($paragraphs)) {
             return 20;

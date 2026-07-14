@@ -59,12 +59,14 @@ return Application::configure(basePath: dirname(__DIR__))
             'admin.activity' => LogAdminActivity::class,
             // [新增] RPA API CORS
             'rpa.cors' => \App\Http\Middleware\RpaCorsMiddleware::class,
+            // [新增] RPA API X-Api-Key 认证
+            'rpa.auth' => \App\Http\Middleware\RpaAuthMiddleware::class,
         ]);
 
         // RPA 引擎同步 API 免 CSRF（本地助手调用）
         $middleware->validateCsrfTokens(except: [
-            'geo_admin/api/v1/rpa/*',
-            'geo_admin/distribution/armory/publish-to-rpa',
+            env('ADMIN_BASE_PATH', 'geo_admin') . '/api/v1/rpa/*',
+            env('ADMIN_BASE_PATH', 'geo_admin') . '/distribution/armory/publish-to-rpa',
         ]);
 
         // 已登录的管理员访问登录页(guest:admin)时，重定向到后台仪表盘，而不是 Laravel 默认的 “/”。

@@ -28,7 +28,6 @@ if %errorlevel%==0 (
     pause
     exit /b
 )
-    echo.
 )
 
 echo 启动 Docker 服务...

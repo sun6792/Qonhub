@@ -43,7 +43,7 @@ class WorkerExecutionService
     /**
      * @return array{article_id:int|null, title:string, message:string, meta:array<string,mixed>}
      */
-    public function executeTask(int $taskId): array
+    public function executeTask(int $taskId, array $payload = []): array
     {
         /** @var Task|null $task */
         $task = Task::query()->find($taskId);
@@ -81,7 +81,12 @@ class WorkerExecutionService
         $category = $this->pickCategory($task);
         $prompt = $task->prompt_id ? Prompt::query()->find((int) $task->prompt_id) : null;
 
-        $keyword = (string) ($titleRow->keyword ?? '');
+        // 自动跑词模式：优先使用 payload 中的关键词，确保关键词驱动内容生成
+        $autoRunKeyword = '';
+        if (($payload['auto_run'] ?? false) && !empty($payload['keyword'] ?? '')) {
+            $autoRunKeyword = trim((string) $payload['keyword']);
+        }
+        $keyword = $autoRunKeyword !== '' ? $autoRunKeyword : (string) ($titleRow->keyword ?? '');
         $knowledgeContext = $this->resolveKnowledgeContext($task, (string) $titleRow->title, $keyword);
         $contentPrompt = $this->buildContentPrompt((string) $titleRow->title, $keyword, $prompt?->content, $knowledgeContext);
         $generation = $this->generateContentWithModelSelection($task, $contentPrompt);

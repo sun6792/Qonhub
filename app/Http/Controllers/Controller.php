@@ -74,6 +74,27 @@ abstract class Controller
     }
 
     /**
+     * 验证运营师是否有权访问指定 workspace。
+     * 超管直接通过；运营师需该 workspace 属于其 operator_workspaces 绑定，否则 abort 403。
+     */
+    protected function authorizeWorkspaceAccess(int $workspaceId): void
+    {
+        $admin = auth('admin')->user();
+        if (! $admin || $admin->isSuperAdmin()) {
+            return;
+        }
+
+        $workspaceIds = \App\Models\Admin::query()->whereKey((int) $admin->id)->first()?->scopedWorkspaceIds() ?? [];
+        if ($workspaceIds === []) {
+            abort(403);
+        }
+
+        if (! in_array($workspaceId, $workspaceIds, true)) {
+            abort(403);
+        }
+    }
+
+    /**
      * 新建素材后自动分配到运营师的 workspace。
      * 超管不自动分配；运营师自动绑到其所有 workspace 上。
      */

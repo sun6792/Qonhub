@@ -12,7 +12,7 @@ class ClientUser extends Authenticatable
         'phone', 'status', 'last_login_at', 'password_ciphertext',
     ];
 
-    protected $hidden = ['password', 'remember_token'];
+    protected $hidden = ['password', 'remember_token', 'password_ciphertext'];
 
     protected $casts = [
         'last_login_at' => 'datetime',

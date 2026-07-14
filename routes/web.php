@@ -73,7 +73,7 @@ Route::prefix($adminPrefix)->name('admin.')->middleware(['admin.locale'])->group
     // 访客认证路由
     Route::middleware('guest:admin')->group(function () {
         Route::get('login', [AdminAuthController::class, 'showLoginForm'])->name('login');
-        Route::post('login', [AdminAuthController::class, 'login'])->name('login.attempt');
+        Route::post('login', [AdminAuthController::class, 'login'])->name('login.attempt')->middleware('throttle:10,1');
     });
 
     // 后台受保护路由
@@ -422,7 +422,7 @@ Route::prefix($adminPrefix)->name('admin.')->middleware(['admin.locale'])->group
     });
 
     // [新增] RPA 引擎云端同步 API（CORS开放 + X-Api-Key 认证，供本地运营助手调用）
-    Route::prefix('api/v1/rpa')->middleware('rpa.cors')->name('rpa.')->group(function () {
+    Route::prefix('api/v1/rpa')->middleware(['rpa.cors', 'rpa.auth'])->name('rpa.')->group(function () {
         // CORS 预检请求
         Route::options('{any}', fn () => response()->noContent(200, [
             'Access-Control-Allow-Origin' => '*',

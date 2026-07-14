@@ -471,9 +471,14 @@ return array (
 
 【字数】800-1200字
 【格式】技术风，代码块用 ```，关键术语加粗',
-      'platforms' => 
+      'platforms' =>
       array (
-        0 => 
+        0 =>
+        array (
+          'name' => 'CSDN',
+          'login_url' => 'https://www.csdn.net/',
+        ),
+        1 =>
         array (
           'name' => '博客园',
           'login_url' => 'https://www.cnblogs.com/',

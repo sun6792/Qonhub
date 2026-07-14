@@ -67,6 +67,7 @@ class AiVisibilityController extends Controller
 
     public function show(int $workspaceId): View|RedirectResponse
     {
+        $this->authorizeWorkspaceAccess($workspaceId);
         $workspace = Workspace::query()->whereKey($workspaceId)->first();
         if (! $workspace) {
             return redirect()->route('admin.ai-visibility.index')->withErrors('工作空间不存在');
@@ -98,6 +99,7 @@ class AiVisibilityController extends Controller
             return back()->withErrors('请选择工作空间');
         }
 
+        $this->authorizeWorkspaceAccess($workspaceId);
         $workspace = Workspace::query()->whereKey($workspaceId)->first();
         if (! $workspace) {
             return back()->withErrors('工作空间不存在');

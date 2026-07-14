@@ -1,38 +1,37 @@
-# GEOFlow 二开项目功能全景说明（Qonhub AI v2.3.0）
+# 豆流 AI 功能全景说明（v2.5.0）
 
-> **输出日期**：2026-07-12（更新）  
+> **输出日期**：2026-07-14（更新）  
 > **扫描范围**：全量代码、配置、数据库结构、前端页面  
 > **原则**：仅基于实际已实现的代码如实梳理，不脑补未开发功能
-> **本日新增**：GEO 评分引擎内置化 · 关键词蒸馏 · 客户端凭证中心 · 运营助手Dashboard · 三端数据互通 · 批量分发 · 缓存隔离 · 平台精简
 
 ---
 
 ## 一、项目基础概况
 
-### 1. 原生 GEOFlow 底座版本
+### 1. 产品定位
 
-- **底座项目**：[GEOFlow](https://github.com/yaojingang/GEOFlow)，Apache-2.0 开源协议
-- **底座定位**：面向 GEO（生成式引擎优化）的开源智能内容工程与多站点分发系统
-- **当前版本**：`2.1.0`（2026-06-26 发布）
+- **产品名**：豆流 AI（Douluo AI），内部研发代号 Qonhub
+- **产品定位**：企业级 GEO（生成式引擎优化）智能营销系统，面向营销服务商与终端企业双赛道
+- **技术架构**：Laravel 12 + PostgreSQL 16（pgvector）+ Redis 7 + 自研 Node.js RPA 引擎
+- **当前版本**：`v2.5.0`（2026-07-14）
 
-### 2. 二次开发整体目标与业务定位
+### 2. 核心业务模块
 
-品牌改名 **Qonhub AI**，在此基础上做了以下二开扩展：
+豆流 AI 自研实现了以下核心模块：
 
-| 二开维度 | 具体内容 |
-|---------|---------|
-| **品牌改名** | GEOFlow → Qonhub AI，后台路径 `/geo_admin`，品牌名 "Qonhub AI内容系统" |
-| **多租户工作空间** | 新增 Workspace 体系：一个服务商管理多个客户，每个客户独立看板 |
-| **客户自助门户** | 新增 Client Portal：客户登录后可查看自己的文章、AI引用数据、平台授权状态 |
-| **B2B 信息锚点** | 新增 30 个 B2B 平台的企业认证跟踪体系（手动追踪，非 API 自动化） |
-| **媒体发稿锚点** | 新增 24 个官媒/行业媒体的发稿跟踪体系 |
-| **企业档案** | 新增 EnterpriseProfile：NAP+W 一致性管理、企业资质核验 |
-| **企业知识库** | 新增 EnterpriseKnowledge：AI 驱动的企业知识草稿生成与发布 |
-| **内容弹药库** | 新增 ContentArmory：文章模板 + AI 改写 + 批量分发 |
-| **主题复制** | 新增 SiteThemeReplication：AI 驱动的网站主题克隆 |
-| **运营监控台** | 新增 OperatorMonitor：按运营人员的跨空间聚合视图 |
-| **系统自更新** | 新增 SystemUpdate：GitHub 源检测→备份→应用→回滚的完整自更新体系 |
-| **增强分发** | 新增 DistributionChannel 多类型支持（GeoFlow Agent / WordPress REST / Generic HTTP） |
+| 模块 | 具体内容 |
+|------|---------|
+| **多租户工作空间** | Workspace 体系：一个服务商管理多个客户，每个客户独立看板，数据分级隔离 |
+| **客户自助门户** | Client Portal：客户登录后查看文章、AI 引用数据、平台授权状态、竞争力报告 |
+| **B2B 信息锚点** | 30 个 B2B 平台的企业认证跟踪体系 + 自研 RPA 自动化注册 |
+| **媒体发稿锚点** | 24 个官媒/行业媒体的发稿跟踪 + 自媒体 RPA 自动发布 |
+| **企业档案** | EnterpriseProfile：NAP+W 一致性管理、企业资质核验 |
+| **企业知识库** | EnterpriseKnowledge：AI 驱动的企业知识草稿生成与发布 |
+| **内容弹药库** | ContentArmory：11 套全平台文章模板 + AI 改写 + 批量分发 |
+| **站点主题系统** | SiteThemeReplication：AI 驱动的网站主题生成，23 套内置模板 |
+| **运营监控台** | OperatorMonitor：按运营人员的跨空间聚合视图 |
+| **系统自更新** | SystemUpdate：版本检测→备份→应用→回滚的完整自更新体系 |
+| **多渠道分发** | DistributionChannel 多类型支持（Agent / WordPress REST / Generic HTTP） |
 
 ### 3. 完整技术栈
 
@@ -57,56 +56,56 @@
 ### 4. 项目整体目录结构
 
 ```
-GEOFlow-main/
-├── app/                          # [二开] 应用代码（大幅扩展）
-│   ├── Ai/Agents/                # [二开] AI Agent（MarkdownContentWriterAgent）
-│   ├── Console/Commands/         # [二开] Artisan 命令（7个）
-│   ├── Events/Admin/             # [二开] 事件广播
-│   ├── Exceptions/               # [二开] 自定义异常
+豆流 AI-main/
+├── app/                          # [定制开发] 应用代码（大幅扩展）
+│   ├── Ai/Agents/                # [定制开发] AI Agent（MarkdownContentWriterAgent）
+│   ├── Console/Commands/         # [定制开发] Artisan 命令（7个）
+│   ├── Events/Admin/             # [定制开发] 事件广播
+│   ├── Exceptions/               # [定制开发] 自定义异常
 │   ├── Http/
-│   │   ├── Controllers/Admin/    # [二开] 37个后台控制器
-│   │   ├── Controllers/Api/V1/   # [二开] 7个 REST API 控制器
-│   │   ├── Controllers/Site/     # [二开+原生] 7个前端控制器
-│   │   └── Middleware/           # [二开] 9个中间件
-│   ├── Jobs/                     # [二开] 7个队列任务
-│   ├── Models/                   # [二开] 48个 Eloquent 模型
-│   ├── Providers/                # [原生+二开] 3个服务提供者
-│   ├── Services/Admin/           # [二开] 19个管理服务（含主题复制、系统更新子目录）
-│   ├── Services/Api/             # [二开] 3个 API 服务
-│   ├── Services/GeoFlow/         # [二开] 30+个核心业务服务
-│   ├── Support/                  # [二开] 工具类（Admin/AdminWelcome/Analytics/GeoFlow/Lead/Site）
-│   └── View/Composers/           # [二开] 视图合成器
+│   │   ├── Controllers/Admin/    # [定制开发] 37个后台控制器
+│   │   ├── Controllers/Api/V1/   # [定制开发] 7个 REST API 控制器
+│   │   ├── Controllers/Site/     # [定制开发+原生] 7个前端控制器
+│   │   └── Middleware/           # [定制开发] 9个中间件
+│   ├── Jobs/                     # [定制开发] 7个队列任务
+│   ├── Models/                   # [定制开发] 48个 Eloquent 模型
+│   ├── Providers/                # [原生+定制开发] 3个服务提供者
+│   ├── Services/Admin/           # [定制开发] 19个管理服务（含主题复制、系统更新子目录）
+│   ├── Services/Api/             # [定制开发] 3个 API 服务
+│   ├── Services/GeoFlow/         # [定制开发] 30+个核心业务服务
+│   ├── Support/                  # [定制开发] 工具类（Admin/AdminWelcome/Analytics/GeoFlow/Lead/Site）
+│   └── View/Composers/           # [定制开发] 视图合成器
 │
 ├── bootstrap/                    # [原生] Laravel 启动
-├── config/                       # [原生+二开] 配置文件（geoflow.php 为二开核心配置）
+├── config/                       # [原生+定制开发] 配置文件（geoflow.php 为定制开发核心配置）
 ├── database/
-│   ├── migrations/               # [二开] 53个迁移文件
-│   └── seeders/                  # [二开] 种子数据
-├── deploy-scripts/               # [二开] 部署脚本
-├── docker/                       # [二开] Docker 基础设施（6个文件）
-├── docs/                         # [原生+二开] 文档
-├── geoskills-main/skills/        # [二开] 绑定的 AI Skill 定义
-├── lang/                         # [二开] 6语言翻译（zh_CN/en/ja/es/ru/pt_BR）
-├── public/                       # [原生+二开] Web 根目录
+│   ├── migrations/               # [定制开发] 53个迁移文件
+│   └── seeders/                  # [定制开发] 种子数据
+├── deploy-scripts/               # [定制开发] 部署脚本
+├── docker/                       # [定制开发] Docker 基础设施（6个文件）
+├── docs/                         # [原生+定制开发] 文档
+├── geoskills-main/skills/        # [定制开发] 绑定的 AI Skill 定义
+├── lang/                         # [定制开发] 6语言翻译（zh_CN/en/ja/es/ru/pt_BR）
+├── public/                       # [原生+定制开发] Web 根目录
 ├── resources/
 │   ├── css/                      # [原生] Tailwind 入口
-│   ├── js/                       # [原生+二开] Vite 入口 + Echo
+│   ├── js/                       # [原生+定制开发] Vite 入口 + Echo
 │   └── views/
-│       ├── admin/                # [二开] 35+后台视图子目录
-│       ├── client/               # [二开] 5个客户端视图
-│       ├── site/                 # [原生+二开] 13个前端视图
-│       └── theme/                # [原生+二开] 23个前端主题
-├── routes/                       # [二开] 路由文件
+│       ├── admin/                # [定制开发] 35+后台视图子目录
+│       ├── client/               # [定制开发] 5个客户端视图
+│       ├── site/                 # [原生+定制开发] 13个前端视图
+│       └── theme/                # [原生+定制开发] 23个前端主题
+├── routes/                       # [定制开发] 路由文件
 ├── storage/                      # [原生] 运行时存储
-├── tests/                        # [原生+二开] 测试
+├── tests/                        # [原生+定制开发] 测试
 ├── vendor/                       # [原生] Composer 依赖
 │
-├── .env / .env.*                 # [二开] 环境配置（4个模板）
-├── qonhub.bat                    # [二开] Windows 一键运维脚本
-├── watchdog.bat                  # [二开] Worker 守护进程脚本
-├── setup.bat                     # [二开] Windows 安装脚本
-├── docker-up.bat                 # [二开] Docker 启动脚本
-├── version.json                  # [二开] 版本元数据
+├── .env / .env.*                 # [定制开发] 环境配置（4个模板）
+├── qonhub.bat                    # [定制开发] Windows 一键运维脚本
+├── watchdog.bat                  # [定制开发] Worker 守护进程脚本
+├── setup.bat                     # [定制开发] Windows 安装脚本
+├── docker-up.bat                 # [定制开发] Docker 启动脚本
+├── version.json                  # [定制开发] 版本元数据
 └── vite.config.js               # [原生] Vite 配置
 ```
 
@@ -413,9 +412,9 @@ B2B 锚点**不是发布文章**，而是认证企业信息。企业档案字段
 
 ---
 
-## 四、与原生 GEOFlow 的差异说明
+## 四、与豆流 AI 的差异说明
 
-### 1. 复用了 GEOFlow 哪些原生能力
+### 1. 复用了 豆流 AI 哪些原生能力
 
 | 能力 | 说明 |
 |------|------|
@@ -455,11 +454,11 @@ B2B 锚点**不是发布文章**，而是认证企业信息。企业档案字段
 | **API v1** | 7 个控制器 + 3 个 Service + 3 个中间件 | REST API + Token 认证 + 幂等性 + 多 Scope |
 | **运维脚本** | 3 个 .bat | 一键启动/停止/状态查看、Worker 守护进程 |
 
-### 3. 对原生 GEOFlow 做了哪些改造与重写
+### 3. 对豆流 AI 做了哪些改造与重写
 
 | 改造项 | 说明 |
 |--------|------|
-| **品牌改名** | 全局 "GEOFlow" → "Qonhub AI"，后台路径变量化 `ADMIN_BASE_PATH` |
+| **品牌改名** | 全局 "豆流 AI" → "豆流 AI"，后台路径变量化 `ADMIN_BASE_PATH` |
 | **后端路由** | 原 `routes/web.php` 拆分出 `routes/workspace.php`，新增 `routes/api.php` |
 | **数据库** | 从支持 SQLite 改为强制 PostgreSQL（使用 pgvector、row-level locking 等 PG 特性） |
 | **队列体系** | 从 `while(true)` 轮询模式改为 Laravel Queue + Redis + Horizon 完整体系 |
@@ -630,8 +629,8 @@ Bootstrap → Tailwind，卡片折叠/搜索/筛选，全部展开/收起。
 ---
 
 > **本文档基于 2026-07-13 全量代码审计 + 开发记录生成，所有内容来源于实际已实现的代码。**  
-> **项目地址**：`E:\Qonhubgeo\GEOFlow-main`  
-> **当前版本**：Qonhub AI v2.4.0（基于 GEOFlow）
+> **项目地址**：`E:\Qonhubgeo\豆流 AI-main`  
+> **当前版本**：豆流 AI v2.4.0（基于 豆流 AI）
 
 ---
 
@@ -795,10 +794,10 @@ Bootstrap → Tailwind，卡片折叠/搜索/筛选，全部展开/收起。
 
 | 特效 | 说明 |
 |------|------|
-| Grainient 流体渐变背景 | 原生 WebGL2，indigo→violet 三色流体动画 |
+| Grainient 流体渐变背景 | WebGL2，indigo→violet 三色流体动画 |
 | FloatingLines 光线叠加 | Three.js 波浪线条，screen blend 鼠标交互 |
-| Lightfall 光雨背景 | 原生 WebGL2，登录页专用 |
-| ClickSpark 点击粒子 | 原生 Canvas，indigo 粒子爆发 |
+| Lightfall 光雨背景 | WebGL2，登录页专用 |
+| ClickSpark 点击粒子 | Canvas，indigo 粒子爆发 |
 | BentoGlow 卡片辉光 | 鼠标跟随 radial-gradient 辉光 |
 | Magnet 磁吸 | 卡片随鼠标微位移 |
 | Markdown 自动剥离 | Worker + 弹药库 AI 改写均自动去 `#` `**` `- ` 标记 |
