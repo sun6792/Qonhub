@@ -79,6 +79,13 @@
                     <a href="{{$p['reg_url']}}" target="_blank" rel="noopener" class="block w-full text-center text-[10px] rounded py-0.5 mb-1 transition hover:opacity-80"
                        style="color:#fbbf24; border:1px solid rgba(251,191,36,0.2); background:rgba(251,191,36,0.05)">📝 前往注册 →</a>
                     @endif
+                    {{-- OAuth 平台：一键授权（头条） --}}
+                    @if(in_array($key, ['toutiao']))
+                    <a href="{{route('oauth.redirect', ['platform'=>$key, 'ws'=>$workspace->id])}}"
+                       class="block w-full text-center text-[10px] rounded py-0.5 mb-1 transition hover:opacity-80"
+                       style="color:#10b981; border:1px solid rgba(16,185,129,0.3); background:rgba(16,185,129,0.08)">🔑 一键授权</a>
+                    @endif
+                    {{-- Cookie/凭证平台：手动保存凭证（百家号/搜狐/B2B等） --}}
                     <form method="POST" action="{{route('client.platforms.bind')}}">@csrf
                         <input type="hidden" name="platform_key" value="{{$key}}">
                         <input name="platform_account_name" required class="w-full rounded-lg px-1.5 py-0.5 text-[10px] text-white placeholder-gray-500 mb-1 focus:outline-none focus:ring-1 focus:ring-indigo-500/50"

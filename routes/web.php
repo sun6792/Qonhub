@@ -4,6 +4,12 @@
  * Web 路由：前台与 Blade 管理后台（路径见 config/geoflow.admin_base_path，默认 geo_admin）。
  */
 
+use App\Http\Controllers\Site\OAuthController;
+
+// OAuth 授权回调（无需登录，平台回调时是平台服务器发起的 GET 请求）
+Route::get('oauth/authorize/{platform}', [OAuthController::class, 'redirect'])->name('oauth.redirect');
+Route::get('oauth/callback/{platform}', [OAuthController::class, 'callback'])->name('oauth.callback');
+
 use App\Http\Controllers\Admin\AdminActivityLogController;
 use App\Http\Controllers\Admin\AdminAuthController;
 use App\Http\Controllers\Admin\AdminUserController;
