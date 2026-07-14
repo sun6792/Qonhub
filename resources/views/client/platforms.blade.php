@@ -82,11 +82,9 @@
                     <form method="POST" action="{{route('client.platforms.bind')}}">@csrf
                         <input type="hidden" name="platform_key" value="{{$key}}">
                         <input name="platform_account_name" required class="w-full rounded-lg px-1.5 py-0.5 text-[10px] text-white placeholder-gray-500 mb-1 focus:outline-none focus:ring-1 focus:ring-indigo-500/50"
-                               style="background:rgba(14,16,28,0.8); border:1px solid rgba(99,102,241,0.1)" placeholder="账号名">
-                        <textarea name="credential" class="w-full rounded-lg px-1.5 py-0.5 text-[9px] text-white placeholder-gray-500 mb-1 focus:outline-none focus:ring-1 focus:ring-indigo-500/50"
-                                  style="background:rgba(14,16,28,0.8); border:1px solid rgba(99,102,241,0.1)" placeholder="Cookie/密码" rows="2"></textarea>
+                               style="background:rgba(14,16,28,0.8); border:1px solid rgba(99,102,241,0.1)" placeholder="平台注册账号名/手机号">
                         <button class="w-full text-[10px] text-white py-0.5 rounded-lg transition"
-                                style="background:linear-gradient(135deg,#6366f1,#8b5cf6)">保存凭证</button>
+                                style="background:linear-gradient(135deg,#6366f1,#8b5cf6)">标记已注册</button>
                     </form>
                     @else
                     <form method="POST" action="{{route('client.platforms.unbind')}}">@csrf
