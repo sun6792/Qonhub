@@ -69,10 +69,18 @@ return Application::configure(basePath: dirname(__DIR__))
             env('ADMIN_BASE_PATH', 'geo_admin') . '/distribution/armory/publish-to-rpa',
         ]);
 
-        // 已登录的管理员访问登录页(guest:admin)时，重定向到后台仪表盘，而不是 Laravel 默认的 “/”。
-        // 默认逻辑只认名为 dashboard/home 的路由，本项目是 admin.dashboard/site.home，匹配不到就回落到 “/”，
-        // 导致”已登录后再打开登录页”被弹到前台内容站。这里显式指向后台首页。
-        $middleware->redirectUsersTo(fn () => route('admin.dashboard'));
+        // 已登录用户重定向
+        $middleware->redirectUsersTo(function (\Illuminate\Http\Request $request) {
+            if ($request->is('client/*')) return route('client.dashboard');
+            if ($request->is('admin/*') || $request->is(trim((string) config('geoflow.admin_base_path', 'geo_admin'), '/') . '/*')) return route('admin.dashboard');
+            return route('site.home');
+        });
+
+        // 未登录用户重定向（auth 中间件拦截后的跳转目标）
+        $middleware->redirectGuestsTo(function (\Illuminate\Http\Request $request) {
+            if ($request->is('client/*')) return route('client.login');
+            return route('admin.login');
+        });
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         /**
