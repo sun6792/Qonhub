@@ -335,16 +335,6 @@ function renderCache(caches) {
   `).join("");
 }
 
-async function clearCache(platformKey) {
-  if (!confirm(`确认清除 ${platformKey} 的缓存？下次需要重新登录。`)) return;
-  await fetch(`${API}/api/cache/clear`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ workspace_id: currentWs, platform_key: platformKey }),
-  });
-  log(`🗑️ 已清除: ${platformKey}`);
-  loadCache();
-}
 
 // ═══════ STATS ═══════
 function updateStats() {
@@ -560,17 +550,17 @@ async function loadAuthPlatforms() {
 
     let statusText, statusClass, btnText, btnAction;
     if (status === 'ready') {
-      statusText = unified.status_label || '\u{1F7E2} 可分发'; statusClass = 'badge-valid';
-      btnText = '\u{1F504} 重新授权'; btnAction = `authLogin('${p.key}')`;
+      statusText = unified.status_label || '可分发'; statusClass = 'badge-valid';
+      btnText = '重新授权'; btnAction = `authLogin('${p.key}')`;
     } else if (status === 'need_bind') {
-      statusText = unified.status_label || '\u{1F7E0} 待绑定'; statusClass = 'badge-fail';
-      btnText = '\u{1F5D1} 清缓存'; btnAction = `clearCache('${p.key}')`;
+      statusText = unified.status_label || '待绑定'; statusClass = 'badge-fail';
+      btnText = '清缓存'; btnAction = `clearCache('${p.key}')`;
     } else if (dbOk && !cacheOk) {
-      statusText = unified.status_label || '\u{1F7E1} 需登录'; statusClass = 'badge-expired';
-      btnText = '\u{1F511} 授权登录'; btnAction = `authLogin('${p.key}')`;
+      statusText = unified.status_label || '需登录'; statusClass = 'badge-expired';
+      btnText = '授权登录'; btnAction = `authLogin('${p.key}')`;
     } else {
-      statusText = unified.status_label || '⚪ 未绑定'; statusClass = 'badge-empty';
-      btnText = '\u{1F511} 授权登录'; btnAction = `authLogin('${p.key}')`;
+      statusText = unified.status_label || '未绑定'; statusClass = 'badge-empty';
+      btnText = '授权登录'; btnAction = `authLogin('${p.key}')`;
     }
 
     return `<div class="cache-item">
@@ -585,6 +575,19 @@ async function loadAuthPlatforms() {
   }).join("");
   h("authStatus").textContent = `WS-${currentWs} | 统一四态校验`;
 }
+
+async function clearCache(platform) {
+  if (!confirm('清除 ' + platform + ' 的本地Cookie缓存？')) return;
+  try {
+    const resp = await fetch(API + '/api/cache/clear', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ workspace_id: currentWs, platform_key: platform }),
+    });
+    const data = await resp.json();
+    log(data.success ? 'OK ' + platform + ' 缓存已清除' : 'WARN ' + data.message);
+    loadAuthPlatforms();
+  } catch(e) { log('ERROR 清除失败: '+e.message); }
 }
 
 async function authLogin(platform) {
