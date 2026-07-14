@@ -112,7 +112,7 @@ return array_replace_recursive($base, [
         'first_login_hint_intro' => 'Se muestra solo una vez. Tras iniciar sesión, cambia de inmediato la contraseña del administrador.',
         'first_login_username' => 'Usuario inicial',
         'first_login_password' => 'Contraseña inicial',
-        'first_login_password_from_log' => 'Si producción no tiene contraseña fija, Qonhub AI genera una contraseña de un solo uso. Revise el log geoflow-init.',
+        'first_login_password_from_log' => 'Si producción no tiene contraseña fija, Qonhub AI genera una contraseña de un solo uso. Revise el log douluo-init.',
         'first_login_security' => 'No mantengas la sesión en dispositivos compartidos. Cambia la contraseña tras el primer acceso.',
         'first_login_dismiss' => 'Cerrar ayuda del primer despliegue',
         'back_home' => 'Volver al inicio',

@@ -559,7 +559,7 @@
                                 </fieldset>
 
                                 <div class="mt-4 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm leading-6 text-blue-900">
-                                    支持模块：{{ implode('、', $supportedFrontendModules) }}。WordPress REST 和 Generic API 只透传字段，不保证渲染 GEOFlow 模块。
+                                    支持模块：{{ implode('、', $supportedFrontendModules) }}。WordPress REST 和 Generic API 只透传字段，不保证渲染豆流 AI 首页模块。
                                 </div>
 
                                 <div class="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-2">
@@ -582,7 +582,7 @@
 
                     @if (! $channel->isGeoFlowAgent())
                         <div class="rounded-lg border border-amber-200 bg-amber-50 px-5 py-4 text-sm leading-6 text-amber-900">
-                            WordPress REST 和 Generic API 只作为外部分发渠道处理，可接收字段透传，不保证渲染 GEOFlow 首页模块、轮播或主题映射。
+                            WordPress REST 和 Generic API 只作为外部分发渠道处理，可接收字段透传，不保证渲染 豆流 AI 首页模块、轮播或主题映射。
                         </div>
                     @endif
 
@@ -808,7 +808,7 @@
             <div class="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-4">
                 <div class="lg:col-span-2">
                     <label class="block text-xs font-medium text-gray-700">{{ __('admin.site_settings.ads.text_field_tracking') }}</label>
-                    <input type="text" name="article_text_ad_policy[__PLACEMENT__][custom_modules][__MODULE_INDEX__][links][__LINK_INDEX__][tracking_param]" value="utm_source=geoflow&utm_medium=article_text_ad" class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                    <input type="text" name="article_text_ad_policy[__PLACEMENT__][custom_modules][__MODULE_INDEX__][links][__LINK_INDEX__][tracking_param]" value="utm_source=douluo&utm_medium=article_text_ad" class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500">
                 </div>
                 <label class="mt-5 inline-flex items-center gap-2 text-sm font-medium text-gray-700">
                     <input type="checkbox" name="article_text_ad_policy[__PLACEMENT__][custom_modules][__MODULE_INDEX__][links][__LINK_INDEX__][open_new_tab]" value="1" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" checked>

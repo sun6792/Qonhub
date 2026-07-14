@@ -940,7 +940,7 @@
                                                     </div>
                                                     <div class="lg:col-span-2">
                                                         <label class="mb-2 block text-sm font-medium text-gray-700">{{ __('admin.site_settings.ads.text_field_tracking') }}</label>
-                                                        <input type="text" name="text_ad_modules[{{ $index }}][links][{{ $linkIndex }}][tracking_param]" value="{{ $link['tracking_param'] ?? '' }}" class="w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500" placeholder="utm_source=geoflow&utm_medium=article_text_ad">
+                                                        <input type="text" name="text_ad_modules[{{ $index }}][links][{{ $linkIndex }}][tracking_param]" value="{{ $link['tracking_param'] ?? '' }}" class="w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500" placeholder="utm_source=douluo&utm_medium=article_text_ad">
                                                     </div>
                                                     <div>
                                                         <label class="mb-2 block text-sm font-medium text-gray-700">{{ __('admin.site_settings.ads.text_field_sort') }}</label>
@@ -1347,7 +1347,7 @@
                 </div>
                 <div class="lg:col-span-2">
                     <label class="mb-2 block text-sm font-medium text-gray-700">{{ __('admin.site_settings.ads.text_field_tracking') }}</label>
-                    <input type="text" name="text_ad_modules[__INDEX__][links][__LINK_INDEX__][tracking_param]" value="" class="w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500" placeholder="utm_source=geoflow&utm_medium=article_text_ad">
+                    <input type="text" name="text_ad_modules[__INDEX__][links][__LINK_INDEX__][tracking_param]" value="" class="w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500" placeholder="utm_source=douluo&utm_medium=article_text_ad">
                 </div>
                 <div>
                     <label class="mb-2 block text-sm font-medium text-gray-700">{{ __('admin.site_settings.ads.text_field_sort') }}</label>

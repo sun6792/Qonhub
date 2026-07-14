@@ -14,28 +14,30 @@ return [
             'changelog_link' => '更新日志',
         ],
         'letter' => [
-            'title' => '写给 GEOFlow 使用者的一封信',
-            'subtitle' => 'GEOFlow 是一套面向 AI 搜索与多站点分发的内容工程后台。它不承诺排名，而是用真实资料、结构化内容和持续验证，提高被理解、引用和推荐的概率。',
+            'title' => '欢迎使用豆流 AI',
+            'subtitle' => '豆流 AI 是一套企业级 GEO（生成式引擎优化）智能营销系统。它不承诺排名，而是用真实资料、结构化内容和持续验证，提高被 AI 理解、引用和推荐的概率。',
             'blocks' => [
                 [
                     'type' => 'paragraph',
-                    'content' => '你好，欢迎使用 GEOFlow。这个系统的出发点不是把内容生产变成一次性的批量生成，而是把资料、事实、提示词、审核、发布、分发和数据复盘连接成一个可持续的 GEO 工作流。',
+                    'content' => '你好，欢迎使用豆流 AI。这个系统的出发点不是把内容生产变成一次性的批量生成，而是把资料、事实、提示词、审核、发布、分发和数据复盘连接成一个可持续的 GEO 工作流。',
                 ],
                 [
                     'type' => 'paragraph',
-                    'content' => 'GEO 的核心不是“骗过算法”，而是让真实、可靠、结构化的内容更容易被答案引擎识别。系统可以帮你提效，但内容质量、业务事实和人工判断仍然是基础。',
+                    'content' => 'GEO 的核心不是"骗过算法"，而是让真实、可靠、结构化的内容更容易被答案引擎识别。系统可以帮你提效，但内容质量、业务事实和人工判断仍然是基础。',
                 ],
                 [
                     'type' => 'heading',
-                    'content' => 'GEOFlow 是什么',
+                    'content' => '豆流 AI 是什么',
                 ],
                 [
                     'type' => 'list',
                     'items' => [
                         '把 AI 模型、提示词、知识库、素材库、任务和文章管理集中到一个后台',
+                        '通过多工作空间体系支持服务商批量管理多个客户，数据分级隔离',
+                        '内置六维透明 GEO 评分引擎，低于 70 分自动增强改写，质量有据可依',
+                        '自研 RPA 自动化引擎，无需平台 API 合作即可实现 B2B 注册和自媒体发布',
                         '把本站、目标 Agent 站点、WordPress 和通用 API 分发渠道接入同一条发布链路',
-                        '用观测归因查看内容生产、任务状态、分发结果、访问日志和 AI 爬虫趋势',
-                        '用审核、引用和复盘机制，减少只追求生成数量带来的内容风险',
+                        '用数据看板查看内容生产、任务状态、分发结果、AI 爬虫趋势和品牌 AI 可见度',
                     ],
                 ],
                 [
@@ -60,8 +62,8 @@ return [
                     'items' => [
                         '先配置 Chat 模型、Embedding 模型和提示词，再沉淀知识库、标题库、关键词库、图片和作者',
                         '先用小任务生成少量文章，检查标题、事实、Markdown 排版、图片、SEO 字段和 Schema',
-                        '通过审核后再发布到本站，或同步到目标 Agent、WordPress、通用 API 等渠道',
-                        '定期查看观测归因，用任务状态、分发日志、访问日志和 AI 爬虫数据反向修正知识资产和内容',
+                        '通过 GEO 评分审核后再发布到本站，或同步到目标 Agent、WordPress、通用 API 等渠道',
+                        '定期查看数据看板，用任务状态、分发日志、访问日志和 AI 爬虫数据反向修正知识资产和内容',
                     ],
                 ],
                 [
@@ -79,7 +81,7 @@ return [
                 ],
                 [
                     'type' => 'paragraph',
-                    'content' => '这封信只会在当前说明版本下自动弹出一次。以后如果需要回看，可以从后台底部的“项目说明”再次打开。',
+                    'content' => '这封信只会在当前说明版本下自动弹出一次。以后如果需要回看，可以从后台底部的"项目说明"再次打开。',
                 ],
             ],
         ],
@@ -95,12 +97,12 @@ return [
             'changelog_link' => 'Changelog',
         ],
         'letter' => [
-            'title' => 'A Letter to GEOFlow Users',
-            'subtitle' => 'GEOFlow is a content engineering admin for AI search and multi-site distribution. It does not promise rankings; it improves the probability of being understood, cited, and recommended through facts, structure, and continuous validation.',
+            'title' => 'Welcome to Douluo AI',
+            'subtitle' => 'Douluo AI is an enterprise-grade GEO (Generative Engine Optimization) marketing system. It does not promise rankings; it improves the probability of being understood, cited, and recommended through facts, structure, and continuous validation.',
             'blocks' => [
                 [
                     'type' => 'paragraph',
-                    'content' => 'Welcome to GEOFlow. The goal is not one-off bulk generation. The goal is to connect materials, facts, prompts, review, publishing, distribution, and analytics into a repeatable GEO workflow.',
+                    'content' => 'Welcome to Douluo AI. The goal is not one-off bulk generation. The goal is to connect materials, facts, prompts, review, publishing, distribution, and analytics into a repeatable GEO workflow.',
                 ],
                 [
                     'type' => 'paragraph',
@@ -108,15 +110,17 @@ return [
                 ],
                 [
                     'type' => 'heading',
-                    'content' => 'What GEOFlow is',
+                    'content' => 'What Douluo AI is',
                 ],
                 [
                     'type' => 'list',
                     'items' => [
                         'A single admin for AI models, prompts, knowledge bases, materials, tasks, and articles',
+                        'Multi-workspace architecture for agencies managing multiple clients with tiered data isolation',
+                        'Built-in six-dimension transparent GEO scoring engine with auto-enhancement below 70 points',
+                        'In-house RPA automation engine for B2B registration and self-media publishing without platform API partnerships',
                         'A publishing chain that connects the local site, target Agent sites, WordPress, and generic API channels',
-                        'An analytics surface for production, task status, distribution results, access logs, and AI crawler trends',
-                        'A quality workflow that uses review, evidence, and feedback instead of only optimizing for volume',
+                        'An analytics surface for production, task status, distribution results, AI crawler trends, and brand AI visibility',
                     ],
                 ],
                 [
@@ -141,7 +145,7 @@ return [
                     'items' => [
                         'Configure chat models, embedding models, and prompts before building knowledge, title, keyword, image, and author libraries',
                         'Generate a few articles first, then review titles, facts, Markdown layout, images, SEO fields, and Schema',
-                        'After review, publish to the local site or sync to target Agent, WordPress, and generic API channels',
+                        'Review GEO scores before publishing to the local site or syncing to target Agent, WordPress, and generic API channels',
                         'Use Analytics regularly to refine materials and content through task status, distribution logs, access logs, and AI crawler data',
                     ],
                 ],
