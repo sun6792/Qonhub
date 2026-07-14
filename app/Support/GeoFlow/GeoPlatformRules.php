@@ -16,6 +16,7 @@ final class GeoPlatformRules
         $parts = [
             self::deAiCommon(),
             self::geoEnhanceCommon(),
+            PlatformCitationStrategy::forTemplate($templateKey),
         ];
 
         $platformSpecific = match ($templateKey) {
