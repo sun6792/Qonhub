@@ -130,24 +130,34 @@ class GeoContentScorer
     {
         $score = 0;
 
-        // Q&A 模式检测（？ + 紧接的陈述句）[修复: s修饰符+放宽长度上限到300]
-        $qaCount = preg_match_all('/[？?]\s*.{10,300}[。.]/us', $content, $m);
-        $score += min(40, $qaCount * 8);
+        // 1. 显式 Q&A 对检测（Q:...? A:... 或 ## Q: ... ### A: ...）
+        $explicitQA = preg_match_all('/(?:Q[：:]\s*|##\s*Q[：:\s])?(.{5,80}[？?])\s*(.{10,600}?)(?=(?:Q[：:]|##\s*Q|###\s*A|$))/us', $content, $qaMatches);
+        // 每个完整 Q&A 对 +10 分，上限 50
+        $qaPairs = count(array_filter($qaMatches[1] ?? [], fn($q) => mb_strlen($q) >= 5));
+        $score += min(50, $qaPairs * 10);
 
-        // 定义句式（"XX 是..."）
-        $defCount = preg_match_all('/[：:]\s*.{5,60}是.{5,}/u', $content, $m);
+        // 2. 单独的问句检测（？结尾的句子，每个 +5，上限 25）
+        $questionCount = preg_match_all('/.{8,80}[？?]/u', $content, $qm);
+        $score += min(25, $questionCount * 5);
+
+        // 3. 定义句式（XX 是... / XX 指的是... / 即：...）
+        $defCount = preg_match_all('/(?:是|指的是|即)[：:\s]*.{5,}/u', $content, $dm);
         $score += min(25, $defCount * 5);
 
-        // 开篇直接回答（前 100 字内出现结论性语句）
-        $first100 = mb_substr($content, 0, 100);
-        if (preg_match('/[。.]\s*[^。.]*[是为].{3,}/u', $first100)) {
+        // 4. 开篇结论前置（前 120 字内包含结论性判断句）
+        $first120 = mb_substr(strip_tags($content), 0, 120);
+        if (preg_match('/[。.！!]/u', $first120) && preg_match('/[是为应可需必].{2,}/u', $first120)) {
             $score += 20;
         }
 
-        // FAQ 结构
-        if (mb_strpos($content, 'Q') !== false || mb_strpos($content, '常见问题') !== false) {
+        // 5. 结构化 FAQ 章节
+        if (preg_match('/(?:常见问题|FAQ|Q&A|问答)/iu', $content)) {
             $score += 15;
         }
+
+        // 6. H2/H3 标题中带问句
+        $headingQuestions = preg_match_all('/^#{2,3}\s*.{5,60}[？?]/um', $content, $hqm);
+        $score += min(15, $headingQuestions * 5);
 
         return min(100, $score);
     }
@@ -260,15 +270,18 @@ class GeoContentScorer
             $score += 25;
         }
 
-        // 数据来源引用 [修复: 加 s 匹配跨行]
-        if (preg_match('/据.{2,10}(报道|统计|数据显示|年报|研究)/us', $text)) {
+        // 数据来源引用
+        if (preg_match('/据.{2,40}(?:报道|统计|数据显示|年报|研究|调查|报告|白皮书|年鉴|行业协会)/us', $text)) {
             $score += 25;
         }
 
-        // 日期/更新时间 [修复: 加 s 匹配跨行]
+        // 日期/更新时间
         if (preg_match('/\d{4}[年-]\d{1,2}[月-]\d{1,2}[日号]/us', $text)) {
             $score += 10;
         }
+        // 破折号引用（——...说/表示）—— 中文最常见专家引用格式
+        $dashCount = preg_match_all('/\xE2\x80\x94\xE2\x80\x94.{3,30}(?:说|表示|认为|指出|提到|直言)/us', $text, $dm);
+        $score += min(25, $dashCount * 8);
 
         return min(100, $score);
     }
