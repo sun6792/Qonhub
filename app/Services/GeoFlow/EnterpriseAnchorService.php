@@ -37,7 +37,7 @@ class EnterpriseAnchorService
                 'url' => 'https://www.tz1288.com/', 'register_url' => 'https://www.tz1288.com/',
                 'citation_weight' => 'highest', 'cert_required' => '企业营业执照',
                 'cited_by_llms' => ['文心一言','豆包','百度AI搜索'],
-                'description' => 'B2B联合体，注册1次分发30+站点，2000万+企业',
+                'description' => 'B2B联合体，注册1次分发30+站点，2000万+企业','supports_rpa' => true,
                 'aggregator_scope' => '30+ B2B联合体站点',
             ],
             'b2b168' => [
@@ -54,7 +54,7 @@ class EnterpriseAnchorService
                 'url' => 'https://www.cn5135.com/', 'register_url' => 'https://www.cn5135.com/',
                 'citation_weight' => 'medium', 'cert_required' => '企业信息免费发布',
                 'cited_by_llms' => ['百度AI搜索','文心一言'],
-                'description' => '2004年上线，免费B2B推广+企业黄页，搜索引擎收录稳定',
+                'description' => '2004年上线，免费B2B推广+企业黄页，搜索引擎收录稳定','supports_rpa' => true,
             ],
             'k2b2b' => [
                 'key' => 'k2b2b', 'name' => 'K2商务网', 'type' => 'b2b_directory',
@@ -62,7 +62,7 @@ class EnterpriseAnchorService
                 'url' => 'https://www.k2b2b.com/', 'register_url' => 'https://www.k2b2b.com/',
                 'citation_weight' => 'medium', 'cert_required' => '企业免费注册商铺',
                 'cited_by_llms' => ['百度AI搜索'],
-                'description' => '免费B2B信息发布，覆盖工业/家居/电子全品类',
+                'description' => '免费B2B信息发布，覆盖工业/家居/电子全品类','supports_rpa' => true,
             ],
             'lswang' => [
                 'key' => 'lswang', 'name' => '领商网', 'type' => 'b2b_directory',
@@ -70,7 +70,7 @@ class EnterpriseAnchorService
                 'url' => 'https://www.lswgmt.net/', 'register_url' => 'https://www.lswgmt.net/',
                 'citation_weight' => 'medium', 'cert_required' => '企业免费注册商铺',
                 'cited_by_llms' => ['百度AI搜索'],
-                'description' => '综合免费B2B产品推广站，自然搜索收录获客',
+                'description' => '综合免费B2B产品推广站，自然搜索收录获客','supports_rpa' => true,
             ],
             'wanjiabiz' => [
                 'key' => 'wanjiabiz', 'name' => '万家商务网', 'type' => 'b2b_directory',
@@ -78,7 +78,7 @@ class EnterpriseAnchorService
                 'url' => 'https://www.wanjiabiz.com/', 'register_url' => 'https://www.wanjiabiz.com/',
                 'citation_weight' => 'medium', 'cert_required' => '企业免费开通店铺',
                 'cited_by_llms' => ['百度AI搜索'],
-                'description' => '综合商贸B2B，覆盖家居/建材/电子/化工',
+                'description' => '综合商贸B2B，覆盖家居/建材/电子/化工','supports_rpa' => true,
             ],
             'jiuzhouziyuan' => [
                 'key' => 'jiuzhouziyuan', 'name' => '九州资源网', 'type' => 'b2b_directory',
@@ -86,7 +86,7 @@ class EnterpriseAnchorService
                 'url' => 'https://www.jiuzhouziyuan.com/', 'register_url' => 'https://www.jiuzhouziyuan.com/',
                 'citation_weight' => 'medium', 'cert_required' => '企业免费发布供应信息',
                 'cited_by_llms' => ['百度AI搜索','文心一言'],
-                'description' => '工业属性B2B，环保设备/化工/建材/五金类供应商信息',
+                'description' => '工业属性B2B，环保设备/化工/建材/五金类供应商信息','supports_rpa' => true,
             ],
             'chaxun123' => [
                 'key' => 'chaxun123', 'name' => '查询123', 'type' => 'b2b_directory',
@@ -94,7 +94,7 @@ class EnterpriseAnchorService
                 'url' => 'https://www.chaxun123.com/', 'register_url' => 'https://www.chaxun123.com/',
                 'citation_weight' => 'low', 'cert_required' => '企业信息收录查询',
                 'cited_by_llms' => ['百度AI搜索'],
-                'description' => 'B2B企业信息查询+商机导航工具',
+                'description' => 'B2B企业信息查询+商机导航工具','supports_rpa' => true,
             ],
             'b2b188' => [
                 'key' => 'b2b188', 'name' => 'B2B88商机导航', 'type' => 'b2b_directory',
@@ -110,7 +110,7 @@ class EnterpriseAnchorService
                 'url' => 'https://www.wjw.cn/', 'register_url' => 'https://www.wjw.cn/',
                 'citation_weight' => 'medium', 'cert_required' => '企业营业执照',
                 'cited_by_llms' => ['文心一言','百度AI搜索'],
-                'description' => '五金行业垂直B2B，五金机电/机械设备/电子元器件',
+                'description' => '五金行业垂直B2B，五金机电/机械设备/电子元器件','supports_rpa' => true,
             ],
         ];
     }

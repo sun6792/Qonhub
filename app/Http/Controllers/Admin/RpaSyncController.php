@@ -8,6 +8,7 @@ use App\Models\EnterpriseAnchorCertification;
 use App\Models\EnterpriseProfile;
 use App\Models\Workspace;
 use App\Services\GeoFlow\EnterpriseAnchorService;
+use App\Services\GeoFlow\PlatformSyncService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -107,7 +108,7 @@ class RpaSyncController extends Controller
 
         try {
             if ($payload['success']) {
-                // 自动标记认证完成
+                // 1) 自动标记锚点认证
                 $cert = EnterpriseAnchorCertification::query()->firstOrCreate(
                     ['enterprise_profile_id' => (int) $profile->id, 'anchor_platform_key' => $platformKey],
                     [
@@ -125,7 +126,15 @@ class RpaSyncController extends Controller
                         'platform_account_id' => $payload['account_id'] ?: $cert->platform_account_id,
                     ])->save();
                 }
-                Log::info('RPA sync: certification auto-saved', [
+
+                // 2) 同步 ClientPlatformAccount（RPA 登录成功后自动标记客户端可见）
+                app(PlatformSyncService::class)->syncBinding((int) $payload['workspace_id'], [
+                    'platform_key' => $platformKey,
+                    'platform_name' => $platformInfo['name'] ?? $platformKey,
+                    'source' => 'rpa_engine',
+                ]);
+
+                Log::info('RPA sync: certification + platform binding synced', [
                     'workspace_id' => $payload['workspace_id'],
                     'platform' => $platformKey,
                     'cert_id' => $cert->id,
@@ -192,19 +201,14 @@ class RpaSyncController extends Controller
         if ($wsId <= 0) {
             return response()->json(['platforms' => []]);
         }
-        $accounts = \App\Models\ClientPlatformAccount::query()
-            ->where('workspace_id', $wsId)
-            ->where('status', 'active')
-            ->get(['platform_key', 'platform_account_name', 'status', 'last_verified_at']);
+
+        // 统一四态数据（DB + 缓存交叉校验）
+        $sync = app(PlatformSyncService::class);
+        $platforms = $sync->getUnifiedStatus($wsId);
 
         return response()->json([
             'workspace_id' => $wsId,
-            'platforms' => $accounts->map(fn($a) => [
-                'key' => $a->platform_key,
-                'name' => $a->platform_account_name ?: $a->platform_key,
-                'status' => $a->status,
-                'has_cache' => file_exists(storage_path("rpa/states/{$wsId}/{$a->platform_key}.json")),
-            ])->all(),
+            'platforms' => $platforms,
         ]);
     }
 

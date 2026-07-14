@@ -344,31 +344,15 @@ class ClientPortalController extends Controller
             'credential' => ['nullable', 'string', 'max:5000'],
         ]);
 
-        $crypto = app(ApiKeyCrypto::class);
-        $data = [
-            'platform_account_name' => $payload['platform_account_name'],
-            'status' => 'active',
-            'last_verified_at' => now(),
-        ];
-        if (!empty($payload['credential'])) {
-            $data['credential_ciphertext'] = $crypto->encrypt($payload['credential']);
-        }
-        ClientPlatformAccount::query()->updateOrCreate(
-            ['workspace_id' => $workspaceId, 'platform_key' => $payload['platform_key']],
-            $data
-        );
+        // 统一三处同步：客户端授权 → 发布管道 + 锚点自动创建
+        app(\App\Services\GeoFlow\PlatformSyncService::class)->syncBinding($workspaceId, [
+            'platform_key' => $payload['platform_key'],
+            'platform_name' => $payload['platform_account_name'],
+            'credential' => $payload['credential'] ?? null,
+            'source' => 'client_portal',
+        ]);
 
-        // [新增] 同步信息锚点：绑定=已认证
-        $profile = \App\Models\EnterpriseProfile::where('workspace_id', $workspaceId)->first();
-        if ($profile) {
-            \App\Models\EnterpriseAnchorCertification::updateOrCreate(
-                ['enterprise_profile_id' => (int)$profile->id, 'anchor_platform_key' => $payload['platform_key']],
-                ['certification_status' => 'certified', 'certified_at' => now(),
-                 'platform_account_id' => $payload['platform_account_name']]
-            );
-        }
-
-        return redirect()->route('client.platforms')->with('message', '平台授权绑定成功！锚点已同步');
+        return redirect()->route('client.platforms')->with('message', '平台授权绑定成功！');
     }
 
     /**
