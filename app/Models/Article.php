@@ -53,6 +53,28 @@ class Article extends Model
         ];
     }
 
+    /**
+     * 删除/恢复时同步更新任务的已创建计数。
+     */
+    protected static function booted(): void
+    {
+        $syncCount = function (Article $article) {
+            if ((int) $article->task_id > 0) {
+                $actual = (int) Article::query()
+                    ->where('task_id', (int) $article->task_id)
+                    ->whereNull('deleted_at')
+                    ->count();
+                \App\Models\Task::query()
+                    ->whereKey((int) $article->task_id)
+                    ->update(['created_count' => $actual]);
+            }
+        };
+
+        static::deleted(fn (Article $a) => $syncCount($a));
+        static::forceDeleted(fn (Article $a) => $syncCount($a));
+        static::restored(fn (Article $a) => $syncCount($a));
+    }
+
     public function category(): BelongsTo
     {
         return $this->belongsTo(Category::class, 'category_id');
