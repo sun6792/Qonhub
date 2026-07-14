@@ -202,7 +202,7 @@ async function switchWorkspace() {
   currentWs = val;
   h("wsStats").textContent = val ? `WS-${val}` : "";
   if (val) {
-    await Promise.all([pullTasks(), loadCache(), loadAuthPlatforms()]);
+    await Promise.all([pullTasks(), loadCache(), loadAuthPlatforms(), loadArticles()]);
     localStorage.setItem("rpa_current_ws", val);
   }
 }
@@ -574,6 +574,19 @@ async function loadAuthPlatforms() {
     </div>`;
   }).join("");
   h("authStatus").textContent = `WS-${currentWs} | 统一四态校验`;
+
+  // 动态填充分发平台下拉（仅显示已就绪的平台）
+  const distSel = h("distPlatform");
+  distSel.innerHTML = '<option value="">选择平台...</option>';
+  let readyCount = 0;
+  AUTH_PLATFORMS.forEach(p => {
+    const u = dbPlatforms[p.key] || {};
+    if (u.publish_ready || u.status === 'ready') {
+      distSel.innerHTML += `<option value="${p.key}">${p.icon} ${p.name}</option>`;
+      readyCount++;
+    }
+  });
+  h("distStatus").textContent = readyCount + '平台就绪';
 }
 
 async function clearCache(platform) {
