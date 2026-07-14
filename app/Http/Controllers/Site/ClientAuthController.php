@@ -18,10 +18,17 @@ class ClientAuthController extends Controller
 
     public function login(Request $request): RedirectResponse
     {
-        $credentials = $request->validate([
-            'username' => ['required', 'string'],
+        $request->validate([
+            'email' => ['required', 'string'],
             'password' => ['required', 'string'],
         ]);
+
+        // 支持用邮箱或用户名登录
+        $loginField = filter_var($request->input('email'), FILTER_VALIDATE_EMAIL) ? 'email' : 'username';
+        $credentials = [
+            $loginField => $request->input('email'),
+            'password' => $request->input('password'),
+        ];
 
         if (Auth::guard('client')->attempt($credentials, $request->boolean('remember'))) {
             $request->session()->regenerate();
