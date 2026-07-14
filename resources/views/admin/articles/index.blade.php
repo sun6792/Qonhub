@@ -672,11 +672,14 @@
                                         <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium {{ $reviewClass }}">
                                             {{ __('admin.articles.review_prefix') }}: {{ __('admin.articles.review.'.(string) $article->review_status) }}
                                         </span>
-                                        @php $gs = $article->geo_score; @endphp
+                                        @php $gs = $article->geo_score; $gg = $article->geo_grade; @endphp
                                         @if($gs !== null)
-                                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium
-                                            {{ $gs >= 70 ? 'bg-green-100 text-green-800' : ($gs >= 50 ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-600') }}">
-                                            🌐 GEO {{ $article->geo_grade }} ({{ $gs }})
+                                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-bold
+                                            {{ $gs >= 85 ? 'bg-green-100 text-green-800 ring-1 ring-green-300' :
+                                               ($gs >= 70 ? 'bg-emerald-50 text-emerald-700' :
+                                               ($gs >= 50 ? 'bg-amber-100 text-amber-800 ring-1 ring-amber-300' :
+                                               'bg-red-100 text-red-800 ring-1 ring-red-300')) }}">
+                                            🌐 GEO {{ $gg }} ({{ $gs }})
                                         </span>
                                         @endif
                                     </div>

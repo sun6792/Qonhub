@@ -92,32 +92,54 @@ class WorkerExecutionService
         $generation = $this->generateContentWithModelSelection($task, $contentPrompt);
         $aiModel = $generation['model'];
         $generatedContent = $generation['content'];
-        // GEO 六维评分 + 低于70分自动增强重写（最多3轮，维度定向优化）
+        // ═══ GEO 六维评分 + geoskills 定向增强重写 ───
+        // < 70 分 → 直接打回重做，不存盘，直到 ≥ 70 分或耗尽重试次数
         $scorer = app(\App\Services\GeoFlow\GeoContentScorer::class);
-        $maxRetries = 3;
+        $maxRetries = 5;
         $scoreResult = $scorer->score((string) $titleRow->title, $generatedContent);
         $geoScore = $scoreResult['score'];
-        $retryLog = [];
+        $retryLog = [(int) $geoScore];
 
         for ($retry = 0; $retry < $maxRetries; $retry++) {
             if ($geoScore >= 70) break;
 
-            // 定向增强：分析弱维度，生成针对性重写指令
-            $weakDims = $this->buildWeakDimensionFix(
-                $scoreResult,
-                $retry + 1,
-                $maxRetries
-            );
+            // Stage 1-3: geoskills 维度定向修复（分析弱维度→针对性指令）
+            if ($retry < 3) {
+                $retryPrompt = $contentPrompt . "\n\n" . $this->buildGeoskillsFixPrompt(
+                    $scoreResult,
+                    $retry + 1
+                );
+            }
+            // Stage 4: 追加 GEO 增强模板（FAQ + 专家引用文本）
+            elseif ($retry === 3) {
+                $enhancedContent = $scorer->geoEnhance((string) $titleRow->title, $generatedContent);
+                $retryPrompt = "以下是一篇已完成的文章，请用 geoskills v2 评分标准（目标 ≥70 分，B 级）重新优化整篇文章的结构、数据和引用。\n\n"
+                    . "=== 待优化文章 ===\n" . $enhancedContent . "\n\n"
+                    . $this->buildGeoskillsFixPrompt($scoreResult, $retry + 1);
+            }
+            // Stage 5: 最后一搏 — 超强约束 + 要求重写而非修改
+            else {
+                $retryPrompt = $this->buildFinalRetryPrompt($contentPrompt, $scoreResult);
+            }
 
-            $retryPrompt = $contentPrompt . "\n\n" . $weakDims;
             $retryGeneration = $this->generateContentWithModelSelection($task, $retryPrompt);
             $generatedContent = $retryGeneration['content'];
             $scoreResult = $scorer->score((string) $titleRow->title, $generatedContent);
             $geoScore = $scoreResult['score'];
-            $retryLog[] = $geoScore;
+            $retryLog[] = (int) $geoScore;
         }
 
-        // 最终 GEO 评分持久化
+        // 5 轮重试后仍 < 70：标记失败，不保存文章
+        if ($geoScore < 70) {
+            throw new \RuntimeException(sprintf(
+                'GEO 评分不达标：%d 分 (%s 级)，经 %d 轮 geoskills 定向重写仍低于 70 分阈值。请检查标题库/提示词/知识库质量。',
+                $geoScore,
+                $scorer->grade($geoScore),
+                $maxRetries
+            ));
+        }
+
+        // 持久化 GEO 评分
         $finalGeoScore = (string) json_encode([
             'score' => $geoScore,
             'grade' => $scorer->grade($geoScore),
@@ -132,12 +154,9 @@ class WorkerExecutionService
         $content = $imageResult['content'];
         $selectedImages = $imageResult['images'];
         $excerpt = $this->buildExcerpt($content);
-        // 低分拦截：< 70 分标记为待审核，运营需人工介入
+        // ≥70 分才到达这里，正常保存
         $geoGrade = $scorer->grade($geoScore);
         $reviewStatus = (int) ($task->need_review ?? 1) === 1 ? 'pending' : 'approved';
-        if ($geoScore < 70) {
-            $reviewStatus = 'pending_review'; // 强制人工审核
-        }
 
         $workflow = [
             'status' => 'draft',
@@ -666,56 +685,119 @@ class WorkerExecutionService
      * 确保 AI 生成的文章天然具有高 GEO 评分，不需要事后改写。
      */
     /**
-     * 维度定向修复：分析低分维度，生成针对性重写提示。
+     * geoskills v2 定向修复提示（前 3 轮）。
+     *
+     * 基于 Content Citability 六维评分，逐维度给出精确到分值的修复指令。
      */
-    private function buildWeakDimensionFix(array $scoreResult, int $attempt, int $maxRetries): string
+    private function buildGeoskillsFixPrompt(array $scoreResult, int $attempt): string
+    {
+        $dims = $scoreResult['dimensions'] ?? [];
+        $score = $scoreResult['score'] ?? 0;
+        $grade = $scoreResult['grade'] ?? 'F';
+        $gap = 70 - $score;
+
+        $fix = [];
+        $fix[] = "═══ 第 {$attempt}/5 轮 geoskills v2 定向重写 ═══";
+        $fix[] = "当前：{$score} 分({$grade}级)，距 B 级(≥70) 差 {$gap} 分。请逐条修复以下弱维度：";
+
+        // ── Answer Block Quality (20pts in geoskills) ──
+        $qa = (int) ($dims['answer_quality'] ?? 0);
+        if ($qa < 70) {
+            $fix[] = "🔴 Q&A结构({$qa}/100 分)：";
+            $fix[] = "  1) 必须包含 ≥5 组显式问答：Q: 具体问题？ A: 分点回答（每点含数据+案例）";
+            $fix[] = "  2) 必须有 ≥3 处定义句式：「XX 是...」「XX 指的是...」";
+            $fix[] = "  3) 开篇 100 字内直接给出核心结论（结论前置）";
+            $fix[] = "  4) 加入 FAQ 章节：「## 常见问题解答（FAQ）」";
+        }
+
+        // ── Statistical Density (17pts in geoskills) ──
+        $sd = (int) ($dims['statistical_density'] ?? 0);
+        if ($sd < 70) {
+            $fix[] = "🔴 数据密度({$sd}/100 分)：";
+            $fix[] = "  1) 每个 H2 段落必须包含 ≥2 个精确数字（百分比/数值+单位/年份）";
+            $fix[] = "  2) 每个数据标注来源和年份：「据 XX 2025 年数据显示」「2026 年 Q1 实测」";
+            $fix[] = "  3) 对比数据用文字表格呈现：「| 维度 | 方案A | 方案B |」";
+            $fix[] = "  4) 至少 6 处数据点在 1000 字内（geoskills 研究：含统计数据可使 AI 引用率 +30%）";
+        }
+
+        // ── Expertise Signals (13pts in geoskills) ──
+        $es = (int) ($dims['expertise_signals'] ?? 0);
+        if ($es < 70) {
+            $fix[] = "🔴 专家信号({$es}/100 分)：";
+            $fix[] = "  1) 加入 ≥3 处带引号的专家直接引用：「XX 技术总监王工表示：『...』」";
+            $fix[] = "  2) 标注引用来源、职位和年份";
+            $fix[] = "  3) 引用行业报告数据：「据 XX 研究院 2026 年报告...」";
+        }
+
+        // ── Structural Clarity (17pts in geoskills) ──
+        $sc = (int) ($dims['structural_clarity'] ?? 0);
+        if ($sc < 70) {
+            $fix[] = "🔴 结构清晰度({$sc}/100 分)：";
+            $fix[] = "  1) 使用 ## H2 / ### H3 标题层级（≥3 个 H2 + ≥2 个 H3）";
+            $fix[] = "  2) 每个 H2 下至少 1 个无序列表（- 或 1.）";
+            $fix[] = "  3) 每段 ≤200 字，禁止超过 300 字的长段落";
+        }
+
+        // ── Self-Containment (18pts in geoskills) ──
+        $self = (int) ($dims['self_containment'] ?? 0);
+        if ($self < 70) {
+            $fix[] = "🔴 自包含性({$self}/100 分)：";
+            $fix[] = "  1) 每段独立可读，不依赖上下文理解";
+            $fix[] = "  2) 代词(它/他们/这个/那个)密度 <2%，用具体名词替代";
+            $fix[] = "  3) 专业术语首次出现时给简短解释（即：... / 是指...）";
+            $fix[] = "  4) 最优段落长度 134-167 字（geoskills 研究：此区间 AI 引用率最高）";
+        }
+
+        // ── Hedge Words (扣分项) ──
+        $hd = (float) ($dims['hedge_density'] ?? 0);
+        if ($hd > 0.3) {
+            $fix[] = "🔴 虚词过多(密度 {$hd}%，目标 <0.3%)：";
+            $fix[] = "  严禁：可能、也许、大概、似乎、大约、通常、往往、一般、一定程度上、相对";
+            $fix[] = "  用确定性表述替代：「可能有效」→「实测有效」，「大概提升」→「提升 23%」";
+        }
+
+        $fix[] = "═══ 请完全重写文章（不是修改），使 GEO 评分 ≥70 分 ═══";
+
+        return implode("\n\n", $fix);
+    }
+
+    /**
+     * 最后一搏重试提示（第 5 轮）。
+     */
+    private function buildFinalRetryPrompt(string $contentPrompt, array $scoreResult): string
     {
         $dims = $scoreResult['dimensions'] ?? [];
         $score = $scoreResult['score'] ?? 0;
         $grade = $scoreResult['grade'] ?? 'F';
 
-        $fix = [];
-        $fix[] = "【第 {$attempt}/{$maxRetries} 次 GEO 定向重写 — 当前 {$score} 分({$grade})，目标 ≥70 分(B级)——必须严格遵守以下针对性修复指令】";
+        return <<<PROMPT
+═══ 最后一轮 GEO 重写（第 5/5 轮）—— 当前 {$score} 分({$grade}级) ═══
 
-        // Q&A 结构弱 → 加强问答
-        $qa = (int) ($dims['answer_quality'] ?? 0);
-        if ($qa < 50) {
-            $fix[] = '【Q&A结构不足(当前'.$qa.'分)】文中必须包含 ≥5 组 Q&A 问答。格式：Q: 具体问题？ A: 分点回答（每点含数据+案例+对比）。';
-        }
+你必须从头重写一篇全新的文章。以下铁律如有违反，直接判为不及格：
 
-        // 数据密度弱 → 加强数据
-        $sd = (int) ($dims['statistical_density'] ?? 0);
-        if ($sd < 50) {
-            $fix[] = '【数据密度不足(当前'.$sd.'分)】每个段落必须包含 ≥2 个具体数字（百分比/数值+单位/年份），引用来源。';
-        }
+【结构铁律】
+- 标题含核心关键词
+- 开头 100 字内直接回答核心问题
+- ≥5 组完整 Q&A（Q: 具体问题？A: 分点回答含数据）
+- ≥3 个 ## H2 + ≥2 个 ### H3 标题层级
+- 每段 ≤200 字
 
-        // 专家信号弱 → 加强引用
-        $es = (int) ($dims['expertise_signals'] ?? 0);
-        if ($es < 50) {
-            $fix[] = '【专家信号不足(当前'.$es.'分)】必须包含 ≥3 处带引号的专家/技术人员直接引用，标注来源和年份。';
-        }
+【数据铁律】
+- 每个 H2 段落 ≥2 个精确数字（百分比或数值+单位）
+- 每个数据标注来源年份
+- ≥1 组文字对比表
 
-        // 结构清晰度弱
-        $sc = (int) ($dims['structural_clarity'] ?? 0);
-        if ($sc < 50) {
-            $fix[] = '【结构不够清晰(当前'.$sc.'分)】必须使用 ## H2 / ### H3 标题层级，每段 ≤200 字，配合无序列表。';
-        }
+【权威铁律】
+- ≥3 处带引号的专家直接引用，标注姓名+职位+年份
+- ≥1 处引用行业报告/研究数据
 
-        // 虚词过多
-        $hd = (float) ($dims['hedge_density'] ?? 0);
-        if ($hd > 0.5) {
-            $fix[] = '【虚词过多(密度'.$hd.'%)】严禁使用：可能、也许、大概、似乎、大约、通常、往往、一般。用确定性表述替代。';
-        }
+【语言铁律】
+- 零虚词：删除所有"可能/也许/大概/似乎/大约/通常/往往/一般"
+- 零代词依赖：每段独立可读，不用"它/这个/那个"指代上文
 
-        // 自包含性弱
-        $self = (int) ($dims['self_containment'] ?? 0);
-        if ($self < 50) {
-            $fix[] = '【自包含性不足(当前'.$self.'分)】每段独立可读，少用代词(它/他们/这个/那个)，用具体名词替代。首次出现的术语给出简短解释。';
-        }
-
-        $fix[] = '请根据以上针对性反馈，重新输出完整的优化后文章。';
-
-        return implode("\n\n", $fix);
+【原始任务】
+{$contentPrompt}
+PROMPT;
     }
 
     private function geoOptimizationInstruction(): string
