@@ -538,7 +538,6 @@ async function loadAuthPlatforms() {
   const el = h("authList");
   el.innerHTML = '<div class="empty-state"><div class="icon">⏳</div><p>加载中...</p></div>';
 
-  // 同时读两个数据源
   let dbPlatforms = {}, cachePlatforms = {};
   try {
     const dbResp = await fetch(`${CLOUD}/api/v1/rpa/client-platforms?workspace_id=${currentWs}`);
@@ -553,24 +552,25 @@ async function loadAuthPlatforms() {
   } catch(e) { log("⚠️ RPA缓存读取失败: "+e.message); }
 
   el.innerHTML = AUTH_PLATFORMS.map(p => {
-    const db = dbPlatforms[p.key];           // 云端DB: 客户端是否绑定
-    const cache = cachePlatforms[p.key];      // RPA缓存: 是否有Cookie
-    const dbOk = db && db.status === 'active';
-    const cacheOk = cache && cache.valid;
+    const unified = dbPlatforms[p.key] || {};
+    const cache = cachePlatforms[p.key];
+    const dbOk = unified.db_status === 'active';
+    const cacheOk = (cache && cache.valid) || unified.cache_valid;
+    const status = unified.status || (dbOk && cacheOk ? 'ready' : (!dbOk && cacheOk ? 'need_bind' : 'unbound'));
 
     let statusText, statusClass, btnText, btnAction;
-    if (dbOk && cacheOk) {
-      statusText = '✅ 可分发'; statusClass = 'badge-valid';
-      btnText = '🔄 重新授权'; btnAction = `authLogin('${p.key}')`;
+    if (status === 'ready') {
+      statusText = unified.status_label || '\u{1F7E2} 可分发'; statusClass = 'badge-valid';
+      btnText = '\u{1F504} 重新授权'; btnAction = `authLogin('${p.key}')`;
+    } else if (status === 'need_bind') {
+      statusText = unified.status_label || '\u{1F7E0} 待绑定'; statusClass = 'badge-fail';
+      btnText = '\u{1F5D1} 清缓存'; btnAction = `clearCache('${p.key}')`;
     } else if (dbOk && !cacheOk) {
-      statusText = '⚠️ 需登录'; statusClass = 'badge-expired';
-      btnText = '🔑 授权登录'; btnAction = `authLogin('${p.key}')`;
-    } else if (!dbOk && cacheOk) {
-      statusText = '⚠️ 已解绑'; statusClass = 'badge-fail';
-      btnText = '🗑 清缓存'; btnAction = `clearCache('${p.key}')`;
+      statusText = unified.status_label || '\u{1F7E1} 需登录'; statusClass = 'badge-expired';
+      btnText = '\u{1F511} 授权登录'; btnAction = `authLogin('${p.key}')`;
     } else {
-      statusText = '未绑定'; statusClass = 'badge-empty';
-      btnText = '🔑 授权登录'; btnAction = `authLogin('${p.key}')`;
+      statusText = unified.status_label || '⚪ 未绑定'; statusClass = 'badge-empty';
+      btnText = '\u{1F511} 授权登录'; btnAction = `authLogin('${p.key}')`;
     }
 
     return `<div class="cache-item">
@@ -583,21 +583,8 @@ async function loadAuthPlatforms() {
       <button class="btn btn-primary btn-sm" onclick="${btnAction}">${btnText}</button>
     </div>`;
   }).join("");
-  h("authStatus").textContent = `WS-${currentWs} | DB+缓存双校验`;
+  h("authStatus").textContent = `WS-${currentWs} | 统一四态校验`;
 }
-
-async function clearCache(platform) {
-  if (!confirm(`清除 ${platform} 的本地Cookie缓存？`)) return;
-  try {
-    const resp = await fetch(`${API}/api/cache/clear`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ workspace_id: currentWs, platform_key: platform }),
-    });
-    const data = await resp.json();
-    log(data.success ? `✅ ${platform} 缓存已清除` : `⚠️ ${data.message}`);
-    loadAuthPlatforms();
-  } catch(e) { log("❌ 清除失败: "+e.message); }
 }
 
 async function authLogin(platform) {
