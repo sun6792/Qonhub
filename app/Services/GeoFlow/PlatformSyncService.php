@@ -131,7 +131,7 @@ class PlatformSyncService
         foreach ($allPlatforms as $key => $info) {
             $db = $dbAccounts->get($key);
             $pub = $pubAccounts->get($key);
-            $cacheFile = storage_path("rpa/states/{$workspaceId}/{$key}.json");
+            $cacheFile = base_path("rpa-engine/storage/states/{$workspaceId}/{$key}.json");
             $hasCache = file_exists($cacheFile) && filesize($cacheFile) > 100;
 
             $result[] = [
