@@ -19,18 +19,16 @@ class ClientAuthController extends Controller
     public function login(Request $request): RedirectResponse
     {
         $request->validate([
-            'email' => ['required', 'string'],
+            'username' => ['required', 'string'],
             'password' => ['required', 'string'],
         ]);
 
-        // 支持用邮箱或用户名登录
-        $loginField = filter_var($request->input('email'), FILTER_VALIDATE_EMAIL) ? 'email' : 'username';
-        $credentials = [
-            $loginField => $request->input('email'),
-            'password' => $request->input('password'),
-        ];
+        $loginId = $request->input('username');
 
-        if (Auth::guard('client')->attempt($credentials, $request->boolean('remember'))) {
+        // 支持用户名或邮箱登录：自动检测
+        $field = filter_var($loginId, FILTER_VALIDATE_EMAIL) ? 'email' : 'username';
+
+        if (Auth::guard('client')->attempt([$field => $loginId, 'password' => $request->input('password')], $request->boolean('remember'))) {
             $request->session()->regenerate();
 
             /** @var ClientUser $client */
@@ -41,8 +39,8 @@ class ClientAuthController extends Controller
         }
 
         return back()->withErrors([
-            'email' => '邮箱或密码不正确',
-        ])->onlyInput('email');
+            'username' => '账号或密码不正确',
+        ])->onlyInput('username');
     }
 
     public function logout(Request $request): RedirectResponse
