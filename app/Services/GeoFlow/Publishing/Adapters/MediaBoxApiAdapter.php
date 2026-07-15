@@ -39,7 +39,7 @@ class MediaBoxApiAdapter extends BasePlatformAdapter
             ]);
 
         if (! $orderResp->successful()) {
-            return $this->fail('下单失败', $orderResp->json());
+            return $this->failResponse('下单失败', $orderResp->json());
         }
 
         $orderData = $orderResp->json('data') ?? [];
@@ -95,15 +95,5 @@ class MediaBoxApiAdapter extends BasePlatformAdapter
 
         return $meta['media_ids'] ?? [];
     }
-
-    private function fail(string $message, array $raw): array
-    {
-        return [
-            'success' => false,
-            'remote_id' => '',
-            'remote_url' => '',
-            'remote_status' => 'error',
-            'raw_response' => array_merge($raw, ['error' => $message]),
-        ];
-    }
+    // failResponse() 继承自 BasePlatformAdapter
 }

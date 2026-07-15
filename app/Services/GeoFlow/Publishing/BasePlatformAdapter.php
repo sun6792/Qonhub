@@ -359,6 +359,20 @@ abstract class BasePlatformAdapter
 
     // ── 工具方法 ──────────────────────────────────────────
 
+    /**
+     * 统一的失败响应格式，供子类 publish() 方法调用。
+     */
+    protected function failResponse(string $message, array $raw = []): array
+    {
+        return [
+            'success' => false,
+            'remote_id' => '',
+            'remote_url' => '',
+            'remote_status' => 'error',
+            'raw_response' => array_merge($raw, ['error' => $message]),
+        ];
+    }
+
     protected function getDecryptedCredential(): string
     {
         $service = app(\App\Services\GeoFlow\Publishing\AccountPoolService::class);

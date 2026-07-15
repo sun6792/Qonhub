@@ -20,10 +20,11 @@ class AiVisibilityController extends Controller
 
     public function index(): View
     {
-        $workspaces = Workspace::query()
+        $wsQuery = Workspace::query()
             ->where('status', 'active')
-            ->orderBy('name')
-            ->get();
+            ->orderBy('name');
+        $this->scopeByOperatorWorkspaces($wsQuery, Workspace::class);
+        $workspaces = $wsQuery->get();
 
         $workspaceSummaries = $workspaces->map(function (Workspace $ws): array {
             $latestSnapshots = AiVisibilitySnapshot::query()

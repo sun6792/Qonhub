@@ -101,6 +101,7 @@ class WorkspaceController extends Controller
             ->with(['owner', 'platformAccounts'])
             ->where('slug', $slug)
             ->firstOrFail();
+        $this->authorizeWorkspaceAccess((int) $workspace->id);
 
         $workspace->touchActivity();
 
@@ -131,6 +132,7 @@ class WorkspaceController extends Controller
     public function edit(string $slug): View
     {
         $workspace = Workspace::query()->where('slug', $slug)->firstOrFail();
+        $this->authorizeWorkspaceAccess((int) $workspace->id);
         $operators = Admin::query()->where('status', 'active')->orderBy('display_name')->get();
 
         return view('admin.workspaces.edit', [
@@ -145,6 +147,7 @@ class WorkspaceController extends Controller
     public function update(Request $request, string $slug): RedirectResponse
     {
         $workspace = Workspace::query()->where('slug', $slug)->firstOrFail();
+        $this->authorizeWorkspaceAccess((int) $workspace->id);
 
         $payload = $request->validate([
             'name' => ['required', 'string', 'max:120'],
@@ -156,9 +159,18 @@ class WorkspaceController extends Controller
             'brand_keywords' => ['nullable', 'string'],
             'status' => ['required', 'string', 'in:active,paused,archived'],
             'logo_url' => ['nullable', 'url', 'max:500'],
+            'auto_deploy_scout' => ['nullable', 'boolean'],
+            'auto_optimize_iteration' => ['nullable', 'boolean'],
         ]);
 
         $payload['brand_keywords'] = $this->parseKeywords($payload['brand_keywords'] ?? '');
+
+        // v2.6.0: 智能体配置合并到 workspace.config JSON
+        $config = $workspace->config ?? [];
+        $config['auto_deploy_scout'] = (bool) ($payload['auto_deploy_scout'] ?? ($config['auto_deploy_scout'] ?? true));
+        $config['auto_optimize_iteration'] = (bool) ($payload['auto_optimize_iteration'] ?? ($config['auto_optimize_iteration'] ?? false));
+        $payload['config'] = $config;
+        unset($payload['auto_deploy_scout'], $payload['auto_optimize_iteration']);
 
         $this->workspaceService->update($workspace, $payload);
 
@@ -170,6 +182,7 @@ class WorkspaceController extends Controller
     public function assignResource(Request $request, string $slug): RedirectResponse
     {
         $workspace = Workspace::query()->where('slug', $slug)->firstOrFail();
+        $this->authorizeWorkspaceAccess((int) $workspace->id);
 
         $payload = $request->validate([
             'type' => ['required', 'string', 'in:Task,Article,KnowledgeBase,TitleLibrary,KeywordLibrary,ImageLibrary'],
@@ -201,6 +214,7 @@ class WorkspaceController extends Controller
     public function regenerateToken(Request $request, string $slug): RedirectResponse
     {
         $workspace = Workspace::query()->where('slug', $slug)->firstOrFail();
+        $this->authorizeWorkspaceAccess((int) $workspace->id);
 
         $workspace->forceFill([
             'access_token' => \Illuminate\Support\Str::random(40),
@@ -220,6 +234,7 @@ class WorkspaceController extends Controller
     public function createClientUser(Request $request, string $slug): RedirectResponse
     {
         $workspace = Workspace::query()->where('slug', $slug)->firstOrFail();
+        $this->authorizeWorkspaceAccess((int) $workspace->id);
 
         $payload = $request->validate([
             'client_name' => ['required', 'string', 'max:100'],
@@ -255,6 +270,7 @@ class WorkspaceController extends Controller
     public function resetClientPassword(Request $request, string $slug): RedirectResponse
     {
         $workspace = Workspace::query()->where('slug', $slug)->firstOrFail();
+        $this->authorizeWorkspaceAccess((int) $workspace->id);
 
         $payload = $request->validate([
             'client_user_id' => ['required', 'integer', 'exists:client_users,id'],
@@ -285,10 +301,14 @@ class WorkspaceController extends Controller
 
     public function revealClientPassword(string $slug, int $clientUserId): \Illuminate\Http\JsonResponse
     {
-        // 仅超级管理员可查看明文密码（需操作审计）
-        $this->ensureSuperAdmin();
-
         $workspace = Workspace::query()->where('slug', $slug)->firstOrFail();
+        $this->authorizeWorkspaceAccess((int) $workspace->id);
+
+        // 仅超级管理员可查看明文密码
+        $admin = auth('admin')->user();
+        if (! $admin || ! $admin->isSuperAdmin()) {
+            abort(403, '仅超级管理员可查看客户明文密码');
+        }
 
         $client = ClientUser::query()
             ->where('workspace_id', (int) $workspace->id)
@@ -325,6 +345,7 @@ class WorkspaceController extends Controller
     public function deleteClientUser(string $slug, int $clientUserId): RedirectResponse
     {
         $workspace = Workspace::query()->where('slug', $slug)->firstOrFail();
+        $this->authorizeWorkspaceAccess((int) $workspace->id);
 
         $client = ClientUser::query()
             ->where('workspace_id', (int) $workspace->id)
@@ -345,6 +366,7 @@ class WorkspaceController extends Controller
     public function togglePlatformStatus(Request $request, string $slug): RedirectResponse
     {
         $workspace = Workspace::query()->where('slug', $slug)->firstOrFail();
+        $this->authorizeWorkspaceAccess((int) $workspace->id);
 
         $payload = $request->validate([
             'platform_key' => ['required', 'string'],
@@ -394,6 +416,7 @@ class WorkspaceController extends Controller
     public function destroy(string $slug): RedirectResponse
     {
         $workspace = Workspace::query()->where('slug', $slug)->firstOrFail();
+        $this->authorizeWorkspaceAccess((int) $workspace->id);
         $workspace->delete();
 
         return redirect()

@@ -15,11 +15,14 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 
+// Edge浏览器(国内用户标配,兼容最好)
+const BROWSER_CHANNEL = 'msedge';
+
 // ES module __dirname 兼容
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// 注册 stealth 插件
+// stealth 插件正常启用(Edge兼容Chromium内核)
 chromium.use(stealth());
 
 // ══════════════════════════════════════════════════════════
@@ -122,6 +125,7 @@ export class BasePlatformScript {
             launchOpts.proxy = { server: this.proxy };
         }
 
+        launchOpts.channel = BROWSER_CHANNEL;
         const browser = await chromium.launch(launchOpts);
 
         // [改造] storageState 持久化：按 workspaceId + platform 分层隔离

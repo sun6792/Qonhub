@@ -101,6 +101,11 @@ return [
         'redis:distribution' => 60,
         'redis:system-updates' => 120,
         'redis:theme-replication' => 120,
+        'redis:agent_scout' => 120,
+        'redis:agent_strategy' => 120,
+        'redis:agent_content' => 300,
+        'redis:agent_deploy' => 600,
+        'redis:agent_review' => 120,
     ],
 
     /*
@@ -202,7 +207,7 @@ return [
     'defaults' => [
         'supervisor-1' => [
             'connection' => 'redis',
-            'queue' => ['geoflow', 'distribution', 'system-updates', 'theme-replication'],
+            'queue' => ['geoflow', 'distribution', 'system-updates', 'theme-replication', 'agent_scout', 'agent_strategy', 'agent_content', 'agent_deploy', 'agent_review'],
             'balance' => 'auto',
             'autoScalingStrategy' => 'time',
             'maxProcesses' => 1,

@@ -90,6 +90,14 @@ Route::prefix($adminPrefix)->name('admin.')->middleware(['admin.locale'])->group
         Route::get('dashboard', [DashboardController::class, 'index'])->name('dashboard');
         Route::get('analytics', [AnalyticsController::class, 'index'])->name('analytics');
 
+        // v2.6.0 智能体工作流
+        Route::prefix('agents')->name('agents.')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Admin\AgentController::class, 'index'])->name('index');
+            Route::post('start', [\App\Http\Controllers\Admin\AgentController::class, 'start'])->name('start');
+            Route::get('{executionId}', [\App\Http\Controllers\Admin\AgentController::class, 'show'])->name('show')->whereNumber('executionId');
+            Route::post('{executionId}/retry', [\App\Http\Controllers\Admin\AgentController::class, 'retry'])->name('retry')->whereNumber('executionId');
+        });
+
         Route::prefix('system-updates')->name('system-updates.')->group(function () {
             Route::get('/', [SystemUpdateController::class, 'index'])->name('index');
             Route::post('check', [SystemUpdateController::class, 'check'])->name('check');
@@ -428,7 +436,7 @@ Route::prefix($adminPrefix)->name('admin.')->middleware(['admin.locale'])->group
     });
 
     // [新增] RPA 引擎云端同步 API（CORS开放 + X-Api-Key 认证，供本地运营助手调用）
-    Route::prefix('api/v1/rpa')->middleware(['rpa.cors', 'rpa.auth'])->name('rpa.')->group(function () {
+    Route::prefix('api/v1/rpa')->middleware(['rpa.cors', 'rpa.auth', 'throttle:rpa'])->name('rpa.')->group(function () {
         // CORS 预检请求
         Route::options('{any}', fn () => response()->noContent(200, [
             'Access-Control-Allow-Origin' => '*',

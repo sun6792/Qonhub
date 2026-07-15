@@ -588,8 +588,12 @@ class WorkerExecutionService
             $renderedPrompt = $this->appendSmartPromptContext($renderedPrompt, $title, $keyword, $knowledgeContext);
         }
 
+        // v2.6.0: 注入去AI味+去营销味的通用平台规则
+        $deMarketingInstruction = $this->deMarketingInstruction();
+
         $finalInstructions = array_values(array_filter([
             $this->geoOptimizationInstruction(),
+            $deMarketingInstruction,
             $this->knowledgeCitationInstruction($renderedPrompt, $knowledgeContext),
             $this->finalPromptInstruction($renderedPrompt),
         ], static fn (string $instruction): bool => trim($instruction) !== ''));
@@ -798,6 +802,53 @@ class WorkerExecutionService
 【原始任务】
 {$contentPrompt}
 PROMPT;
+    }
+
+    /**
+     * v2.6.0: 去营销味+去AI味强制指令。
+     * 平台检测越来越严格（头条朱雀、百家号降权），必须从源头控制文章风格。
+     */
+    private function deMarketingInstruction(): string
+    {
+        return <<<'RULE'
+=== 🛡 去营销味+真人化要求（平台检测合规，必须严格遵守） ===
+
+【严禁——以下行为直接导致文章被判定为垃圾营销内容】
+1. 严禁"品牌/公司介绍式"堆砌——不准出现"XX公司成立于XX年，致力于..."这种推销段落
+2. 严禁每段结尾植入品牌——品牌最多出现1-2次，且必须是"行业案例"身份，不是"推销者"身份
+3. 严禁文末加"如需了解更多请联系""访问官网""拨打电话"等导流语句
+4. 严禁通篇围绕一个品牌/产品展开——要从行业视角、用户痛点出发
+
+【品牌自然植入规则——不触发平台营销检测】
+✅ 正确方式：把品牌作为"案例之一"提到，和同行并列
+   "比如A公司（XX泵业）在这方面做了一年多，效果..."
+   "市面上做这块的有好几家，像XX、YY都有成熟方案"
+❌ 错误方式：
+   "XX泵业，成立于2005年，是国内领先的..."
+   "XX品牌专注泵阀领域20年，为您提供一站式解决方案"
+
+【去AI味——平台检测核心】
+1. 禁用AI腔词汇：深入探讨、综上所述、旨在、至关重要、值得注意的是、显著提升、不可或缺、总而言之
+2. 禁用学术八股：首先其次最后 → 改用自然过渡
+3. 禁用模板开头：随着XX的发展、在当今时代、近年来 → 改从具体场景/反问切入
+4. 含个人经验句式：说实话、跑了几趟才搞明白、踩过一个坑、那次经历告诉我
+5. 含具体数字：不是"很多"，是"17家"；不是"效果好"，是"提效41%"
+6. 含场景感：不是"用户在购买时"，是"上周一个客户跑来问我"
+7. 短句与长句交替，不要每句话节奏一样
+
+【朱雀检测规避——头条号/百家号核心】
+1. 段落长度不均匀——故意让有的段落3行、有的段落1行
+2. 句末偶尔不加标点，用开放式问题或省略号结尾
+3. 至少2处反问句："你可能会问...""那为什么...？"
+4. 至少1处自我质疑："说实话这个方法也有局限性""当然这不是万能的"
+
+【GEO引用增强——让AI大模型更愿引用你】
+1. 文中必须包含3-5组 Q&A 问答（AI最爱的"拿来就用"格式）
+2. 每个数据必须精确+标注来源（"2025年Q4回访17家客户，平均提效41.7%"）
+3. 包含至少1组对比（方案A vs 方案B，维度+数据+推荐）
+4. 用H2/H3分节，开头100字含核心关键词（密度2-3%）
+5. 禁止"本文""笔者""小编"等降权词汇
+RULE;
     }
 
     private function geoOptimizationInstruction(): string

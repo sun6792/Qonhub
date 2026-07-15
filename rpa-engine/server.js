@@ -467,6 +467,14 @@ app.post("/api/v1/auth-login", auth, async (req, res) => {
     smzdm:       { url: "https://www.smzdm.com/",            name: "值得买" },
     douyin:      { url: "https://creator.douyin.com/",       name: "抖音" },
     kuaishou:    { url: "https://cp.kuaishou.com/",          name: "快手" },
+    // v2.6.0 AI平台授权 (Scout检测用)
+    doubao_ai:   { url: "https://www.doubao.com/chat/",      name: "豆包AI" },
+    yuanbao_ai:  { url: "https://yuanbao.tencent.com/chat/",  name: "腾讯元宝" },
+    baidu_ai:    { url: "https://chat.baidu.com/search",      name: "百度AI" },
+    xfyun_ai:    { url: "https://xinghuo.xfyun.cn/",          name: "讯飞星火" },
+    quark_ai:    { url: "https://ai.quark.cn/",               name: "夸克AI" },
+    nami_ai:     { url: "https://bot.n.cn/",                  name: "纳米AI" },
+    douyin_ai:   { url: "https://www.douyin.com/aisearch",    name: "抖音AI" },
   };
   const info = platformMap[platform];
   if (!info) return res.status(400).json({ error: "unknown platform" });
@@ -474,26 +482,17 @@ app.post("/api/v1/auth-login", auth, async (req, res) => {
   logger.info(`Auth-login: ${info.name} for ws=${workspace_id}`);
 
   try {
-    const browser = await chromium.launch({
+    // v2.6.1: 持久化上下文 — 登录一次永久有效，所有脚本共享Cookie
+    const profileDir = path.join(__dirname, 'storage', 'browser-profile', 'shared');
+    if (!fs.existsSync(profileDir)) fs.mkdirSync(profileDir, { recursive: true });
+
+    const context = await chromium.launchPersistentContext(profileDir, {
+      channel: 'msedge',
       headless: headless !== undefined ? headless : false,
+      viewport: { width: 1366, height: 768 },
       args: ["--no-sandbox", "--disable-blink-features=AutomationControlled"],
     });
-
-    // Load saved state if exists
-    const stateDir = path.join(STORAGE_DIR, String(workspace_id));
-    if (!fs.existsSync(stateDir)) fs.mkdirSync(stateDir, { recursive: true });
-    const stateFile = path.join(stateDir, `${platform}.json`);
-    const contextOpts = {
-      viewport: { width: 1366, height: 768 },
-      locale: "zh-CN",
-      timezoneId: "Asia/Shanghai",
-    };
-    if (fs.existsSync(stateFile)) {
-      try { contextOpts.storageState = JSON.parse(fs.readFileSync(stateFile, "utf-8")); } catch {}
-    }
-
-    const context = await browser.newContext(contextOpts);
-    const page = await context.newPage();
+    const page = context.pages()[0] || await context.newPage();
     await page.goto(info.url, { waitUntil: "domcontentloaded", timeout: 20000 });
 
     // Wait for user to complete login (max 5 min)
@@ -516,20 +515,16 @@ app.post("/api/v1/auth-login", auth, async (req, res) => {
     }
 
     if (loggedIn) {
-      const state = await context.storageState();
-      fs.writeFileSync(stateFile, JSON.stringify(state));
-      logger.info(`Auth-login SUCCESS: ${info.name} state saved`);
-
-      // 通知 Laravel 后端：Cookie 已就绪，更新 DB 状态
+      // 持久化上下文自动保存Cookie，无需手动storageState
+      logger.info(`Auth-login SUCCESS: ${info.name} (persistent)`);
       reportToCloud(`auth-${platform}-${workspace_id}`, {
         success: true, platform, workspace_id,
-        message: `${info.name} Cookie 已保存`,
+        message: `${info.name} Cookie 已持久化`,
       });
-
-      await browser.close();
-      res.json({ success: true, message: `${info.name} 登录成功，Cookie已保存，云端已同步` });
+      await context.close();
+      res.json({ success: true, message: `${info.name} 登录成功，Cookie已持久化` });
     } else {
-      await browser.close();
+      await context.close();
       res.json({ success: false, message: `登录超时（5分钟），请在浏览器中手动完成登录后重试` });
     }
   } catch (err) {

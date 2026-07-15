@@ -26,11 +26,12 @@ class EnterpriseAnchorController extends Controller
 
     public function overview(): View
     {
-        $workspaces = Workspace::query()
+        $query = Workspace::query()
             ->where('status', 'active')
             ->with('enterpriseProfile.certifications')
-            ->orderBy('name')
-            ->get();
+            ->orderBy('name');
+        $this->scopeByOperatorWorkspaces($query, Workspace::class);
+        $workspaces = $query->get();
 
         $platforms = EnterpriseAnchorService::anchorPlatformsByPriority();
         $totalPlatforms = count($platforms);
@@ -85,6 +86,7 @@ class EnterpriseAnchorController extends Controller
     public function manage(string $slug): View
     {
         $workspace = Workspace::query()->where('slug', $slug)->firstOrFail();
+        $this->authorizeWorkspaceAccess((int) $workspace->id);
         $profile = $this->anchorService->getOrInitProfile($workspace);
         $summary = $this->anchorService->certificationSummary($profile);
         $napCheck = $profile->company_full_name ? $this->anchorService->napwConsistencyCheck($profile) : null;
@@ -108,6 +110,7 @@ class EnterpriseAnchorController extends Controller
     public function saveProfile(Request $request, string $slug): RedirectResponse
     {
         $workspace = Workspace::query()->where('slug', $slug)->firstOrFail();
+        $this->authorizeWorkspaceAccess((int) $workspace->id);
 
         $data = $request->validate([
             'company_full_name' => ['required', 'string', 'max:200'],
@@ -141,6 +144,7 @@ class EnterpriseAnchorController extends Controller
     public function markCertified(Request $request, string $slug): RedirectResponse
     {
         $workspace = Workspace::query()->where('slug', $slug)->firstOrFail();
+        $this->authorizeWorkspaceAccess((int) $workspace->id);
         $profile = $this->anchorService->getOrInitProfile($workspace);
 
         $payload = $request->validate([
@@ -176,6 +180,7 @@ class EnterpriseAnchorController extends Controller
     public function revokeCertification(Request $request, string $slug): RedirectResponse
     {
         $workspace = Workspace::query()->where('slug', $slug)->firstOrFail();
+        $this->authorizeWorkspaceAccess((int) $workspace->id);
         $profile = $this->anchorService->getOrInitProfile($workspace);
 
         $payload = $request->validate([
@@ -200,6 +205,7 @@ class EnterpriseAnchorController extends Controller
     public function rpaRegister(Request $request, string $slug, string $platformKey): RedirectResponse
     {
         $workspace = Workspace::query()->where('slug', $slug)->firstOrFail();
+        $this->authorizeWorkspaceAccess((int) $workspace->id);
         $profile = EnterpriseProfile::query()->where('workspace_id', (int) $workspace->id)->first();
 
         if (! $profile || empty($profile->company_full_name)) {
@@ -316,6 +322,7 @@ class EnterpriseAnchorController extends Controller
     public function checkNapw(string $slug): RedirectResponse
     {
         $workspace = Workspace::query()->where('slug', $slug)->firstOrFail();
+        $this->authorizeWorkspaceAccess((int) $workspace->id);
         $profile = $this->anchorService->getOrInitProfile($workspace);
 
         $result = $this->anchorService->napwConsistencyCheck($profile);

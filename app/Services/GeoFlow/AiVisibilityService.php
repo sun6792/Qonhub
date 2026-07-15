@@ -28,36 +28,29 @@ class AiVisibilityService
         'qianwen'      => ['name' => '通义千问',    'icon' => '🟠', 'color' => '#F97316', 'url' => 'https://tongyi.aliyun.com/qianwen/',  'pc' => true, 'mobile' => true],
         'kimi'         => ['name' => 'Kimi',       'icon' => '🌙', 'color' => '#6366F1', 'url' => 'https://kimi.moonshot.cn/',          'pc' => true, 'mobile' => true],
         'xf_xinghuo'   => ['name' => '讯飞星火',    'icon' => '🔥', 'color' => '#EF4444', 'url' => 'https://xinghuo.xfyun.cn/',          'pc' => true, 'mobile' => true],
-        'nami_ai'      => ['name' => '纳米AI',     'icon' => '🧬', 'color' => '#10B981', 'url' => 'https://www.nami.com/',              'pc' => true, 'mobile' => false],
+        'nami_ai'      => ['name' => '纳米AI',     'icon' => '🧬', 'color' => '#10B981', 'url' => 'https://bot.n.cn/',                   'pc' => true, 'mobile' => true],
         'baidu_ai'     => ['name' => '百度AI搜索',  'icon' => '🔍', 'color' => '#2563EB', 'url' => 'https://chat.baidu.com/search',      'pc' => true, 'mobile' => true],
-        'wechat_ai'    => ['name' => '微信AI',     'icon' => '💬', 'color' => '#07C160', 'url' => 'https://weixin.qq.com/',             'pc' => false, 'mobile' => true],
-        'douyin_ai'    => ['name' => '抖音AI',     'icon' => '🎵', 'color' => '#000000', 'url' => 'https://www.douyin.com/',            'pc' => false, 'mobile' => true],
-        'quark_ai'     => ['name' => '夸克AI',     'icon' => '⚛️', 'color' => '#FF6A00', 'url' => 'https://ai.quark.cn/',               'pc' => true, 'mobile' => true],
+        'wechat_ai'    => ['name' => '微信AI',     'icon' => '💬', 'color' => '#07C160', 'url' => 'https://yuanbao.tencent.com/',          'pc' => false, 'mobile' => true],
+        'douyin_ai'    => ['name' => '抖音AI',     'icon' => '🎵', 'color' => '#000000', 'url' => 'https://www.douyin.com/aisearch',      'pc' => false, 'mobile' => true],
+        'quark_ai'     => ['name' => '夸克AI',     'icon' => '⚛️', 'color' => '#FF6A00', 'url' => 'https://www.quark.cn/',               'pc' => true, 'mobile' => true],
     ];
 
     /**
-     * @deprecated 使用 self::AI_PLATFORMS
+     * @deprecated v2.6.0: 不再使用单LLM问答模式。保留常量仅为向下兼容。
      */
-    private const AI_PLATFORM_PROMPTS = [
-        'deepseek' => '请简要回答以下问题，并引用你参考的信息来源：',
-        'doubao' => '请回答以下问题：',
-        'wenxin' => '请回答以下问题：',
-        'kimi' => '请回答以下问题：',
-        'qianwen' => '请回答以下问题：',
-        'yuanbao' => '请回答以下问题：',
-    ];
+    private const AI_PLATFORM_PROMPTS = [];
 
     private const MAX_QUERIES_PER_RUN = 50;
-    private const QUERY_DELAY_MS = 1500;
 
-    public function __construct(
-        private readonly ApiKeyCrypto $apiKeyCrypto,
-    ) {}
+    public function __construct() {}
 
     /**
-     * 对单个工作空间执行AI引用检测。
+     * v2.6.0 重构：对单个工作空间执行 AI 引用检测。
      *
-     * @return array{total:int, mentioned:int, checks:list<array>}
+     * 改为异步并行模式：每个 (平台, 关键词) 组合分发为独立的 PlatformScoutJob，
+     * 不再串行阻塞。API 平台走真实 LLM API 调用，非 API 平台走 Playwright MCP 浏览器。
+     *
+     * @return array{total:int, mentioned:int, checks:list<array>, mode:string}
      */
     public function checkWorkspace(Workspace $workspace): array
     {
@@ -65,71 +58,46 @@ class AiVisibilityService
         $brandName = $workspace->client_company_name ?: $workspace->name;
 
         if ($keywords === []) {
-            return ['total' => 0, 'mentioned' => 0, 'checks' => []];
+            return ['total' => 0, 'mentioned' => 0, 'checks' => [], 'mode' => 'async'];
         }
 
-        $aiModel = $this->resolveAiModel();
-        if (! $aiModel) {
-            return ['total' => 0, 'mentioned' => 0, 'checks' => []];
-        }
-
+        $dispatched = 0;
         $checks = [];
-        $mentioned = 0;
-        $count = 0;
 
         foreach (array_keys(self::AI_PLATFORMS) as $platform) {
             foreach (array_slice($keywords, 0, 3) as $keyword) {
-                if ($count >= self::MAX_QUERIES_PER_RUN) {
+                if ($dispatched >= self::MAX_QUERIES_PER_RUN) {
                     break 2;
                 }
 
-                $queryText = $this->buildQuery($platform, $brandName, $keyword);
+                \App\Jobs\PlatformScoutJob::dispatch(
+                    (int) $workspace->id,
+                    $platform,
+                    $keyword,
+                    $brandName,
+                )->onQueue('agent_scout');
 
-                try {
-                    $response = $this->queryAi($aiModel, $queryText);
-                    $isMentioned = $this->detectMention($response, $brandName);
-                    $snippet = $isMentioned ? $this->extractSnippet($response, $brandName) : null;
+                $checks[] = [
+                    'platform' => $platform,
+                    'keyword' => $keyword,
+                    'dispatched' => true,
+                ];
 
-                    $check = AiVisibilityCheck::query()->create([
-                        'workspace_id' => (int) $workspace->id,
-                        'ai_platform' => $platform,
-                        'query_keyword' => $keyword,
-                        'query_text' => $queryText,
-                        'mentioned' => $isMentioned,
-                        'mention_type' => $isMentioned ? 'brand_name' : null,
-                        'response_snippet' => $snippet,
-                        'checked_at' => now(),
-                    ]);
-
-                    $checks[] = [
-                        'platform' => $platform,
-                        'keyword' => $keyword,
-                        'mentioned' => $isMentioned,
-                    ];
-
-                    if ($isMentioned) {
-                        $mentioned++;
-                    }
-
-                    $count++;
-
-                    if ($count < self::MAX_QUERIES_PER_RUN) {
-                        usleep(self::QUERY_DELAY_MS * 1000);
-                    }
-                } catch (Throwable $e) {
-                    Log::warning("AI visibility check failed: {$e->getMessage()}", [
-                        'workspace_id' => $workspace->id,
-                        'platform' => $platform,
-                        'keyword' => $keyword,
-                    ]);
-                }
+                $dispatched++;
             }
         }
 
+        Log::info('Scout jobs dispatched', [
+            'workspace_id' => $workspace->id,
+            'total_jobs' => $dispatched,
+            'mode' => 'async_parallel',
+        ]);
+
         return [
-            'total' => $count,
-            'mentioned' => $mentioned,
+            'total' => $dispatched,
+            'mentioned' => 0, // 异步模式下即时返回，实际结果由 Job 写入 DB
             'checks' => $checks,
+            'mode' => 'async',
         ];
     }
 
@@ -237,96 +205,11 @@ class AiVisibilityService
         ];
     }
 
-    private function resolveAiModel(): ?AiModel
-    {
-        return AiModel::query()
-            ->where('status', 'active')
-            ->where(fn ($q) => $q->whereNull('model_type')->orWhere('model_type', '')->orWhere('model_type', 'chat'))
-            ->orderBy('failover_priority')
-            ->first();
-    }
+    // v2.6.0: 旧的 queryAi()/detectMention()/buildQuery() 等方法已移除。
+    // 检测逻辑已迁移至 PlatformScoutJob：API 平台走 LlmOrchestratorService 真实调用，
+    // 非 API 平台走 PlaywrightMcpTool 浏览器抓取。
+    // 公共 API (clientVisibilityData/dashboardOverview/brandTop5Share/brandCompare/runningWords/collectedWords) 保持不变。
 
-    private function buildQuery(string $platform, string $brandName, string $keyword): string
-    {
-        $prefix = self::AI_PLATFORM_PROMPTS[$platform] ?? self::AI_PLATFORM_PROMPTS['deepseek'];
-
-        return "{$prefix}关于{$brandName}在{$keyword}方面有什么特点和优势？";
-    }
-
-    /**
-     * @return string
-     */
-    private function queryAi(AiModel $model, string $prompt): string
-    {
-        $apiKey = $this->apiKeyCrypto->decrypt((string) $model->getRawOriginal('api_key') ?? '');
-        $providerUrl = OpenAiRuntimeProvider::resolveChatBaseUrl((string) ($model->api_url ?? ''));
-        $driver = OpenAiRuntimeProvider::resolveChatDriver($providerUrl, (string) ($model->model_id ?? ''));
-        $providerName = OpenAiRuntimeProvider::registerProvider('visibility', $driver, $providerUrl, $apiKey);
-
-        $agent = new \App\Ai\Agents\MarkdownContentWriterAgent(
-            instructions: '你是一个客观的AI助手，请根据你的知识库如实回答问题。如果不知道就说不确定。',
-            maxTokens: 1024,
-        );
-
-        $response = $agent->prompt($prompt, [], $providerName, (string) ($model->model_id ?? ''));
-
-        return (string) ($response->text ?? '');
-    }
-
-    private function detectMention(string $response, string $brandName): bool
-    {
-        $response = mb_strtolower($response, 'UTF-8');
-        $brandName = mb_strtolower($brandName, 'UTF-8');
-
-        if ($brandName !== '' && str_contains($response, $brandName)) {
-            return true;
-        }
-
-        // 检查是否包含品牌名的一部分（至少2个字）
-        if (mb_strlen($brandName) >= 4) {
-            $parts = $this->brandNameTokens($brandName);
-            foreach ($parts as $part) {
-                if (str_contains($response, $part)) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
-    }
-
-    /**
-     * @return list<string>
-     */
-    private function brandNameTokens(string $brandName): array
-    {
-        $length = mb_strlen($brandName);
-        $tokens = [];
-        for ($i = 2; $i <= min(4, $length); $i++) {
-            for ($j = 0; $j <= $length - $i; $j++) {
-                $tokens[] = mb_substr($brandName, $j, $i);
-            }
-        }
-
-        return array_values(array_unique($tokens));
-    }
-
-    private function extractSnippet(string $response, string $brandName): string
-    {
-        $pos = mb_stripos($response, $brandName);
-        if ($pos === false) {
-            return mb_substr($response, 0, 200);
-        }
-
-        $start = max(0, $pos - 60);
-        $end = min(mb_strlen($response), $pos + mb_strlen($brandName) + 100);
-
-        return mb_substr($response, $start, $end - $start);
-    }
-
-    /**
-     * @return array{total:int, mentioned:int, top_keywords:list<string>}
-     */
     // ─── P4 新增：AI 数据大屏 + 竞争力报告 ───────────────
 
     /**

@@ -21,6 +21,7 @@
     $menu = [
         'dashboard' => ['route' => 'admin.dashboard', 'name' => __('admin.nav.dashboard')],
         'analytics' => ['route' => 'admin.analytics', 'name' => __('admin.nav.analytics')],
+        'agents' => ['route' => 'admin.agents.index', 'name' => '智能体'],
         'workspaces' => ['route' => 'admin.workspaces.index', 'name' => '工作空间'],
         'tasks' => ['route' => 'admin.tasks.index', 'name' => __('admin.nav.tasks')],
         'distribution' => ['route' => 'admin.distribution.index', 'name' => __('admin.nav.distribution')],
@@ -34,6 +35,8 @@
     }
     $subMap = [
         'admin.analytics' => 'analytics',
+        'admin.agents.index' => 'agents',
+        'admin.agents.show' => 'agents',
         'admin.workspaces.index' => 'workspaces',
         'admin.workspaces.create' => 'workspaces',
         'admin.workspaces.show' => 'workspaces',

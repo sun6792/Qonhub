@@ -26,15 +26,15 @@ Route::prefix($adminPrefix)->name('admin.')->middleware(['admin.auth', 'admin.lo
         Route::get('/', [WorkspaceController::class, 'index'])->name('index');
         Route::get('create', [WorkspaceController::class, 'create'])->name('create');
         Route::post('create', [WorkspaceController::class, 'store'])->name('store');
-        Route::get('{slug}', [WorkspaceController::class, 'show'])->name('show');
         Route::get('{slug}/edit', [WorkspaceController::class, 'edit'])->name('edit');
+        Route::get('{slug}/client-user/{clientUserId}/reveal-password', [WorkspaceController::class, 'revealClientPassword'])->name('client-user.reveal-password')->whereNumber('clientUserId');
+        Route::get('{slug}', [WorkspaceController::class, 'show'])->name('show');
         Route::put('{slug}', [WorkspaceController::class, 'update'])->name('update');
         Route::post('{slug}/assign', [WorkspaceController::class, 'assignResource'])->name('assign');
         Route::post('{slug}/regenerate-token', [WorkspaceController::class, 'regenerateToken'])->name('regenerate-token');
         Route::post('{slug}/client-user', [WorkspaceController::class, 'createClientUser'])->name('client-user.create');
         Route::post('{slug}/toggle-platform', [WorkspaceController::class, 'togglePlatformStatus'])->name('toggle-platform');
         Route::post('{slug}/client-user/reset-password', [WorkspaceController::class, 'resetClientPassword'])->name('client-user.reset-password');
-        Route::get('{slug}/client-user/{clientUserId}/reveal-password', [WorkspaceController::class, 'revealClientPassword'])->name('client-user.reveal-password')->whereNumber('clientUserId');
         Route::post('{slug}/client-user/{clientUserId}/delete', [WorkspaceController::class, 'deleteClientUser'])->name('client-user.delete')->whereNumber('clientUserId');
         Route::post('{slug}/delete', [WorkspaceController::class, 'destroy'])->name('delete');
     });
@@ -96,6 +96,7 @@ Route::middleware('web')->prefix('client')->name('client.')->group(function (): 
         Route::get('/', [ClientPortalController::class, 'dashboard'])->name('dashboard');
         Route::get('/articles', [ClientPortalController::class, 'articles'])->name('articles');
         Route::get('/ai-visibility', [ClientPortalController::class, 'aiVisibility'])->name('ai-visibility');
+        Route::get('/snapshot/{checkId}', [ClientPortalController::class, 'snapshot'])->name('snapshot')->whereNumber('checkId');
         Route::get('/competitiveness', [ClientPortalController::class, 'competitiveness'])->name('competitiveness');
         Route::post('/content-request', [ClientPortalController::class, 'contentRequestStore'])->name('content-request.store');
         Route::post('/enterprise-profile/save', [ClientPortalController::class, 'enterpriseProfileSave'])->name('enterprise-profile.save');

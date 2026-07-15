@@ -34,14 +34,13 @@ class CheckAiVisibilityCommand extends Command
 
             try {
                 $result = $visibilityService->checkWorkspace($workspace);
-                $this->info("完成！查询 {$result['total']} 次，品牌提及 {$result['mentioned']} 次");
-                $this->table(['平台', '关键词', '是否提及'], array_map(
-                    static fn (array $c): array => [$c['platform'], $c['keyword'], $c['mentioned'] ? '✅ 是' : '❌ 否'],
-                    $result['checks']
-                ));
-
-                $visibilityService->snapshotForWorkspace($workspace, now());
-                $this->info('每日快照已生成');
+                $mode = $result['mode'] ?? 'sync';
+                if ($mode === 'async') {
+                    $this->info("已分发 {$result['total']} 个异步检测任务到 agent_scout 队列");
+                    $this->warn("提示: 等待1-2分钟（任务执行完成后），再运行一次生成快照");
+                } else {
+                    $this->info("完成！查询 {$result['total']} 次，品牌提及 ".($result['mentioned'] ?? 0)." 次");
+                }
             } catch (Throwable $e) {
                 $this->error("检测失败: {$e->getMessage()}");
                 Log::error('AI visibility check failed: '.$e->getMessage());
@@ -64,7 +63,12 @@ class CheckAiVisibilityCommand extends Command
 
             try {
                 $result = $visibilityService->checkWorkspace($workspace);
-                $this->line("    查询 {$result['total']} 次，提及 {$result['mentioned']} 次");
+                $mode = $result['mode'] ?? 'sync';
+                if ($mode === 'async') {
+                    $this->line("    已分发 {$result['total']} 个异步检测任务到 agent_scout 队列");
+                } else {
+                    $this->line("    查询 {$result['total']} 次，提及 ".($result['mentioned'] ?? 0)." 次");
+                }
                 $success++;
             } catch (Throwable $e) {
                 $this->error("    失败: {$e->getMessage()}");

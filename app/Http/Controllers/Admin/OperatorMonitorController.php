@@ -18,11 +18,16 @@ class OperatorMonitorController extends Controller
 
     public function index(): View
     {
-        // 按运营人员聚合
-        $operators = Admin::query()
-            ->where('status', 'active')
-            ->orderBy('display_name')
-            ->get()
+        /** @var Admin $currentAdmin */
+        $currentAdmin = auth('admin')->user();
+        $isSuperAdmin = $currentAdmin && $currentAdmin->isSuperAdmin();
+
+        // 运营师只能看自己，超管看全部
+        $operatorQuery = Admin::query()->where('status', 'active')->orderBy('display_name');
+        if (! $isSuperAdmin && $currentAdmin) {
+            $operatorQuery->whereKey((int) $currentAdmin->id);
+        }
+        $operators = $operatorQuery->get()
             ->map(function (Admin $admin): array {
                 $workspaces = Workspace::query()
                     ->where('owner_admin_id', (int) $admin->id)
@@ -75,6 +80,14 @@ class OperatorMonitorController extends Controller
 
     public function detail(int $adminId): View
     {
+        $currentAdmin = auth('admin')->user();
+        $isSuperAdmin = $currentAdmin && $currentAdmin->isSuperAdmin();
+
+        // 运营师只能看自己，超管看任意
+        if (! $isSuperAdmin && (! $currentAdmin || (int) $currentAdmin->id !== $adminId)) {
+            abort(403);
+        }
+
         $admin = Admin::query()->whereKey($adminId)->firstOrFail();
 
         $workspaces = Workspace::query()

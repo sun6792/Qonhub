@@ -219,7 +219,128 @@ final class KnowledgeSourceParser
             ];
         }
 
-        throw new \RuntimeException(__('admin.knowledge_bases.error.file_type_invalid'));
+        // PDF: 尝试提取文字
+        if ($extension === 'pdf') {
+            $content = $this->extractPdfContent($absolutePath);
+            return ['content' => $content ?: '(PDF文件，文字提取有限，建议同时上传txt/md版本)', 'file_type' => 'pdf'];
+        }
+
+        // PPTX/XLSX: ZIP包内XML提取
+        if (in_array($extension, ['pptx','xlsx'], true)) {
+            $content = $this->extractOfficeXmlText($absolutePath, $extension);
+            $ft = $extension === 'pptx' ? 'powerpoint' : 'excel';
+            return ['content' => $content ?: "(无法解析{$extension}内容)", 'file_type' => $ft];
+        }
+
+        // CSV: 直接读文本
+        if ($extension === 'csv') {
+            $content = @file_get_contents($absolutePath);
+            if ($content !== false) {
+                return ['content' => $this->normalizeKnowledgeText($content), 'file_type' => 'csv'];
+            }
+        }
+
+        // PPT/XLS(旧格式)等: 存储文件
+        $formats = ['ppt'=>'powerpoint','xls'=>'excel'];
+        $ft = $formats[$extension] ?? 'binary';
+        return [
+            'content' => "(二进制文件，类型: {$extension}) 文件已上传。建议另存为 pptx/xlsx 格式以获得文字解析。",
+            'file_type' => $ft,
+        ];
+    }
+
+    /** PDF文字提取（基础——提取文本流内容） */
+    private function extractPdfContent(string $path): string
+    {
+        $content = @file_get_contents($path);
+        if ($content === false) return '';
+        $text = '';
+        // 提取 BT/ET 之间的文本
+        if (preg_match_all('/BT\s*(.*?)\s*ET/s', $content, $blocks)) {
+            foreach ($blocks[1] as $block) {
+                if (preg_match_all('/\(([^)]*)\)/', $block, $chars)) {
+                    $text .= implode('', $chars[1]) . "\n";
+                }
+            }
+        }
+        // 也尝试提取流内容
+        if (empty(trim($text)) && preg_match_all('/stream\s*(.*?)\s*endstream/s', $content, $streams)) {
+            foreach ($streams[1] as $s) {
+                $decoded = @gzuncompress($s) ?: $s;
+                if (preg_match_all('/\(([^)]*)\)/', $decoded, $chars)) {
+                    $text .= implode('', $chars[1]) . "\n";
+                }
+            }
+        }
+        return $this->normalizeKnowledgeText($this->convertUploadedTextToUtf8($text));
+    }
+
+    /** PPTX/XLSX: ZIP内XML文本提取 */
+    private function extractOfficeXmlText(string $path, string $ext): string
+    {
+        $zip = new \ZipArchive;
+        if ($zip->open($path) !== true) return '';
+
+        // 辅助: 移除命名空间前缀让正则匹配更简单
+        $cleanXml = fn(string $xml): string => preg_replace('/<\/?[a-z]+:/', '</', preg_replace('/<[a-z]+:/', '<', $xml));
+
+        $texts = [];
+        if ($ext === 'pptx') {
+            // PPTX: 逐页提取 slide XML
+            for ($i = 1; $i <= 100; $i++) {
+                $xml = $zip->getFromName("ppt/slides/slide{$i}.xml");
+                if ($xml === false) break;
+                $texts[] = $this->stripXmlTags($cleanXml($xml));
+            }
+            // 也提取备注
+            for ($i = 1; $i <= 100; $i++) {
+                $notes = $zip->getFromName("ppt/notesSlides/notesSlide{$i}.xml");
+                if ($notes === false) break;
+                $texts[] = $this->stripXmlTags($notes);
+            }
+        } elseif ($ext === 'xlsx') {
+            // XLSX: strip_tags提取文本（最可靠，兼容所有命名空间）
+            $ss = $zip->getFromName('xl/sharedStrings.xml');
+            $sharedStrings = [];
+            if ($ss !== false) {
+                preg_match_all('/<si[^>]*>(.*?)<\/si>/s', $ss, $siMatches);
+                foreach ($siMatches[1] as $si) {
+                    $sharedStrings[] = trim(strip_tags($si));
+                }
+            }
+            for ($i = 1; $i <= 100; $i++) {
+                $sheet = $zip->getFromName("xl/worksheets/sheet{$i}.xml");
+                if ($sheet === false) break;
+                preg_match_all('/<row[^>]*>(.*?)<\/row>/s', $sheet, $rows);
+                $rowTexts = [];
+                foreach ($rows[1] as $row) {
+                    // 提取每个单元格的内容和类型
+                    preg_match_all('/<c[^>]*>(.*?)<\/c>/s', $row, $cellMatches);
+                    $cells = [];
+                    foreach ($cellMatches[1] as $ci => $inner) {
+                        $fullTag = $cellMatches[0][$ci];
+                        $isShared = strpos($fullTag, 't="s"') !== false;
+                        if ($isShared && preg_match('/<v[^>]*>(\d+)<\/v>/', $inner, $vm)) {
+                            $cells[] = $sharedStrings[(int)$vm[1]] ?? '';
+                        } elseif (preg_match('/<v[^>]*>(.*?)<\/v>/', $inner, $vm)) {
+                            $cells[] = $vm[1];
+                        } else {
+                            $cells[] = trim(strip_tags($inner));
+                        }
+                    }
+                    if ($cells) $rowTexts[] = implode("\t", $cells);
+                }
+                $texts[] = implode("\n", $rowTexts);
+            }
+        }
+        $zip->close();
+        return $this->normalizeKnowledgeText($this->convertUploadedTextToUtf8(implode("\n\n", $texts)));
+    }
+
+    /** 去除XML标签保留文本 */
+    private function stripXmlTags(string $xml): string
+    {
+        return trim(strip_tags(preg_replace('/<a:t[^>]*>/', '', preg_replace('/<\/a:t>/', '', $xml))));
     }
 
     /**

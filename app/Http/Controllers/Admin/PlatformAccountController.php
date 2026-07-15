@@ -18,12 +18,11 @@ class PlatformAccountController extends Controller
 
     public function index(): View
     {
-        $this->ensureSuperAdmin();
-
-        $workspaces = Workspace::query()
+        $wsQuery = Workspace::query()
             ->where('status', 'active')
-            ->orderBy('name')
-            ->get();
+            ->orderBy('name');
+        $this->scopeByOperatorWorkspaces($wsQuery, Workspace::class);
+        $workspaces = $wsQuery->get();
 
         return view('admin.workspaces.index', [
             'pageTitle' => '平台账号管理',
@@ -36,7 +35,7 @@ class PlatformAccountController extends Controller
 
     public function show(int $workspaceId): View|RedirectResponse
     {
-        $this->ensureSuperAdmin();
+        $this->authorizeWorkspaceAccess($workspaceId);
 
         $workspace = Workspace::query()->whereKey($workspaceId)->first();
         if (! $workspace) {
@@ -60,7 +59,7 @@ class PlatformAccountController extends Controller
 
     public function revoke(int $workspaceId, string $platformKey): RedirectResponse
     {
-        $this->ensureSuperAdmin();
+        $this->authorizeWorkspaceAccess($workspaceId);
 
         $this->platformAccountService->revokeCredential($workspaceId, $platformKey);
 

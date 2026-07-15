@@ -51,16 +51,47 @@ class ContentPublishTask extends Model
 
     public function updateProgress(): void
     {
+        $oldStatus = $this->status;
         $completed = $this->results()->whereIn('status', ['success', 'failed'])->count();
+        $newStatus = $completed >= $this->total_jobs
+            ? ($this->results()->where('status', 'failed')->count() > 0 ? 'partial_failed' : 'completed')
+            : 'running';
+
         $this->forceFill([
             'completed_jobs' => $this->results()->where('status', 'success')->count(),
             'failed_jobs' => $this->results()->where('status', 'failed')->count(),
             'progress_percent' => $this->total_jobs > 0
                 ? (int) round($completed / $this->total_jobs * 100)
                 : 0,
-            'status' => $completed >= $this->total_jobs
-                ? ($this->failed_jobs > 0 ? 'partial_failed' : 'completed')
-                : 'running',
+            'status' => $newStatus,
         ])->save();
+
+        // v2.6.0: 发布完成后触发 Scout 收录检测
+        if ($oldStatus !== 'completed' && $newStatus === 'completed') {
+            $this->triggerPostDeployScout();
+        }
+    }
+
+    /**
+     * v2.6.0: 发布完成后自动触发 Scout 检测。
+     * 受 workspace 级别开关控制，默认开启。
+     */
+    private function triggerPostDeployScout(): void
+    {
+        // workspace 级别开关（默认开启）
+        $workspace = $this->workspace;
+        if ($workspace && ! ($workspace->config['auto_deploy_scout'] ?? true)) {
+            return;
+        }
+
+        $articleIds = is_array($this->article_ids) ? $this->article_ids : [];
+        if ($articleIds === []) {
+            return;
+        }
+
+        \App\Jobs\TriggerPostDeployScout::dispatch(
+            (int) $this->workspace_id,
+            array_map('intval', $articleIds),
+        );
     }
 }

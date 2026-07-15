@@ -427,7 +427,7 @@ class EnterpriseAnchorService
 
         // 调用 RPA 引擎注册
         $rpaUrl = rtrim((string) config('geoflow.rpa_engine_url'), '/') . '/api/v1/register';
-        $apiKey = (string) config('geoflow.rpa_engine_api_key', 'qonhub-rpa-secret-change-me');
+        $apiKey = (string) config('geoflow.rpa_engine_api_key');
 
         $products = is_array($profile->products_services)
             ? implode('、', array_slice($profile->products_services, 0, 5))

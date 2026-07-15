@@ -21,11 +21,11 @@ use Illuminate\Support\Facades\Route;
 Route::prefix('v1')
     ->middleware(['api.request_id'])
     ->group(function (): void {
-        // 公开：管理员登录，返回 API Token（无需 Bearer）
-        Route::post('auth/login', [AuthController::class, 'login']);
+        // 公开：管理员登录，返回 API Token（无需 Bearer），限流 10次/分钟
+        Route::post('auth/login', [AuthController::class, 'login'])->middleware('throttle:10,1');
 
-        // 需有效 Token + 对应 scope
-        Route::middleware(['api.auth'])->group(function (): void {
+        // 需有效 Token + 对应 scope，全局 api 限流 120次/分钟
+        Route::middleware(['api.auth', 'throttle:api'])->group(function (): void {
             // catalog:read — 下拉元数据（模型、提示词、库、作者、分类等）
             Route::get('catalog', [CatalogController::class, 'show'])->middleware('api.scope:catalog:read');
 

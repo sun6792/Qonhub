@@ -122,22 +122,5 @@ class GenericRpaAdapter extends BasePlatformAdapter
     }
 
     // ── 辅助 ─────────────────────────────────────────────
-
-    private function getDecryptedCredential(): string
-    {
-        $service = app(\App\Services\GeoFlow\Publishing\AccountPoolService::class);
-
-        return $service->decryptCredential($this->account);
-    }
-
-    private function fail(string $message, array $raw): array
-    {
-        return [
-            'success' => false,
-            'remote_id' => '',
-            'remote_url' => '',
-            'remote_status' => 'error',
-            'raw_response' => array_merge($raw, ['error' => $message]),
-        ];
-    }
+    // （getDecryptedCredential()、failResponse() 继承自 BasePlatformAdapter）
 }

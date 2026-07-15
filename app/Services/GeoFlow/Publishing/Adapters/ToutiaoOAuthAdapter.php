@@ -152,14 +152,5 @@ class ToutiaoOAuthAdapter extends BasePlatformAdapter
         return (string) ($data['image_id'] ?? '');
     }
 
-    private function failResponse(string $message, array $raw): array
-    {
-        return [
-            'success' => false,
-            'remote_id' => '',
-            'remote_url' => '',
-            'remote_status' => 'error',
-            'raw_response' => array_merge($raw, ['error' => $message]),
-        ];
-    }
+    // failResponse() 继承自 BasePlatformAdapter
 }

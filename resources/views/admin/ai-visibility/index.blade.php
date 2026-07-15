@@ -27,7 +27,7 @@
                     <div>
                         <strong>检测引擎:</strong>
                         @foreach (\App\Services\GeoFlow\AiVisibilityService::AI_PLATFORMS as $key => $info)
-                        <span class="badge bg-light text-dark me-1">{{ $info['icon'] }} {{ $info['name'] }}</span>
+                        <a href="{{ $info['url'] ?? '#' }}" target="_blank" class="badge bg-light text-dark me-1 text-decoration-none">{{ $info['icon'] }} {{ $info['name'] }} ↗</a>
                         @endforeach
                     </div>
                     <form action="{{ route('admin.ai-visibility.check') }}" method="POST" class="d-flex gap-2">

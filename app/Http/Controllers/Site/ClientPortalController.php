@@ -136,6 +136,28 @@ class ClientPortalController extends Controller
         ]);
     }
 
+    /**
+     * v2.6.0 快照凭证独立页面。
+     * GET /client/snapshot/{checkId}
+     */
+    public function snapshot(int $checkId): View|RedirectResponse
+    {
+        $client = Auth::guard('client')->user();
+        if (! $client) return redirect()->route('client.login');
+
+        $check = \App\Models\AiVisibilityCheck::where('workspace_id', (int) $client->workspace_id)
+            ->whereKey($checkId)->firstOrFail();
+
+        $platforms = \App\Services\GeoFlow\AiVisibilityService::AI_PLATFORMS;
+        $info = $platforms[$check->ai_platform] ?? null;
+
+        return view('client.snapshot', [
+            'workspace' => Workspace::query()->whereKey((int) $client->workspace_id)->firstOrFail(),
+            'check' => $check,
+            'platformInfo' => $info,
+        ]);
+    }
+
     public function aiVisibility(Request $request): View|RedirectResponse
     {
         /** @var ClientUser|null $client */
@@ -387,7 +409,7 @@ class ClientPortalController extends Controller
         // 同步清除 RPA 缓存：解绑后运营助手不再显示已绑定
         try {
             $rpaUrl = rtrim((string) config('geoflow.rpa_engine_url', 'http://127.0.0.1:9901'), '/');
-            $apiKey = (string) config('geoflow.rpa_engine_api_key', 'qonhub-rpa-secret-change-me');
+            $apiKey = (string) config('geoflow.rpa_engine_api_key');
             \Illuminate\Support\Facades\Http::timeout(5)
                 ->withHeaders(['X-Api-Key' => $apiKey, 'Content-Type' => 'application/json'])
                 ->post($rpaUrl . '/api/cache/clear', [

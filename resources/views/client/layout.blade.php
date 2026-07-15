@@ -4,10 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ $workspace->name ?? '客户看板' }} - Qonhub AI</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <script src="{{ asset('js/tailwindcss.js') }}"></script>
+    <script src="{{ asset('js/chart.min.js') }}"></script>
+    <script src="{{ asset('js/three.min.js') }}"></script>
+    <link rel="stylesheet" href="{{ asset('css/font-awesome.min.css') }}">
     <script>
       // Tailwind config: AI dark theme — 与 Galaxy 星空色系统一
       tailwind.config = {
@@ -138,37 +138,44 @@
             </div>
         </nav>
 
-        {{-- Tab Navigation — 实色底衬防融合 --}}
+        {{-- Tab Navigation — 五步引导式工作流 v2.6.0 --}}
         <div style="background:rgba(13,14,26,0.85); backdrop-filter:blur(12px); border-bottom:1px solid rgba(165,180,252,0.08);">
         <div class="max-w-7xl mx-auto px-4 pt-4 pb-3">
-            <div class="flex space-x-2 flex-wrap gap-y-2">
+            <div class="flex items-center space-x-1 flex-wrap gap-y-2">
+                {{-- 步骤引导线 --}}
+                <span class="text-[10px] text-ai-dim mr-1 whitespace-nowrap">GEO五步：</span>
                 <a href="{{ route('client.dashboard') }}"
-                   class="nav-link px-4 py-2 rounded-xl text-sm font-medium {{ request()->routeIs('client.dashboard') ? 'active' : '' }}">
-                    📊 总览
+                   class="nav-link px-3 py-2 rounded-xl text-xs font-medium {{ request()->routeIs('client.dashboard') ? 'active' : '' }}">
+                    ① 总览
                 </a>
-                <a href="{{ route('client.articles') }}"
-                   class="nav-link px-4 py-2 rounded-xl text-sm font-medium {{ request()->routeIs('client.articles') ? 'active' : '' }}">
-                    📝 文章
-                </a>
-                <a href="{{ route('client.ai-visibility') }}"
-                   class="nav-link px-4 py-2 rounded-xl text-sm font-medium {{ request()->routeIs('client.ai-visibility') ? 'active' : '' }}">
-                    🤖 AI搜索
-                </a>
-                <a href="{{ route('client.competitiveness') }}"
-                   class="nav-link px-4 py-2 rounded-xl text-sm font-medium {{ request()->routeIs('client.competitiveness*') ? 'active' : '' }}">
-                    📊 竞争力
-                </a>
+                <span class="text-ai-dim text-[10px]">→</span>
                 <a href="{{ route('client.platforms') }}"
-                   class="nav-link px-4 py-2 rounded-xl text-sm font-medium {{ request()->routeIs('client.platforms') ? 'active' : '' }}">
-                    🔑 授权
+                   class="nav-link px-3 py-2 rounded-xl text-xs font-medium {{ request()->routeIs('client.platforms') ? 'active' : '' }}">
+                    ② 授权
                 </a>
+                <span class="text-ai-dim text-[10px]">→</span>
                 <a href="{{ route('client.content-publish.index') }}"
-                   class="nav-link px-4 py-2 rounded-xl text-sm font-medium {{ request()->routeIs('client.content-publish.*') ? 'active' : '' }}">
-                    📡 发布
+                   class="nav-link px-3 py-2 rounded-xl text-xs font-medium {{ request()->routeIs('client.content-publish.*') ? 'active' : '' }}">
+                    ③ 发布
+                </a>
+                <span class="text-ai-dim text-[10px]">→</span>
+                <a href="{{ route('client.ai-visibility') }}"
+                   class="nav-link px-3 py-2 rounded-xl text-xs font-medium {{ request()->routeIs('client.ai-visibility') ? 'active' : '' }}">
+                    ④ 检测
+                </a>
+                <span class="text-ai-dim text-[10px]">→</span>
+                <a href="{{ route('client.competitiveness') }}"
+                   class="nav-link px-3 py-2 rounded-xl text-xs font-medium {{ request()->routeIs('client.competitiveness*') ? 'active' : '' }}">
+                    ⑤ 报表
+                </a>
+                <span class="flex-1"></span>
+                <a href="{{ route('client.articles') }}"
+                   class="nav-link px-3 py-2 rounded-xl text-xs font-medium {{ request()->routeIs('client.articles') ? 'active' : '' }}">
+                    📝 文章
                 </a>
                 <form method="POST" action="{{ route('client.logout') }}" class="inline">
                     @csrf
-                    <button class="nav-link px-4 py-2 rounded-xl text-sm font-medium text-red-400/70 hover:text-red-300">
+                    <button class="nav-link px-3 py-2 rounded-xl text-xs font-medium text-red-400/70 hover:text-red-300">
                         退出
                     </button>
                 </form>
@@ -250,5 +257,38 @@
     });
     </script>
     @stack('scripts')
+</body>
+</html>
+
+
+{{-- v2.6.0 快照凭证弹窗 --}}
+<div id="snapshot-modal" style="display:none; position:fixed; inset:0; z-index:9999; background:rgba(0,0,0,0.7); backdrop-filter:blur(4px);" onclick="document.getElementById('snapshot-modal').style.display='none'">
+    <div style="position:relative; max-width:600px; margin:8% auto; background:rgba(22,24,40,0.96); border:1px solid rgba(165,180,252,0.2); border-radius:16px; padding:24px;" onclick="event.stopPropagation()">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-bold text-white" id="snap-title"></h3>
+            <button onclick="document.getElementById('snapshot-modal').style.display='none'" class="text-ai-dim hover:text-white text-xl">&times;</button>
+        </div>
+        <div id="snap-body" class="text-sm space-y-3"></div>
+        <div class="mt-4 pt-3 border-t flex justify-end gap-2" style="border-color:rgba(165,180,252,0.1)">
+            <a id="snap-verify-link" href="#" target="_blank" class="text-xs text-indigo-400 hover:underline">在平台验证</a>
+            <button onclick="document.getElementById('snapshot-modal').style.display='none'" class="text-xs px-3 py-1 rounded-lg border text-ai-dim hover:text-white" style="border-color:rgba(165,180,252,0.2)">关闭</button>
+        </div>
+    </div>
+</div>
+<script>
+function showSnapshot(platform, icon, color, query, time, mentioned, snippet, verifyUrl) {
+    document.getElementById('snap-title').innerHTML = icon + ' ' + platform + ' - 检测快照';
+    document.getElementById('snap-body').innerHTML =
+        '<div style="color:#9ca3af;font-size:12px">搜索词</div>' +
+        '<div style="color:#e0e0e0;background:rgba(255,255,255,0.04);padding:8px 12px;border-radius:8px">' + (query||'') + '</div>' +
+        '<div class="flex gap-4"><div><div style="color:#9ca3af;font-size:12px">时间</div><div style="color:#e0e0e0">' + (time||'') + '</div></div><div><div style="color:#9ca3af;font-size:12px">结果</div><div style="color:' + (mentioned ? '#86efac' : '#9ca3af') + '">' + (mentioned ? '已收录' : '未提及') + '</div></div></div>' +
+        '<div style="color:#9ca3af;font-size:12px">AI回复快照</div>' +
+        '<div style="color:#d0d0d0;background:rgba(255,255,255,0.04);padding:10px 12px;border-radius:8px;max-height:200px;overflow-y:auto;font-size:13px;line-height:1.6">' + (snippet || '暂无') + '</div>';
+    var vlink = document.getElementById('snap-verify-link');
+    if(verifyUrl) { vlink.href = verifyUrl; vlink.style.display = ''; }
+    else { vlink.style.display = 'none'; }
+    document.getElementById('snapshot-modal').style.display = 'block';
+}
+</script>
 </body>
 </html>

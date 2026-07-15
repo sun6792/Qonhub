@@ -25,7 +25,7 @@ class RpaEngineClient implements RpaEngineInterface
     public function __construct()
     {
         $this->baseUrl = rtrim((string) config('geoflow.rpa_engine_url', 'http://127.0.0.1:9901'), '/');
-        $this->apiKey = (string) config('geoflow.rpa_engine_api_key', 'qonhub-rpa-secret-change-me');
+        $this->apiKey = (string) config('geoflow.rpa_engine_api_key');
         $this->timeout = (int) config('geoflow.rpa_engine_timeout', 300);
     }
 

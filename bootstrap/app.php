@@ -63,11 +63,13 @@ return Application::configure(basePath: dirname(__DIR__))
             'rpa.auth' => \App\Http\Middleware\RpaAuthMiddleware::class,
         ]);
 
-        // RPA 引擎同步 API 免 CSRF（本地助手调用）
+        // RPA 引擎同步 API 免 CSRF（本地助手调用，使用 X-Api-Key 认证）
         $middleware->validateCsrfTokens(except: [
             env('ADMIN_BASE_PATH', 'geo_admin') . '/api/v1/rpa/*',
-            env('ADMIN_BASE_PATH', 'geo_admin') . '/distribution/armory/publish-to-rpa',
         ]);
+
+        // 注意：distribution/armory/publish-to-rpa 使用 admin session 认证，
+        // 不应豁免 CSRF。如需无 CSRF 调用，请改走 rpa.auth 中间件保护的 api/v1/rpa 路由。
 
         // 已登录用户重定向
         $middleware->redirectUsersTo(function (\Illuminate\Http\Request $request) {

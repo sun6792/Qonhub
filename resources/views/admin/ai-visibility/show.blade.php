@@ -8,7 +8,8 @@
         <form action="{{ route('admin.ai-visibility.check') }}" method="POST">
             @csrf
             <input type="hidden" name="workspace_id" value="{{ $workspace->id }}">
-            <button class="btn btn-primary">立即检测</button>
+            <button class="btn btn-primary">立即检测（异步）</button>
+            <small class="text-muted ms-2 d-block mt-1">检测任务已分发到后台队列，1-2分钟后刷新查看结果</small>
         </form>
     </div>
 
@@ -18,10 +19,10 @@
         @foreach ($platforms as $key => $info)
         @php $data = $scores[$key] ?? ['score' => 0, 'trend' => 'new', 'mentioned' => 0]; @endphp
         <div class="col-md-4 col-lg-2">
-            <div class="card text-center h-100">
+            <a href="{{ $info['url'] ?? '#' }}" target="_blank" class="card text-center h-100 text-decoration-none" style="cursor:pointer">
                 <div class="card-body">
                     <h3 class="{{ $data['score'] > 50 ? 'text-success' : ($data['score'] > 20 ? 'text-warning' : 'text-muted') }}">{{ $data['score'] }}%</h3>
-                    <div class="fw-bold">{{ $info['icon'] }} {{ $info['name'] }}</div>
+                    <div class="fw-bold">{{ $info['icon'] }} {{ $info['name'] }} ↗</div>
                     <small class="text-muted">提及 {{ $data['mentioned'] }} 次</small>
                     <div>
                         @if ($data['trend'] === 'up') <span class="badge bg-success">↗ 提升</span>
@@ -31,7 +32,7 @@
                         @endif
                     </div>
                 </div>
-            </div>
+            </a>
         </div>
         @endforeach
     </div>
@@ -42,7 +43,7 @@
             @if ($recentChecks->isNotEmpty())
             <table class="table table-hover mb-0">
                 <thead class="table-light">
-                    <tr><th>时间</th><th>平台</th><th>关键词</th><th>是否提及</th><th>内容片段</th></tr>
+                    <tr><th>时间</th><th>平台</th><th>关键词</th><th>提及</th><th>快照</th></tr>
                 </thead>
                 <tbody>
                     @foreach ($recentChecks as $check)
@@ -55,7 +56,9 @@
                                 {{ $check->mentioned ? '✅ 是' : '❌ 否' }}
                             </span>
                         </td>
-                        <td class="small text-muted">{{ $check->response_snippet ? Str::limit($check->response_snippet, 80) : '-' }}</td>
+                        <td>
+                            <a href="/client/snapshot/{{ $check->id }}" target="_blank" class="btn btn-sm btn-outline-secondary">📋 快照</a>
+                        </td>
                     </tr>
                     @endforeach
                 </tbody>

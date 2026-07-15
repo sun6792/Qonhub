@@ -61,26 +61,23 @@ class AnalyticsController extends Controller
      */
     private function filterOptions(): array
     {
+        $taskQuery = Task::query()->orderByDesc('created_at')->select('id', 'name')->limit(100);
+        $this->scopeByOperatorWorkspaces($taskQuery, Task::class);
+
+        $articleQuery = Article::query()->whereNull('deleted_at')->orderByDesc('created_at')->select('id', 'title')->limit(100);
+        $this->scopeByOperatorWorkspaces($articleQuery, Article::class);
+
         return [
             'channels' => DistributionChannel::query()
                 ->orderBy('name')
                 ->select('id', 'name')
                 ->get(),
-            'tasks' => Task::query()
-                ->orderByDesc('created_at')
-                ->select('id', 'name')
-                ->limit(100)
-                ->get(),
+            'tasks' => $taskQuery->get(),
             'categories' => Category::query()
                 ->orderBy('name')
                 ->select('id', 'name')
                 ->get(),
-            'articles' => Article::query()
-                ->whereNull('deleted_at')
-                ->orderByDesc('created_at')
-                ->select('id', 'title')
-                ->limit(100)
-                ->get(),
+            'articles' => $articleQuery->get(),
         ];
     }
 

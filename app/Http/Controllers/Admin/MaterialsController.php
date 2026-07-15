@@ -86,14 +86,20 @@ class MaterialsController extends Controller
             ->value('setting_value') ?? 'rule');
         $latestKnowledgeUpdatedAt = $this->latestKnowledgeUpdatedAt();
 
+        // Scoped queries for workspace-assignable resources
+        $klQuery = KeywordLibrary::query(); $this->scopeByOperatorWorkspaces($klQuery, KeywordLibrary::class);
+        $tlQuery = TitleLibrary::query(); $this->scopeByOperatorWorkspaces($tlQuery, TitleLibrary::class);
+        $ilQuery = ImageLibrary::query(); $this->scopeByOperatorWorkspaces($ilQuery, ImageLibrary::class);
+        $kbQuery = KnowledgeBase::query(); $this->scopeByOperatorWorkspaces($kbQuery, KnowledgeBase::class);
+
         return [
-            'keyword_libraries' => KeywordLibrary::query()->count(),
+            'keyword_libraries' => $klQuery->count(),
             'total_keywords' => Keyword::query()->count(),
-            'title_libraries' => TitleLibrary::query()->count(),
+            'title_libraries' => $tlQuery->count(),
             'total_titles' => Title::query()->count(),
-            'image_libraries' => ImageLibrary::query()->count(),
+            'image_libraries' => $ilQuery->count(),
             'total_images' => Image::query()->count(),
-            'knowledge_bases' => KnowledgeBase::query()->count(),
+            'knowledge_bases' => $kbQuery->count(),
             'knowledge_chunks' => $knowledgeChunks,
             'vectorized_chunks' => $vectorizedChunks,
             'unvectorized_chunks' => max(0, $knowledgeChunks - $vectorizedChunks),

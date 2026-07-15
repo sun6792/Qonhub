@@ -94,18 +94,47 @@ class AnalyticsOverviewService
      */
     public function publicationTrend(AnalyticsFilter $filter): array
     {
+        $start = $filter->start();
+        $end = $filter->end();
         $days = $this->days($filter);
+        $results = [];
 
-        return array_map(function (Carbon $day) use ($filter): array {
-            $start = $day->copy()->startOfDay();
-            $end = $day->copy()->endOfDay();
-
-            return [
+        // 初始化所有日期为 0
+        foreach ($days as $day) {
+            $results[$day->toDateString()] = [
                 'date' => $day->toDateString(),
-                'created' => (int) $this->filteredArticles($filter)->whereBetween('created_at', [$start, $end])->count(),
-                'published' => (int) $this->publishedArticlesBetween($filter, $start, $end)->count(),
+                'created' => 0,
+                'published' => 0,
             ];
-        }, $days);
+        }
+
+        // 批量查询：一次 GROUP BY 替代按天循环
+        $createdRows = $this->filteredArticles($filter)
+            ->whereBetween('created_at', [$start, $end])
+            ->selectRaw("DATE(created_at) as d, COUNT(*) as c")
+            ->groupBy(\Illuminate\Support\Facades\DB::raw('1'))
+            ->pluck('c', 'd');
+
+        $publishedRows = $this->filteredArticles($filter)
+            ->where('status', 'published')
+            ->whereBetween('published_at', [$start, $end])
+            ->selectRaw("DATE(published_at) as d, COUNT(*) as c")
+            ->groupBy(\Illuminate\Support\Facades\DB::raw('1'))
+            ->pluck('c', 'd');
+
+        foreach ($createdRows as $date => $count) {
+            if (isset($results[$date])) {
+                $results[$date]['created'] = (int) $count;
+            }
+        }
+
+        foreach ($publishedRows as $date => $count) {
+            if (isset($results[$date])) {
+                $results[$date]['published'] = (int) $count;
+            }
+        }
+
+        return array_values($results);
     }
 
     /**
@@ -113,19 +142,47 @@ class AnalyticsOverviewService
      */
     public function taskTrend(AnalyticsFilter $filter): array
     {
-        return array_map(function (Carbon $day) use ($filter): array {
-            $start = $day->copy()->startOfDay();
-            $end = $day->copy()->endOfDay();
-            $base = $this->filteredTaskRuns($filter)->whereBetween('created_at', [$start, $end]);
+        $start = $filter->start();
+        $end = $filter->end();
+        $days = $this->days($filter);
+        $results = [];
 
-            return [
+        // 初始化所有日期为 0
+        foreach ($days as $day) {
+            $results[$day->toDateString()] = [
                 'date' => $day->toDateString(),
-                'completed' => (int) (clone $base)->where('status', 'completed')->count(),
-                'failed' => (int) (clone $base)->where('status', 'failed')->count(),
-                'running' => (int) (clone $base)->where('status', 'running')->count(),
-                'pending' => (int) (clone $base)->where('status', 'pending')->count(),
+                'completed' => 0,
+                'failed' => 0,
+                'running' => 0,
+                'pending' => 0,
             ];
-        }, $this->days($filter));
+        }
+
+        // 批量查询：一次 GROUP BY + CASE WHEN 聚合替代 4N 次查询
+        $rows = $this->filteredTaskRuns($filter)
+            ->whereBetween('created_at', [$start, $end])
+            ->selectRaw("DATE(created_at) as d")
+            ->selectRaw("SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed")
+            ->selectRaw("SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed")
+            ->selectRaw("SUM(CASE WHEN status = 'running' THEN 1 ELSE 0 END) as running")
+            ->selectRaw("SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending")
+            ->groupBy(\Illuminate\Support\Facades\DB::raw('1'))
+            ->get();
+
+        foreach ($rows as $row) {
+            $date = $row->d;
+            if (isset($results[$date])) {
+                $results[$date] = [
+                    'date' => $date,
+                    'completed' => (int) $row->completed,
+                    'failed' => (int) $row->failed,
+                    'running' => (int) $row->running,
+                    'pending' => (int) $row->pending,
+                ];
+            }
+        }
+
+        return array_values($results);
     }
 
     /**

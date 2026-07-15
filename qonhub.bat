@@ -59,6 +59,8 @@ echo [4/5] 启动客户站...
 call :START_TARGET_SITE
 echo [5/5] 启动 Worker 守护进程（崩溃自动重启）...
 call :START_WATCHDOG
+echo [6/6] 启动 Playwright MCP（浏览器自动化常驻服务）...
+call :START_MCP_SVC
 echo.
 echo ============================================
 echo   全部启动完成！
@@ -66,6 +68,7 @@ echo   主站: http://%HOST%:%PORT%
 echo   后台: http://%HOST%:%PORT%/geo_admin/login
 echo   客户站: http://localhost:%TARGET_PORT%
 echo   Redis: %HOST%:6379
+echo   MCP:   http://%HOST%:8932/mcp
 echo ============================================
 pause
 goto MENU
@@ -129,6 +132,9 @@ curl -s -o NUL -w "HTTP %%{http_code}" http://localhost:%TARGET_PORT% 2>nul
 echo.
 echo === 队列 Worker ===
 tasklist /FI "IMAGENAME eq php.exe" /FO TABLE 2>nul | findstr php
+echo.
+echo === Playwright MCP (端口 8932) ===
+curl -s -o NUL -w "HTTP %%{http_code}" http://%HOST%:8932/mcp 2>nul
 echo.
 echo === DB 队列待处理 ===
 "%PHP%" -r "$c=pg_connect('host=%HOST% port=5432 dbname=geo_flow user=geo_user password=geo_password');$r=pg_query($c,'SELECT COUNT(*) FROM jobs');echo '待处理: '.pg_fetch_result($r,0).PHP_EOL;" 2>nul
@@ -221,5 +227,21 @@ if %errorlevel%==0 (
     echo Redis 未响应，清理残留进程...
     taskkill /F /IM redis-server.exe >nul 2>&1
     echo [OK] 已清理
+)
+exit /b
+
+:START_MCP_SVC
+curl -s -o NUL http://%HOST%:8932/mcp 2>nul
+if %errorlevel%==0 (
+    echo [OK] Playwright MCP 已在运行
+    exit /b
+)
+start "Qonhub-MCP" /MIN cmd /c "%PROJECT_DIR%\rpa-engine\start-mcp.bat"
+timeout /t 4 >nul
+curl -s -o NUL http://%HOST%:8932/mcp 2>nul
+if %errorlevel%==0 (
+    echo [OK] Playwright MCP 启动成功 (端口 8932)
+) else (
+    echo [WARN] Playwright MCP 启动中，请稍候或手动启动 rpa-engine\start-mcp.bat
 )
 exit /b

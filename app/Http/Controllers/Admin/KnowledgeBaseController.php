@@ -363,15 +363,10 @@ class KnowledgeBaseController extends Controller
             'risk_level' => ['nullable', 'in:low,medium,high'],
             'review_status' => ['nullable', 'in:unreviewed,reviewed'],
             'import_action' => ['nullable', 'in:save,save_and_chunk'],
-            'knowledge_file' => ['nullable', 'extensions:txt,md,docx', 'max:51200'],
-            'knowledge_files' => ['nullable', 'array', 'max:10'],
-            'knowledge_files.*' => ['file', 'extensions:txt,md,docx', 'max:51200'],
+            'knowledge_file' => ['nullable', 'file', 'max:102400'],
+            'knowledge_files' => ['nullable', 'array', 'max:30'],
+            'knowledge_files.*' => ['file', 'max:102400'],
         ], [
-            'knowledge_file.mimes' => __('admin.knowledge_bases.error.file_type_invalid'),
-            'knowledge_file.max' => __('admin.knowledge_bases.error.file_too_large'),
-            'knowledge_files.max' => __('admin.knowledge_bases.error.files_limit'),
-            'knowledge_files.*.mimes' => __('admin.knowledge_bases.error.file_type_invalid'),
-            'knowledge_files.*.max' => __('admin.knowledge_bases.error.file_too_large'),
         ]);
     }
 

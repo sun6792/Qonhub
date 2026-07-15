@@ -16,13 +16,24 @@ use Illuminate\Support\Facades\Log;
 /**
  * RPA 引擎云端同步控制器 [新增]
  *
- * 负责本地运营助手与 Laravel 后端的双向通信：
- *   - 本地助手拉取待执行任务
- *   - 本地助手上报执行结果
- *   - 验证码回调同步
+ * 负责本地运营助手与 Laravel 后端的双向通信。
+ * 路由由 rpa.auth 中间件保护（X-Api-Key 认证）。
+ * 所有端点均校验 workspace 是否存在；敏感操作附加审计日志。
  */
 class RpaSyncController extends Controller
 {
+    /**
+     * 校验 workspace 存在性，不存在则返回 404。
+     */
+    private function validateWorkspace(int $wsId): Workspace
+    {
+        $workspace = Workspace::query()->find($wsId);
+        if (! $workspace) {
+            abort(404, '工作空间不存在');
+        }
+        return $workspace;
+    }
+
     /**
      * GET /api/v1/rpa/pending-tasks
      * 本地助手轮询：返回指定 workspace 下的待认证 B2B 平台。
@@ -34,10 +45,7 @@ class RpaSyncController extends Controller
             return response()->json(['tasks' => []]);
         }
 
-        $workspace = Workspace::query()->find($wsId);
-        if (! $workspace) {
-            return response()->json(['tasks' => []]);
-        }
+        $workspace = $this->validateWorkspace($wsId);
 
         $profile = EnterpriseProfile::query()->where('workspace_id', $wsId)->first();
         if (! $profile) {
@@ -89,6 +97,8 @@ class RpaSyncController extends Controller
             'account_id' => ['nullable', 'string', 'max:100'],
             'error' => ['nullable', 'string', 'max:1000'],
         ]);
+
+        $this->validateWorkspace((int) $payload['workspace_id']);
 
         $profile = EnterpriseProfile::query()
             ->where('workspace_id', (int) $payload['workspace_id'])
@@ -162,6 +172,9 @@ class RpaSyncController extends Controller
     public function articles(Request $request): JsonResponse
     {
         $wsId = (int) $request->query('workspace_id', 0);
+        if ($wsId > 0) {
+            $this->validateWorkspace($wsId);
+        }
 
         $query = \App\Models\Article::query()
             ->where('status', 'published')
@@ -201,6 +214,7 @@ class RpaSyncController extends Controller
         if ($wsId <= 0) {
             return response()->json(['platforms' => []]);
         }
+        $this->validateWorkspace($wsId);
 
         // 统一四态数据（DB + 缓存交叉校验）
         $sync = app(PlatformSyncService::class);
@@ -223,6 +237,11 @@ class RpaSyncController extends Controller
         if ($wsId <= 0) {
             return response()->json(['credentials' => []]);
         }
+
+        $this->validateWorkspace($wsId);
+
+        // 审计：凭证被访问（仅本地 RPA API 调用）
+        Log::info('RPA: credentials accessed', ['workspace_id' => $wsId]);
 
         $crypto = app(\App\Support\GeoFlow\ApiKeyCrypto::class);
         $accounts = \App\Models\ClientPlatformAccount::query()
@@ -337,10 +356,7 @@ class RpaSyncController extends Controller
         ]);
 
         $wsId = (int) $payload['workspace_id'];
-        $workspace = Workspace::query()->find($wsId);
-        if (! $workspace) {
-            return response()->json(['ok' => false, 'error' => '工作空间不存在'], 404);
-        }
+        $workspace = $this->validateWorkspace($wsId);
 
         try {
             $publishService = app(\App\Services\GeoFlow\Publishing\ContentPublishService::class);

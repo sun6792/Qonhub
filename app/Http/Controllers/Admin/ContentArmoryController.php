@@ -131,6 +131,7 @@ class ContentArmoryController extends Controller
         if (! $article) {
             return response()->json(['ok' => false, 'error' => '文章不存在'], 404);
         }
+        $this->authorizeOperatorAccess($articleId, Article::class);
 
         // GEO 评分：改写前打分
         $scorer = app(\App\Services\GeoFlow\GeoContentScorer::class);
@@ -195,6 +196,7 @@ class ContentArmoryController extends Controller
         if (! $article) {
             return response()->json(['ok' => false, 'error' => '文章不存在'], 404);
         }
+        $this->authorizeOperatorAccess($articleId, Article::class);
 
         $adminId = Auth::guard('admin')->id();
         $results = [];
@@ -320,6 +322,8 @@ class ContentArmoryController extends Controller
         if (! $article) {
             return response()->json(['ok' => false, 'error' => '文章不存在'], 404);
         }
+        $this->authorizeOperatorAccess($articleId, Article::class);
+        $this->authorizeWorkspaceAccess($workspaceId);
 
         // 一键分发：未传标题/内容时自动取原文
         $title = $payload['rewritten_title'] ?: (string) $article->title;
@@ -537,25 +541,20 @@ class ContentArmoryController extends Controller
         $siteUrl = rtrim((string) config('app.url', 'http://localhost:18080'), '/');
         $contactInfo = config('geoflow.contact_info', '');
 
-        $profile = "=== 品牌/公司推广信息（请自然融入文中，不要生硬推销） ===\n"
-            ."站点名称：{$siteName}\n"
-            ."站点全称：{$siteFullName}\n"
-            ."官网地址：{$siteUrl}\n";
+        // v2.6.0: 品牌信息仅作为"行业背景数据"注入，不写推广指令
+        $profile = "=== 行业背景信息（仅用于增加文章专业度，不要推销） ===\n"
+            ."行业参考：{$siteFullName}\n";
 
         if ($companyIntro !== '') {
-            $profile .= "公司/业务介绍：{$companyIntro}\n";
+            $profile .= "领域知识：{$companyIntro}\n";
         }
 
-        if ($contactInfo !== '') {
-            $profile .= "联系方式：{$contactInfo}\n";
-        }
-
-        $profile .= "\n推广要求：\n"
-            ."- 不要生硬堆砌公司名，而是把公司/品牌作为「行业专家」「解决方案提供者」自然带出\n"
-            ."- 在文章的适当位置（如案例分析、推荐环节、结尾总结）自然提到品牌\n"
-            ."- 文末可加一句自然的引导语，例如「如需了解更多，可访问XX官网」或「欢迎联系XX获取定制方案」\n"
-            ."- 给人的感觉是：这篇文章是一个懂行的专家写的，恰好提到了这个品牌\n"
-            ."- 联系方式不要生硬粘贴，要像朋友推荐一样自然\n";
+        $profile .= "\n【重要：品牌植入规则——不遵守会触发平台营销检测导致限流】\n"
+            ."- 品牌最多出现1次，且必须是文章的\"案例之一\"，和其他品牌并列提及\n"
+            ."- 严禁文末加导流语句（\"如需了解更多\"\"访问官网\"\"联系我们\"等全部禁止）\n"
+            ."- 严禁写\"XX公司成立于XX年，致力于...\"这种企业介绍式段落\n"
+            ."- 正确的品牌出现方式：\"市面上的方案有几类，比如A公司（XX）做的XX方向...\"\n"
+            ."- 文章应该是行业视角的客观分析，品牌只是众多案例中的一个名字\n";
 
         return $profile;
     }

@@ -41,44 +41,72 @@
         </div>
     </div>
 
-    {{-- 12平台覆盖矩阵 --}}
+    {{-- 12平台覆盖矩阵 — 始终显示，点击可跳转验证 --}}
     <div class="bento-card p-5">
-        <h2 class="text-base font-semibold text-ai-primary mb-4">📡 平台覆盖矩阵（{{ count($platforms) }} 平台 / PC+移动）</h2>
-        @if (!empty($scores))
+        <h2 class="text-base font-semibold text-ai-primary mb-4">📡 平台覆盖矩阵（{{ count($platforms) }} 平台）<span class="text-xs text-ai-dim ml-2">点击平台名可跳转验证</span></h2>
         <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
             @foreach ($platforms as $key => $info)
             @php $d = $scores[$key] ?? ['score' => 0, 'trend' => 'new', 'mentioned' => 0]; @endphp
-            <div class="rounded-xl border p-4 transition hover:border-indigo-400/30"
-                 style="background:rgba(14,16,28,0.5); border-color:{{ ($d['score']??0) > 50 ? 'rgba(167,139,250,0.3)' : (($d['score']??0) > 20 ? 'rgba(251,191,36,0.2)' : 'rgba(99,102,241,0.08)') }}">
-                <div class="flex items-center gap-2 mb-2">
-                    <span class="text-lg">{{ $info['icon'] }}</span>
-                    <span class="text-sm font-medium text-ai-primary">{{ $info['name'] }}</span>
-                    <span class="ml-auto text-xs font-bold" style="color:{{ ($d['score']??0) > 50 ? '#a5b4fc' : (($d['score']??0) > 20 ? '#fbbf24' : '#6b7280') }}">
-                        {{ round($d['score']) }}%
+            <div class="rounded-xl p-3.5 transition-all duration-200"
+                 style="background:rgba(255,255,255,0.03); border:1px solid {{ $info['color'] ?? '#6366f1' }}22">
+                <div class="flex items-center justify-between mb-2">
+                    <a href="{{ $info['url'] ?? '#' }}" target="_blank" rel="noopener"
+                       class="flex items-center gap-2 hover:underline cursor-pointer"
+                       style="pointer-events:auto; z-index:10; position:relative; color:inherit; text-decoration:none;">
+                        <span class="text-base">{{ $info['icon'] }}</span>
+                        <span class="text-sm font-medium text-white">{{ $info['name'] }}</span>
+                        <span class="text-[10px] text-ai-dim">↗</span>
+                    </a>
+                    <div class="flex items-center gap-1 text-[10px]" style="pointer-events:none">
+                        @if($info['pc'] ?? true)<span class="px-1 rounded" style="background:{{ $info['color'] }}22; color:{{ $info['color'] }}">💻</span>@endif
+                        @if($info['mobile'] ?? true)<span class="px-1 rounded" style="background:{{ $info['color'] }}22; color:{{ $info['color'] }}">📱</span>@endif
+                    </div>
+                </div>
+                <div class="text-lg font-bold" style="color:{{ $d['score'] >= 50 ? '#a5b4fc' : ($d['score'] >= 20 ? '#fbbf24' : '#9ca3af') }}">
+                    {{ $d['score'] ?? 0 }}%
+                </div>
+                <div class="text-[10px] mt-1 flex items-center gap-2">
+                    <span class="text-ai-dim">提及 {{ $d['mentioned'] ?? 0 }} 次</span>
+                    <span class="{{ ($d['trend'] ?? 'flat') === 'up' ? 'text-green-400' : (($d['trend'] ?? 'flat') === 'down' ? 'text-red-400' : 'text-ai-dim') }}">
+                        {{ ($d['trend'] ?? 'flat') === 'up' ? '↑' : (($d['trend'] ?? 'flat') === 'down' ? '↓' : '→') }}
                     </span>
-                </div>
-                <div class="rounded-full h-1.5 mb-2" style="background:rgba(255,255,255,0.06)">
-                    <div class="h-1.5 rounded-full transition-all" style="width:{{ min(100, $d['score']) }}%; background:{{ $info['color'] }}"></div>
-                </div>
-                <div class="flex justify-between text-[10px]">
-                    <span class="text-ai-dim">提及 {{ $d['mentioned'] }} 次</span>
-                    <span style="color:{{ $d['trend']==='up'?'#a5b4fc':($d['trend']==='down'?'#fca5a5':'#6b7280') }}">
-                        {{ $d['trend'] === 'up' ? '↗' : ($d['trend'] === 'down' ? '↘' : '→') }}
-                    </span>
-                </div>
-                <div class="flex gap-2 mt-2 pt-2 border-t" style="border-color:rgba(99,102,241,0.08)">
-                    @if ($info['pc'] ?? true)
-                    <span class="text-[10px] px-1.5 py-0.5 rounded" style="background:rgba(99,102,241,0.1); color:#a5b4fc">💻 PC</span>
-                    @endif
-                    @if ($info['mobile'] ?? true)
-                    <span class="text-[10px] px-1.5 py-0.5 rounded" style="background:rgba(99,102,241,0.1); color:#a5b4fc">📱 移动</span>
-                    @endif
                 </div>
             </div>
             @endforeach
         </div>
+    </div>
+
+    {{-- v2.6.0 报表明细表 --}}
+    <div class="bento-card p-5">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-base font-semibold text-ai-primary">📋 检测明细</h2>
+            <span class="text-xs text-ai-dim">最近50条 · 点击平台名可跳转验证</span>
+        </div>
+        @php $recentChecks = \App\Models\AiVisibilityCheck::where('workspace_id', $workspace->id)->orderByDesc('checked_at')->limit(50)->get(); @endphp
+        @if($recentChecks->isNotEmpty())
+        <div class="overflow-x-auto">
+            <table class="w-full text-xs">
+                <thead><tr class="text-ai-dim border-b" style="border-color:rgba(165,180,252,0.08)">
+                    <th class="text-left py-2 px-2">#</th><th class="text-left py-2 px-2">关键词</th><th class="text-left py-2 px-2">平台</th><th class="text-left py-2 px-2">时间</th><th class="text-left py-2 px-2">结果</th><th class="text-left py-2 px-2">快照</th>
+                </tr></thead>
+                <tbody>
+                @foreach($recentChecks as $i => $c)
+                @php $pI = $platforms[$c->ai_platform] ?? null; @endphp
+                <tr class="border-b hover:bg-white/5" style="border-color:rgba(165,180,252,0.04)">
+                    <td class="py-2 px-2 text-ai-dim">{{ $i+1 }}</td>
+                    <td class="py-2 px-2 text-ai-primary max-w-[120px] truncate">{{ $c->query_keyword }}</td>
+                    <td class="py-2 px-2">@if($pI)<a href="{{ route('client.snapshot', $c->id) }}" target="_blank"
+   class="inline-flex items-center gap-1 hover:underline" style="color:{{ $pI['color']??'#6366f1' }};cursor:pointer">{{ $pI['icon'] }} {{ $pI['name'] }} <span class="text-[10px] opacity-50">📋 快照</span></a>@else<span class="text-ai-dim">{{ $c->ai_platform }}</span>@endif</td>
+                    <td class="py-2 px-2 text-ai-dim">{{ $c->checked_at?->format('m-d H:i') }}</td>
+                    <td class="py-2 px-2">@if($c->mentioned)<span class="px-1.5 py-0.5 rounded-full text-[10px] bg-green-500/15 text-green-300">✅ 收录</span>@else<span class="text-ai-dim text-[10px]">—</span>@endif</td>
+                    <td class="py-2 px-2">@if($c->response_snippet)<span class="text-[10px] text-ai-dim cursor-help" title="{{ e($c->response_snippet) }}">💬</span>@endif</td>
+                </tr>
+                @endforeach
+                </tbody>
+            </table>
+        </div>
         @else
-        <div class="text-center py-8 text-ai-dim"><p class="text-3xl mb-2">🔍</p><p>AI引用数据正在收集中，系统将在每日凌晨自动检测</p></div>
+        <div class="text-center py-6 text-ai-dim text-sm">暂无检测记录，文章发布后将自动检测</div>
         @endif
     </div>
 

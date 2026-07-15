@@ -90,27 +90,61 @@ class DashboardController extends Controller
             $defaults['failed_jobs'] = (int) ($jobStatusCounts['failed'] ?? 0);
             $defaults['completed_tasks'] = (int) ($jobStatusCounts['completed'] ?? 0);
 
-            $defaults['total_articles'] = (int) Article::query()->whereNull('deleted_at')->count();
-            $defaults['published_articles'] = (int) Article::query()->where('status', 'published')->whereNull('deleted_at')->count();
-            $defaults['draft_articles'] = (int) Article::query()->where('status', 'draft')->whereNull('deleted_at')->count();
-            $defaults['ai_generated_articles'] = (int) Article::query()->where('is_ai_generated', 1)->whereNull('deleted_at')->count();
-            $defaults['pending_review'] = (int) Article::query()->where('review_status', 'pending')->whereNull('deleted_at')->count();
-            $defaults['approved_articles'] = (int) Article::query()->where('review_status', 'approved')->whereNull('deleted_at')->count();
-            $defaults['total_views'] = (int) (Article::query()->whereNull('deleted_at')->sum('view_count') ?? 0);
-            if (Schema::hasColumn('articles', 'like_count')) {
-                $defaults['total_likes'] = (int) (Article::query()->whereNull('deleted_at')->sum('like_count') ?? 0);
+            // 合并 6 次 Article 查询为 1 次聚合查询（含 views/likes）
+            $articleAgg = Article::query()
+                ->whereNull('deleted_at')
+                ->selectRaw("
+                    COUNT(*) as total_articles,
+                    SUM(CASE WHEN status = 'published' THEN 1 ELSE 0 END) as published_articles,
+                    SUM(CASE WHEN status = 'draft' THEN 1 ELSE 0 END) as draft_articles,
+                    SUM(CASE WHEN is_ai_generated = 1 THEN 1 ELSE 0 END) as ai_generated_articles,
+                    SUM(CASE WHEN review_status = 'pending' THEN 1 ELSE 0 END) as pending_review,
+                    SUM(CASE WHEN review_status = 'approved' THEN 1 ELSE 0 END) as approved_articles,
+                    COALESCE(SUM(view_count), 0) as total_views"
+                    . (Schema::hasColumn('articles', 'like_count') ? ', COALESCE(SUM(like_count), 0) as total_likes' : ''))
+                ->first();
+
+            if ($articleAgg) {
+                $defaults['total_articles'] = (int) $articleAgg->total_articles;
+                $defaults['published_articles'] = (int) $articleAgg->published_articles;
+                $defaults['draft_articles'] = (int) $articleAgg->draft_articles;
+                $defaults['ai_generated_articles'] = (int) $articleAgg->ai_generated_articles;
+                $defaults['pending_review'] = (int) $articleAgg->pending_review;
+                $defaults['approved_articles'] = (int) $articleAgg->approved_articles;
+                $defaults['total_views'] = (int) $articleAgg->total_views;
+                if (Schema::hasColumn('articles', 'like_count') && isset($articleAgg->total_likes)) {
+                    $defaults['total_likes'] = (int) $articleAgg->total_likes;
+                }
             }
 
-            $defaults['total_tasks'] = (int) Task::query()->count();
-            $defaults['active_tasks'] = (int) Task::query()->where('status', 'active')->count();
+            // 合并 2 次 Task 查询为 1 次
+            $taskAgg = Task::query()
+                ->selectRaw("COUNT(*) as total_tasks, SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active_tasks")
+                ->first();
+            if ($taskAgg) {
+                $defaults['total_tasks'] = (int) $taskAgg->total_tasks;
+                $defaults['active_tasks'] = (int) $taskAgg->active_tasks;
+            }
+
+            // 合并 3 次 Prompt 查询为 1 次
+            $promptAgg = Prompt::query()
+                ->selectRaw("
+                    COUNT(*) as total_prompts,
+                    SUM(CASE WHEN type = 'content' THEN 1 ELSE 0 END) as body_prompts,
+                    SUM(CASE WHEN type IN ('keyword', 'description') THEN 1 ELSE 0 END) as special_prompts")
+                ->first();
+            if ($promptAgg) {
+                $defaults['total_prompts'] = (int) $promptAgg->total_prompts;
+                $defaults['body_prompts'] = (int) $promptAgg->body_prompts;
+                $defaults['special_prompts'] = (int) $promptAgg->special_prompts;
+            }
+
+            // 单次查询的统计数据
             $defaults['total_keywords'] = (int) Keyword::query()->count();
             $defaults['total_titles'] = (int) Title::query()->count();
             $defaults['total_images'] = (int) Image::query()->count();
             $defaults['total_categories'] = (int) Category::query()->count();
             $defaults['active_ai_models'] = (int) AiModel::query()->where('status', 'active')->count();
-            $defaults['total_prompts'] = (int) Prompt::query()->count();
-            $defaults['body_prompts'] = (int) Prompt::query()->where('type', 'content')->count();
-            $defaults['special_prompts'] = (int) Prompt::query()->whereIn('type', ['keyword', 'description'])->count();
         } catch (\Throwable) {
             return $defaults;
         }

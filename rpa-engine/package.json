@@ -10,6 +10,7 @@
     "test:b2b168": "node test-certify.js b2b168"
   },
   "dependencies": {
+    "@playwright/mcp": "^0.0.78",
     "express": "^4.21.0",
     "playwright": "^1.48.0",
     "playwright-extra": "^4.3.6",

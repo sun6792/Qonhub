@@ -13,6 +13,7 @@
         "laravel/reverb": "^1.0",
         "laravel/sanctum": "^4.3",
         "laravel/tinker": "^2.10.1",
+        "paperdoc-dev/paperdoc-lib": "^0.8.3",
         "predis/predis": "^3.5"
     },
     "require-dev": {

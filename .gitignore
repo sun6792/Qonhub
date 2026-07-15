@@ -28,3 +28,7 @@ Homestead.json
 Homestead.yaml
 Thumbs.db
 .env.docker
+
+# v2.6.0: 浏览器持久化数据（Cookie/缓存）
+rpa-engine/storage/browser-profile/
+storage/browser-profile/

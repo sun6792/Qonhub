@@ -173,7 +173,7 @@ let currentWs = "";
 
 async function loadWorkspaces() {
   try {
-    const resp = await fetch(`${CLOUD}/api/v1/rpa/my-workspaces`);
+    const resp = await fetch(`${CLOUD}/api/v1/rpa/my-workspaces`, {headers: {'X-Api-Key': API_KEY}});
     const data = await resp.json();
     wsList = data.workspaces || [];
     if (wsList.length === 0) {
@@ -395,7 +395,7 @@ const CLOUD = "http://127.0.0.1:18080/geo_admin";
 async function loadArticles() {
   if (!currentWs) return;
   try {
-    const resp = await fetch(CLOUD + "/api/v1/rpa/articles?workspace_id=" + currentWs);
+    const resp = await fetch(CLOUD + "/api/v1/rpa/articles?workspace_id=" + currentWs, {headers: {'X-Api-Key': API_KEY}});
     const data = await resp.json();
     renderArticles(data.articles || []);
     log("文章加载完成: " + (data.articles || []).length + " 篇");
@@ -408,14 +408,14 @@ async function loadDistChannels() {
   if (!currentWs) { distChannels = []; return; }
   try {
     // 客户已绑平台
-    const platResp = await fetch(CLOUD + "/api/v1/rpa/client-platforms?workspace_id=" + currentWs);
+    const platResp = await fetch(CLOUD + "/api/v1/rpa/client-platforms?workspace_id=" + currentWs, {headers: {'X-Api-Key': API_KEY}});
     const platData = await platResp.json();
     const bound = (platData.platforms || []).map(function(p) {
       return {key: p.key + '_publish', name: p.name, type: 'rpa', bound: true, hasCache: p.has_cache};
     });
 
     // API渠道（始终可用）
-    const chResp = await fetch(CLOUD + "/api/v1/rpa/distribution-channels");
+    const chResp = await fetch(CLOUD + "/api/v1/rpa/distribution-channels", {headers: {'X-Api-Key': API_KEY}});
     const chData = await chResp.json();
     const apiChannels = (chData.channels || []).filter(function(c) { return c.type === 'api'; });
 
@@ -478,7 +478,7 @@ async function bulkDistribute() {
   try {
     var resp = await fetch(CLOUD + "/api/v1/rpa/bulk-distribute", {
       method: "POST",
-      headers: {"Content-Type": "application/json"},
+      headers: {"Content-Type": "application/json", "X-Api-Key": API_KEY},
       body: JSON.stringify({
         workspace_id: parseInt(currentWs),
         platform: platform,
@@ -530,7 +530,7 @@ async function loadAuthPlatforms() {
 
   let dbPlatforms = {}, cachePlatforms = {};
   try {
-    const dbResp = await fetch(`${CLOUD}/api/v1/rpa/client-platforms?workspace_id=${currentWs}`);
+    const dbResp = await fetch(`${CLOUD}/api/v1/rpa/client-platforms?workspace_id=${currentWs}`, {headers: {'X-Api-Key': API_KEY}});
     const dbData = await dbResp.json();
     (dbData.platforms || []).forEach(p => { dbPlatforms[p.key] = p; });
   } catch(e) { log("⚠️ 云端平台状态读取失败: "+e.message); }

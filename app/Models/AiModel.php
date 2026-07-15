@@ -20,6 +20,7 @@ class AiModel extends Model
         'model_id',
         'model_type',
         'api_url',
+        'provider_id',
         'failover_priority',
         'daily_limit',
         'used_today',
@@ -47,5 +48,10 @@ class AiModel extends Model
     public function tasks(): HasMany
     {
         return $this->hasMany(Task::class, 'ai_model_id');
+    }
+
+    public function provider(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(AiModelProvider::class, 'provider_id');
     }
 }
