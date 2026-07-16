@@ -103,11 +103,13 @@ class ScoutAgentService
 
         $results = [];
 
-        // ── RPA 真实浏览器搜索 ──
+        // ── RPA 真实浏览器搜索（仅包含 Cookie 就绪的平台）──
         $rpaAvailable = $this->isRpaAvailable();
         if ($rpaAvailable) {
-            $rpaPlatforms = ['yuanbao', 'baidu'];
-            $results = array_merge($results, $this->executeRpaScout($rpaPlatforms, $brandName, $workspaceId));
+            $rpaPlatforms = $this->resolveAvailableRpaPlatforms($workspaceId);
+            if ($rpaPlatforms !== []) {
+                $results = array_merge($results, $this->executeRpaScout($rpaPlatforms, $brandName, $workspaceId));
+            }
         }
 
         // ── API 对话 ──
@@ -115,6 +117,32 @@ class ScoutAgentService
         $results = array_merge($results, $this->executeApiScout($apiPlatforms, $brandName, $workspaceId, $agentExecutionId, $scoutBrief));
 
         return $results;
+    }
+
+    /**
+     * 仅返回 Cookie 有效的 RPA 平台（≥10 个 cookie 才算真登录）。
+     * WS7 如果未登录元宝/百度，就不会返回这些平台，避免假阴性拉低数据。
+     */
+    private function resolveAvailableRpaPlatforms(int $workspaceId): array
+    {
+        $candidates = [
+            'yuanbao' => '元宝(RPA)',
+            'baidu' => '百度AI(RPA)',
+        ];
+        $available = [];
+        $stateDir = base_path("rpa-engine/storage/states/{$workspaceId}");
+        foreach ($candidates as $key => $name) {
+            $file = "{$stateDir}/{$key}.json";
+            if (! file_exists($file)) continue;
+            try {
+                $data = json_decode(file_get_contents($file), true);
+                $count = count($data['cookies'] ?? []);
+                if ($count >= 10) {
+                    $available[] = $key;
+                }
+            } catch (\Throwable) { /* 文件损坏,跳过 */ }
+        }
+        return $available;
     }
 
     /** 检测 RPA 引擎是否在线 */

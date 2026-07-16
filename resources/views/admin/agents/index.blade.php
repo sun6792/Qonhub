@@ -66,8 +66,13 @@
         </div>
       </div>
       <button type="submit" class="mt-4 px-6 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 transition">
-        启动智能体工作流
+        🚀 启动智能体工作流
       </button>
+      <p class="text-xs text-gray-400 mt-3">
+        ⚠️ 启动前请确保已通过
+        <a href="http://127.0.0.1:9901" target="_blank" class="text-indigo-500 hover:underline font-medium">🖥️ 运营助手 (RPA)</a>
+        完成平台授权登录，否则分发步骤将超时
+      </p>
     </form>
   </div>
 

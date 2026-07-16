@@ -1,6 +1,10 @@
 @extends('client.layout')
 
 @section('content')
+<div class="rounded-xl p-4 mb-4 text-sm" style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.2)">
+  <span class="font-medium" style="color:#a5b4fc">💡 如何授权？</span>
+  <span class="text-ai-dim">平台授权由运营团队通过本地助手完成。看到"未授权"的平台，联系您的运营专员即可。已授权的平台会显示 ✅ 并可用于一键发布。</span>
+</div>
 @php
   $accts = \App\Models\ClientPlatformAccount::where('workspace_id',(int)$workspace->id)->get()->keyBy('platform_key');
   $totalBound = $accts->where('status','active')->count();
