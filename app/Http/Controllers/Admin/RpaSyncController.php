@@ -14,14 +14,65 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
 /**
- * RPA 引擎云端同步控制器 [新增]
+ * RPA 引擎云端同步控制器。
  *
  * 负责本地运营助手与 Laravel 后端的双向通信。
  * 路由由 rpa.auth 中间件保护（X-Api-Key 认证）。
- * 所有端点均校验 workspace 是否存在；敏感操作附加审计日志。
+ *
+ * 安全加固（v2.6.1+）：
+ *   - Tier 1: localhost-only 模式（GEOFLOW_RPA_LOCALHOST_ONLY=true，默认开启）
+ *   - Tier 2: operator 身份绑定（X-Operator-Token header → Admin API Token → 按 workspace 隔离）
  */
 class RpaSyncController extends Controller
 {
+    // ── 安全基础设施 ─────────────────────────────────────
+
+    /**
+     * 检查请求是否来自本地回环地址。
+     * 由 GEOFLOW_RPA_LOCALHOST_ONLY 环境变量控制，默认开启。
+     */
+    private function guardLocalhost(Request $request): void
+    {
+        if (! config('geoflow.rpa_localhost_only', true)) {
+            return;
+        }
+
+        $remoteIp = $request->ip();
+        if (! in_array($remoteIp, ['127.0.0.1', '::1', 'localhost'], true)) {
+            Log::warning('RPA: non-localhost access denied', [
+                'remote_ip' => $remoteIp,
+                'path' => $request->path(),
+            ]);
+            abort(403, 'RPA API 仅限本地访问（GEOFLOW_RPA_LOCALHOST_ONLY=true）');
+        }
+    }
+
+    /**
+     * 解析 RPA Operator 身份（通过 X-Operator-Token header）。
+     * 返回该 operator 有权访问的 workspace ID 列表。
+     *
+     * @return int[]|null  null=无身份（兼容旧版dashboard），[]=有身份但无workspace
+     */
+    private function resolveRpaOperatorWorkspaceIds(Request $request): ?array
+    {
+        $token = $request->header('X-Operator-Token');
+        if (empty($token)) {
+            return null; // 未提供 token，向后兼容
+        }
+
+        // 通过 Sanctum personal access token 查找 admin
+        $accessToken = \Laravel\Sanctum\PersonalAccessToken::findToken($token);
+        if (! $accessToken || $accessToken->tokenable_type !== \App\Models\Admin::class) {
+            Log::warning('RPA: invalid operator token', ['token_hash' => substr(hash('sha256', $token), 0, 8)]);
+            return [];
+        }
+
+        /** @var \App\Models\Admin $admin */
+        $admin = $accessToken->tokenable;
+
+        return $admin->scopedWorkspaceIds() ?? [];
+    }
+
     /**
      * 校验 workspace 存在性，不存在则返回 404。
      */
@@ -35,16 +86,39 @@ class RpaSyncController extends Controller
     }
 
     /**
-     * GET /api/v1/rpa/pending-tasks
-     * 本地助手轮询：返回指定 workspace 下的待认证 B2B 平台。
+     * 校验 operator 对 workspace 的访问权限。
+     * operatorWorkspaceIds 为 null 时（未提供身份）跳过，向后兼容。
+     */
+    private function authorizeRpaWorkspaceAccess(int $wsId, ?array $operatorWorkspaceIds): void
+    {
+        if ($operatorWorkspaceIds === null) {
+            return; // 未提供 operator token，向后兼容
+        }
+
+        if (! in_array($wsId, $operatorWorkspaceIds, true)) {
+            Log::warning('RPA: workspace access denied by operator scope', [
+                'workspace_id' => $wsId,
+            ]);
+            abort(403, '无权访问该工作空间');
+        }
+    }
+
+    // ── API 端点 ─────────────────────────────────────────
+
+    /**
+     * GET /api/v1/rpa/pending-tasks?workspace_id=N
      */
     public function pendingTasks(Request $request): JsonResponse
     {
+        $this->guardLocalhost($request);
+        $operatorWsIds = $this->resolveRpaOperatorWorkspaceIds($request);
+
         $wsId = (int) $request->query('workspace_id', 0);
         if ($wsId <= 0) {
             return response()->json(['tasks' => []]);
         }
 
+        $this->authorizeRpaWorkspaceAccess($wsId, $operatorWsIds);
         $workspace = $this->validateWorkspace($wsId);
 
         $profile = EnterpriseProfile::query()->where('workspace_id', $wsId)->first();
@@ -61,11 +135,9 @@ class RpaSyncController extends Controller
         $tasks = [];
         foreach ($platforms as $key => $info) {
             $cert = $existingCerts->get($key);
-            // 只返回未认证或已过期的平台
             if ($cert && $cert->isCertified() && ! $cert->isExpired()) {
                 continue;
             }
-            // 只返回有 RPA 脚本的平台
             if (empty($info['supports_rpa']) && ($info['coverage'] ?? 'manual') !== 'rpa') {
                 continue;
             }
@@ -84,10 +156,12 @@ class RpaSyncController extends Controller
 
     /**
      * POST /api/v1/rpa/report
-     * 本地助手执行完成后上报结果，自动同步锚点状态。
      */
     public function report(Request $request): JsonResponse
     {
+        $this->guardLocalhost($request);
+        $operatorWsIds = $this->resolveRpaOperatorWorkspaceIds($request);
+
         $payload = $request->validate([
             'task_id' => ['nullable', 'string'],
             'workspace_id' => ['required', 'integer'],
@@ -98,6 +172,7 @@ class RpaSyncController extends Controller
             'error' => ['nullable', 'string', 'max:1000'],
         ]);
 
+        $this->authorizeRpaWorkspaceAccess((int) $payload['workspace_id'], $operatorWsIds);
         $this->validateWorkspace((int) $payload['workspace_id']);
 
         $profile = EnterpriseProfile::query()
@@ -118,7 +193,6 @@ class RpaSyncController extends Controller
 
         try {
             if ($payload['success']) {
-                // 1) 自动标记锚点认证
                 $cert = EnterpriseAnchorCertification::query()->firstOrCreate(
                     ['enterprise_profile_id' => (int) $profile->id, 'anchor_platform_key' => $platformKey],
                     [
@@ -137,7 +211,6 @@ class RpaSyncController extends Controller
                     ])->save();
                 }
 
-                // 2) 同步 ClientPlatformAccount（RPA 登录成功后自动标记客户端可见）
                 app(PlatformSyncService::class)->syncBinding((int) $payload['workspace_id'], [
                     'platform_key' => $platformKey,
                     'platform_name' => $platformInfo['name'] ?? $platformKey,
@@ -160,19 +233,21 @@ class RpaSyncController extends Controller
             return response()->json(['success' => true]);
         } catch (\Throwable $e) {
             Log::error('RPA sync: report processing error', ['message' => $e->getMessage()]);
-
             return response()->json(['success' => false, 'error' => $e->getMessage()]);
         }
     }
 
     /**
-     * [新增] GET /api/v1/rpa/articles?workspace_id=7
-     * 返回指定 workspace 的已发布文章列表（用于本地助手文章分发）。
+     * GET /api/v1/rpa/articles?workspace_id=N
      */
     public function articles(Request $request): JsonResponse
     {
+        $this->guardLocalhost($request);
+        $operatorWsIds = $this->resolveRpaOperatorWorkspaceIds($request);
+
         $wsId = (int) $request->query('workspace_id', 0);
         if ($wsId > 0) {
+            $this->authorizeRpaWorkspaceAccess($wsId, $operatorWsIds);
             $this->validateWorkspace($wsId);
         }
 
@@ -181,7 +256,6 @@ class RpaSyncController extends Controller
             ->orderByDesc('published_at')
             ->limit(30);
 
-        // Workspace 隔离：只返回该客户的已发布文章
         if ($wsId > 0) {
             $query->whereIn('id', function ($sub) use ($wsId) {
                 $sub->select('assignable_id')
@@ -205,18 +279,58 @@ class RpaSyncController extends Controller
     }
 
     /**
-     * [新增] GET /api/v1/rpa/client-platforms?workspace_id=7
-     * 返回该 workspace 客户已绑定的平台列表（供助手加载渠道）。
+     * GET /api/v1/rpa/articles/{id}
+     */
+    public function articleDetail(Request $request, int $id): JsonResponse
+    {
+        $this->guardLocalhost($request);
+        $operatorWsIds = $this->resolveRpaOperatorWorkspaceIds($request);
+
+        $article = \App\Models\Article::query()->find($id);
+        if (! $article) {
+            return response()->json(['error' => '文章不存在'], 404);
+        }
+
+        // 检查文章所属 workspace 是否在 operator 权限范围内
+        if ($operatorWsIds !== null) {
+            $articleWsIds = \Illuminate\Support\Facades\DB::table('workspace_assignments')
+                ->where('assignable_type', \App\Models\Article::class)
+                ->where('assignable_id', $id)
+                ->pluck('workspace_id')
+                ->map(fn ($v) => (int) $v)
+                ->toArray();
+
+            $allowed = ! empty(array_intersect($articleWsIds, $operatorWsIds));
+            if (! $allowed && $articleWsIds !== []) {
+                Log::warning('RPA: article access denied by operator scope', ['article_id' => $id]);
+                abort(403, '无权访问该文章');
+            }
+        }
+
+        return response()->json([
+            'id' => (int) $article->id,
+            'title' => $article->title,
+            'content' => $article->content,
+            'excerpt' => $article->excerpt,
+        ]);
+    }
+
+    /**
+     * GET /api/v1/rpa/client-platforms?workspace_id=N
      */
     public function clientPlatforms(Request $request): JsonResponse
     {
+        $this->guardLocalhost($request);
+        $operatorWsIds = $this->resolveRpaOperatorWorkspaceIds($request);
+
         $wsId = (int) $request->query('workspace_id', 0);
         if ($wsId <= 0) {
             return response()->json(['platforms' => []]);
         }
+
+        $this->authorizeRpaWorkspaceAccess($wsId, $operatorWsIds);
         $this->validateWorkspace($wsId);
 
-        // 统一四态数据（DB + 缓存交叉校验）
         $sync = app(PlatformSyncService::class);
         $platforms = $sync->getUnifiedStatus($wsId);
 
@@ -227,21 +341,29 @@ class RpaSyncController extends Controller
     }
 
     /**
-     * [新增] GET /api/v1/rpa/credentials?workspace_id=7
-     * 返回指定workspace下所有平台的解密凭证，供运营助手登录使用。
-     * 凭证经 AES-256-CBC 解密后通过本地 API 传输（localhost:9901 ↔ localhost:18080，不经过公网）。
+     * GET /api/v1/rpa/credentials?workspace_id=N
+     *
+     * 凭证经 AES-256-CBC 解密后通过本地 API 传输。
+     *
+     * 安全：仅允许 localhost（Tier 1）+ operator 绑定（Tier 2）。
      */
     public function credentials(Request $request): JsonResponse
     {
+        $this->guardLocalhost($request);
+        $operatorWsIds = $this->resolveRpaOperatorWorkspaceIds($request);
+
         $wsId = (int) $request->query('workspace_id', 0);
         if ($wsId <= 0) {
             return response()->json(['credentials' => []]);
         }
 
+        $this->authorizeRpaWorkspaceAccess($wsId, $operatorWsIds);
         $this->validateWorkspace($wsId);
 
-        // 审计：凭证被访问（仅本地 RPA API 调用）
-        Log::info('RPA: credentials accessed', ['workspace_id' => $wsId]);
+        Log::warning('RPA: credentials accessed (sensitive)', [
+            'workspace_id' => $wsId,
+            'remote_ip' => $request->ip(),
+        ]);
 
         $crypto = app(\App\Support\GeoFlow\ApiKeyCrypto::class);
         $accounts = \App\Models\ClientPlatformAccount::query()
@@ -262,7 +384,7 @@ class RpaSyncController extends Controller
             $result[] = [
                 'platform_key' => $a->platform_key,
                 'account_name' => $a->platform_account_name,
-                'credential' => $cred, // 解密后的明文（仅本地传输）
+                'credential' => $cred,
                 'last_verified_at' => $a->last_verified_at?->toIso8601String(),
             ];
         }
@@ -271,32 +393,20 @@ class RpaSyncController extends Controller
     }
 
     /**
-     * [新增] GET /api/v1/rpa/articles/{id}
-     * 返回单篇文章全文（用于分发时传内容给RPA）。
-     */
-    public function articleDetail(int $id): JsonResponse
-    {
-        $article = \App\Models\Article::query()->find($id);
-        if (! $article) {
-            return response()->json(['error' => '文章不存在'], 404);
-        }
-        return response()->json([
-            'id' => (int) $article->id,
-            'title' => $article->title,
-            'content' => $article->content,
-            'excerpt' => $article->excerpt,
-        ]);
-    }
-
-    /**
-     * [新增] GET /api/v1/rpa/distribution-channels?workspace_id=7
-     * 返回该 workspace 可用的分发渠道（API渠道 + RPA渠道）。
+     * GET /api/v1/rpa/distribution-channels?workspace_id=N
      */
     public function distributionChannels(Request $request): JsonResponse
     {
+        $this->guardLocalhost($request);
+        $operatorWsIds = $this->resolveRpaOperatorWorkspaceIds($request);
+
+        $wsId = (int) $request->query('workspace_id', 0);
+        if ($wsId > 0) {
+            $this->authorizeRpaWorkspaceAccess($wsId, $operatorWsIds);
+        }
+
         $channels = [];
 
-        // API 分发渠道（GeoFlow/WP/HTTP）
         $apiChannels = \App\Models\DistributionChannel::query()
             ->where('status', 'active')
             ->get(['id', 'name', 'domain', 'channel_type']);
@@ -309,7 +419,6 @@ class RpaSyncController extends Controller
             ];
         }
 
-        // RPA 自媒体渠道
         $rpaPlatforms = [
             ['key' => 'toutiao_publish', 'name' => '头条号', 'type' => 'rpa'],
             ['key' => 'baijiahao_publish', 'name' => '百家号', 'type' => 'rpa'],
@@ -322,15 +431,28 @@ class RpaSyncController extends Controller
 
     /**
      * GET /api/v1/rpa/my-workspaces
-     * 返回当前运营名下的 workspace 列表（用于助手下拉框）。
+     *
+     * 有 X-Operator-Token 时只返回该运营绑定的 workspace；
+     * 无 token 时兜底返回全部（向后兼容旧版 dashboard）。
      */
     public function myWorkspaces(Request $request): JsonResponse
     {
-        // 运营助手 dashboard 无 admin session，返回全部 workspace
-        $workspaces = Workspace::query()->select(['id', 'name', 'slug'])
+        $this->guardLocalhost($request);
+        $operatorWsIds = $this->resolveRpaOperatorWorkspaceIds($request);
+
+        $query = Workspace::query()->select(['id', 'name', 'slug'])
             ->where('status', 'active')
-            ->orderBy('name')
-            ->get();
+            ->orderBy('name');
+
+        // Tier 2: operator 身份绑定 → 只返回该运营的 workspace
+        if ($operatorWsIds !== null) {
+            if ($operatorWsIds === []) {
+                return response()->json(['workspaces' => []]);
+            }
+            $query->whereIn('id', $operatorWsIds);
+        }
+
+        $workspaces = $query->get();
 
         return response()->json([
             'workspaces' => $workspaces->map(fn ($w) => [
@@ -342,12 +464,14 @@ class RpaSyncController extends Controller
     }
 
     /**
-     * POST /api/v1/rpa/bulk-distribute — P0 运营助手批量分发
+     * POST /api/v1/rpa/bulk-distribute
      * Body: { workspace_id, platform, article_ids[] }
-     * 自动创建 ContentPublishTask → 入队 distribution 队列
      */
     public function bulkDistribute(Request $request): JsonResponse
     {
+        $this->guardLocalhost($request);
+        $operatorWsIds = $this->resolveRpaOperatorWorkspaceIds($request);
+
         $payload = $request->validate([
             'workspace_id' => ['required', 'integer', 'min:1'],
             'platform' => ['required', 'string'],
@@ -356,6 +480,7 @@ class RpaSyncController extends Controller
         ]);
 
         $wsId = (int) $payload['workspace_id'];
+        $this->authorizeRpaWorkspaceAccess($wsId, $operatorWsIds);
         $workspace = $this->validateWorkspace($wsId);
 
         try {
@@ -382,5 +507,56 @@ class RpaSyncController extends Controller
         } catch (\Throwable $e) {
             return response()->json(['ok' => false, 'error' => $e->getMessage()], 500);
         }
+    }
+
+    /**
+     * POST /api/v1/scout/report — Scout脚本上报AI收录结果。
+     * Body: { workspace_id, platform, results: [{url, domain, title, excerpt}] }
+     * scout_and_save.cjs 执行完成后自动调用此端点将数据写入 ai_cited_sources 表。
+     */
+    public function scoutReport(Request $request): JsonResponse
+    {
+        $this->guardLocalhost($request);
+        $operatorWsIds = $this->resolveRpaOperatorWorkspaceIds($request);
+
+        $payload = $request->validate([
+            'workspace_id' => ['required', 'integer', 'min:1'],
+            'platform' => ['required', 'string'],
+            'results' => ['required', 'array'],
+            'results.*.url' => ['required', 'string'],
+            'results.*.domain' => ['nullable', 'string'],
+            'results.*.title' => ['nullable', 'string'],
+            'results.*.excerpt' => ['nullable', 'string'],
+        ]);
+
+        $wsId = (int) $payload['workspace_id'];
+        $this->authorizeRpaWorkspaceAccess($wsId, $operatorWsIds);
+        $this->validateWorkspace($wsId);
+
+        $platform = $payload['platform'];
+        $inserted = 0;
+
+        foreach ($payload['results'] as $r) {
+            try {
+                \App\Models\AiCitedSource::updateOrCreate(
+                    ['workspace_id' => $wsId, 'url' => $r['url']],
+                    [
+                        'ai_platform' => $platform,
+                        'domain' => $r['domain'] ?? parse_url($r['url'], PHP_URL_HOST),
+                        'title' => $r['title'] ?? null,
+                        'excerpt' => $r['excerpt'] ?? null,
+                    ]
+                );
+                $inserted++;
+            } catch (\Throwable) { /* skip duplicate */ }
+        }
+
+        Log::info('Scout report ingested', [
+            'workspace_id' => $wsId,
+            'platform' => $platform,
+            'inserted' => $inserted,
+        ]);
+
+        return response()->json(['ok' => true, 'inserted' => $inserted]);
     }
 }

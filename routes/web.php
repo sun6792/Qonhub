@@ -452,5 +452,6 @@ Route::prefix($adminPrefix)->name('admin.')->middleware(['admin.locale'])->group
         Route::get('client-platforms', [RpaSyncController::class, 'clientPlatforms'])->name('client-platforms');
         Route::get('credentials', [RpaSyncController::class, 'credentials'])->name('credentials');
         Route::post('bulk-distribute', [RpaSyncController::class, 'bulkDistribute'])->name('bulk-distribute');
+        Route::post('scout/report', [RpaSyncController::class, 'scoutReport'])->name('scout-report');
     });
 });

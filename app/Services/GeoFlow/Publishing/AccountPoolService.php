@@ -6,6 +6,7 @@ use App\Models\ContentPublisherAccount;
 use App\Models\Workspace;
 use App\Support\GeoFlow\ApiKeyCrypto;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
 /**
@@ -82,29 +83,36 @@ class AccountPoolService
 
     /**
      * 账号轮换：当前账号不可用时切换到下一个。
+     * 使用悲观行锁防止并发递增导致的假锁死。
      */
     public function rotateToNext(int $workspaceId, string $platformKey, int $currentAccountId): ?ContentPublisherAccount
     {
-        // 标记当前账号消耗
-        $current = ContentPublisherAccount::find($currentAccountId);
-        if ($current) {
-            $current->increment('daily_publish_count');
-            $current->forceFill(['last_publish_at' => now()])->save();
-        }
+        return DB::transaction(function () use ($workspaceId, $platformKey, $currentAccountId) {
+            // 悲观锁读取当前账号，防止并发递增
+            $current = ContentPublisherAccount::query()
+                ->whereKey($currentAccountId)
+                ->lockForUpdate()
+                ->first();
 
-        return ContentPublisherAccount::query()
-            ->where('workspace_id', $workspaceId)
-            ->where('platform_key', $platformKey)
-            ->where('status', 'active')
-            ->where('health_status', '!=', 'unhealthy')
-            ->whereKeyNot($currentAccountId)
-            ->where(function ($q) {
-                $q->whereRaw('COALESCE(daily_publish_count, 0) < COALESCE(daily_publish_limit, 5)');
-            })
-            ->orderBy('risk_level')
-            ->orderBy('daily_publish_count')
-            ->orderBy('last_publish_at')
-            ->first();
+            if ($current) {
+                $current->increment('daily_publish_count');
+                $current->forceFill(['last_publish_at' => now()])->save();
+            }
+
+            return ContentPublisherAccount::query()
+                ->where('workspace_id', $workspaceId)
+                ->where('platform_key', $platformKey)
+                ->where('status', 'active')
+                ->where('health_status', '!=', 'unhealthy')
+                ->whereKeyNot($currentAccountId)
+                ->where(function ($q) {
+                    $q->whereRaw('COALESCE(daily_publish_count, 0) < COALESCE(daily_publish_limit, 5)');
+                })
+                ->orderBy('risk_level')
+                ->orderBy('daily_publish_count')
+                ->orderBy('last_publish_at')
+                ->first();
+        });
     }
 
     private function riskWeight(ContentPublisherAccount $account): int

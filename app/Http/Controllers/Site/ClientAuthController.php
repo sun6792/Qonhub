@@ -28,7 +28,7 @@ class ClientAuthController extends Controller
         // 支持用户名或邮箱登录：自动检测
         $field = filter_var($loginId, FILTER_VALIDATE_EMAIL) ? 'email' : 'username';
 
-        if (Auth::guard('client')->attempt([$field => $loginId, 'password' => $request->input('password')], $request->boolean('remember'))) {
+        if (Auth::guard('client')->attempt([$field => $loginId, 'password' => $request->input('password'), 'status' => 'active'], $request->boolean('remember'))) {
             $request->session()->regenerate();
 
             /** @var ClientUser $client */

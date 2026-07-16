@@ -8,12 +8,13 @@ namespace App\Services\AI;
 class ChatResponse
 {
     /**
-     * @param  string          $text          响应文本
-     * @param  int             $tokensUsed    Token 消耗
-     * @param  string          $modelId       实际使用的模型ID
-     * @param  string          $providerCode  实际使用的供应商
-     * @param  list<array>     $attempts      故障切换尝试记录
-     * @param  list<array>|null $toolCalls    Function Calling 工具调用 (Phase 3)
+     * @param  string           $text          响应文本
+     * @param  int              $tokensUsed    Token 消耗
+     * @param  string           $modelId       实际使用的模型ID
+     * @param  string           $providerCode  实际使用的供应商
+     * @param  list<array>      $attempts      故障切换尝试记录
+     * @param  list<array>|null $toolCalls     Function Calling 工具调用
+     * @param  int|null         $workspaceId   工作空间ID（用于快照隔离）
      */
     public function __construct(
         public readonly string $text,
@@ -22,6 +23,7 @@ class ChatResponse
         public readonly string $providerCode = '',
         public readonly array  $attempts = [],
         public readonly ?array $toolCalls = null,
+        public readonly ?int   $workspaceId = null,
     ) {}
 
     public function isTextResponse(): bool
@@ -38,6 +40,7 @@ class ChatResponse
             providerCode: $this->providerCode,
             attempts: $attempts,
             toolCalls: $this->toolCalls,
+            workspaceId: $this->workspaceId,
         );
     }
 }

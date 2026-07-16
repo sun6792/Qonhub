@@ -25,6 +25,23 @@
       }
     </script>
     <style>
+      /* ── v2.7.0 AI 暗色主题 Design Tokens ── */
+      :root {
+        --ai-bg: #06080f;
+        --ai-surface: rgba(21, 23, 38, 0.88);
+        --ai-card: rgba(16, 18, 30, 0.82);
+        --ai-border: rgba(165,180,252,0.1);
+        --ai-border-hover: rgba(196,181,253,0.25);
+        --ai-glow: rgba(99,102,241,0.08);
+        --ai-text-primary: rgba(255,255,255,0.85);
+        --ai-text-secondary: rgba(255,255,255,0.55);
+        --ai-text-dim: rgba(200,198,225,0.5);
+        --ai-nav-bg: rgba(16,18,30,0.92);
+        --ai-accent: #a5b4fc;
+        --ai-accent-dim: rgba(129,140,248,0.2);
+        --ai-gradient: linear-gradient(135deg,#6366f1,#8b5cf6);
+      }
+
       /* Bento card glow system */
       .bento-card {
         --glow-x: 50%; --glow-y: 50%; --glow-intensity: 0;

@@ -37,7 +37,14 @@ import { fileURLToPath } from "url";
 // ── Config ──────────────────────────────────────────────
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.RPA_PORT || 9901;
-const API_KEY = process.env.RPA_API_KEY || "qonhub-rpa-secret-change-me";
+const API_KEY = (() => {
+  if (process.env.RPA_API_KEY) return process.env.RPA_API_KEY;
+  // 无环境变量时生成随机密钥并警告，拒绝使用硬编码默认值
+  const fallback = 'rpa-' + Array.from({length: 32}, () => Math.floor(Math.random()*16).toString(16)).join('');
+  console.warn('[SECURITY] RPA_API_KEY 未设置！已生成临时随机密钥。请在生产环境设置 RPA_API_KEY 环境变量。');
+  console.warn(`临时密钥: ${fallback}`);
+  return fallback;
+})();
 const HEADLESS = process.env.RPA_HEADLESS === "true"; // v2.4: 默认桌面模式(浏览器可见), RPA_HEADLESS=true 切回无头
 const SCREENSHOT_DIR = process.env.RPA_SCREENSHOT_DIR || path.join(__dirname, "screenshots");
 const GEOFLOW_API_URL = process.env.GEOFLOW_API_URL || "http://127.0.0.1:18080/geo_admin";
@@ -83,7 +90,8 @@ async function loadAutomations() {
 
 // ── Express App ─────────────────────────────────────────
 const app = express();
-app.use(express.json({ limit: "10mb" }));
+app.use(express.json({ limit: "10mb", type: "application/json" }));
+app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
 // [新增] Serve dashboard
 const dashPath = path.join(__dirname, "dashboard.html");
@@ -226,6 +234,250 @@ app.post("/api/v1/publish", auth, async (req, res) => {
     }
 });
 
+// ══════════════════════════════════════════════════════════
+//  RPA 真实浏览器搜索 — Scout Agent 调用
+// ══════════════════════════════════════════════════════════
+
+const SCOUT_PLATFORMS = {
+    doubao: {
+        name: "豆包",
+        url: "https://www.doubao.com/chat/new",
+        inputSel: "textarea[placeholder*='提问'], textarea[placeholder*='发消息'], textarea",
+        submitKey: "Enter",
+        needNewChat: false,
+    },
+    yuanbao: {
+        name: "腾讯元宝",
+        url: "https://yuanbao.tencent.com/chat/",
+        inputSel: "[class*=\"chat-input\"], [class*=\"InputTextArea\"], textarea",
+        submitKey: "Enter",
+        isRichEditor: true,
+    },
+    baidu: {
+        name: "百度AI",
+        url: "https://chat.baidu.com/search",
+        inputSel: "textarea",
+        submitKey: "Enter",
+    },
+    deepseek: {
+        name: "DeepSeek",
+        url: "https://chat.deepseek.com/",
+        inputSel: "textarea",
+        submitKey: "Enter",
+    },
+    qianwen: {
+        name: "通义千问",
+        url: "https://tongyi.aliyun.com/qianwen/",
+        inputSel: "textarea",
+        submitKey: "Enter",
+    },
+    xf_xinghuo: {
+        name: "讯飞星火",
+        url: "https://xinghuo.xfyun.cn/desk",
+        inputSel: "textarea",
+        submitKey: "Enter",
+    },
+    kimi: {
+        name: "Kimi",
+        url: "https://kimi.moonshot.cn/",
+        inputSel: "textarea",
+        submitKey: "Enter",
+    },
+};
+
+// ── 反检测补丁（对齐 BasePlatformScript） ──
+const UA_POOL = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36 Edg/125.0.0.0",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+];
+const rand = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
+const randomUA = () => UA_POOL[rand(0, UA_POOL.length - 1)];
+
+const STEALTH_PATCH = `
+Object.defineProperty(navigator, 'webdriver', { get: () => false });
+delete Object.getPrototypeOf(navigator).webdriver;
+window.chrome = { runtime: { platform: "Win32", engine: "blink" }, loadTimes: () => {}, csi: () => {}, app: {} };
+`;
+
+/**
+ * POST /api/v1/scout — 真实浏览器搜索 AI 平台。
+ * 双层反检测 + Cookie 持久化 + 搜索提取。
+ * Body: { platform, query, workspace_id }
+ */
+app.post("/api/v1/scout", auth, async (req, res) => {
+    const { platform, query, workspace_id } = req.body;
+    const cfg = SCOUT_PLATFORMS[platform];
+    if (!cfg) return res.status(400).json({ error: "unsupported platform: " + platform });
+
+    const wsId = workspace_id || "default";
+    const taskId = `scout_${platform}_${Date.now()}`;
+    const stateDir = path.join(STORAGE_DIR, String(wsId));
+    if (!fs.existsSync(stateDir)) fs.mkdirSync(stateDir, { recursive: true });
+    const stateFile = path.join(stateDir, `${platform}.json`);
+
+    logger.info(`[${taskId}] Scout: ${cfg.name} query="${query}"`);
+
+    let browser, context;
+    try {
+        // 启动选项（对齐 BasePlatformScript 反检测）
+        const launchOpts = {
+            channel: "msedge",
+            headless: HEADLESS,
+            args: [
+                "--no-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-gpu",
+                "--disable-blink-features=AutomationControlled",
+                "--disable-features=IsolateOrigins,site-per-process",
+            ],
+            timeout: 30000,
+        };
+
+        // Context 选项（含已保存登录态 + 随机UA + 国内时区）
+        const contextOpts = {
+            userAgent: randomUA(),
+            viewport: { width: 1366 + rand(-100, 100), height: 768 + rand(-50, 50) },
+            locale: "zh-CN",
+            timezoneId: "Asia/Shanghai",
+        };
+        if (fs.existsSync(stateFile)) {
+            try {
+                contextOpts.storageState = JSON.parse(fs.readFileSync(stateFile, "utf-8"));
+                logger.info(`[${taskId}] Loaded login state (${contextOpts.storageState.cookies?.length || 0} cookies)`);
+            } catch { /* corrupted state, ignore */ }
+        } else {
+            logger.warn(`[${taskId}] No saved state — search will be unauthenticated`);
+        }
+
+        browser = await chromium.launch(launchOpts);
+        context = await browser.newContext(contextOpts);
+        const page = await context.newPage();
+
+        // 最小反检测：移除 webdriver 标记
+        await page.addInitScript(() => {
+            Object.defineProperty(navigator, 'webdriver', { get: () => false });
+        });
+
+        // 导航
+        await page.goto(cfg.url, { waitUntil: "domcontentloaded", timeout: 20000 });
+        await page.waitForTimeout(rand(4000, 8000));
+
+        // 模拟人类：缓慢滚动
+        await page.mouse.wheel(0, rand(300, 800));
+        await page.waitForTimeout(rand(500, 1500));
+
+        // 找到输入框（主页面 + iframe 遍历）
+        let input = await page.locator(cfg.inputSel).first();
+        if (await input.count() === 0) {
+            for (const frame of page.frames()) {
+                if (frame === page.mainFrame()) continue;
+                input = await frame.locator(cfg.inputSel).first();
+                if (await input.count() > 0) break;
+            }
+        }
+        if (await input.count() === 0) {
+            await browser.close();
+            return res.json({ success: false, error: "input_not_found", text: "", cited_urls: [], platform });
+        }
+
+        // 人类式输入
+        await input.click();
+        await page.waitForTimeout(rand(300, 800));
+
+        if (cfg.isRichEditor) {
+            // 富文本编辑器：用键盘输入（不能用 fill）
+            await page.keyboard.type(query, { delay: rand(60, 150) });
+        } else {
+            // 标准输入框：清空 + 逐字输入
+            await input.fill("");
+            for (const ch of query) {
+                await input.type(ch, { delay: rand(60, 150) });
+            }
+        }
+        await page.waitForTimeout(rand(300, 1000));
+
+        // 记录提交前的文本长度
+        const preLen = await page.evaluate(() => document.body?.innerText?.length || 0);
+
+        // 提交
+        await page.waitForTimeout(rand(500, 1000));
+        if (cfg.submitKey === "Enter") await page.keyboard.press("Enter");
+
+        // 等待 AI 回答（最长 60 秒，检测新内容增量 > 200 字符）
+        for (let i = 0; i < 20; i++) {
+            await page.waitForTimeout(3000);
+            try {
+                const curLen = await page.evaluate(() => document.body?.innerText?.length || 0);
+                if ((curLen - preLen) > 200) break;
+                // 也检测验证码
+                const captcha = await page.evaluate(() => {
+                    const body = document.body?.innerText || '';
+                    return body.includes('验证') || body.includes('captcha') || body.includes('安全检测');
+                });
+                if (captcha) { logger.warn(`[${taskId}] CAPTCHA detected`); break; }
+            } catch {}
+        }
+
+        // 模拟真人浏览
+        await page.mouse.wheel(0, rand(200, 600));
+        await page.waitForTimeout(rand(500, 1000));
+
+        // 提取回答文本（排除导航/工具栏等干扰）
+        const bodyText = await page.evaluate(() => {
+            const main = document.querySelector('main, [role="main"], .chat-container, [class*="conversation"]');
+            if (main?.innerText) return main.innerText;
+            const content = document.querySelector('[class*="content"]:not(nav):not(header)');
+            if (content?.innerText) return content.innerText;
+            return document.body?.innerText || '';
+        });
+        const idx = bodyText.indexOf(query);
+        const answer = idx > -1
+            ? bodyText.substring(idx + query.length).trim().substring(0, 8000)
+            : bodyText.substring(0, 8000);
+
+        // 提取引用URL
+        const urlRegex = /https?:\/\/[^\s\]\)>\"一-鿿]+/g;
+        const rawUrls = answer.match(urlRegex) || [];
+        const citedUrls = [...new Set(rawUrls)]
+            .filter(u => !u.includes(cfg.url.split("/")[2]))
+            .slice(0, 20);
+
+        // 截图
+        try { await page.screenshot({ path: path.join(SCREENSHOT_DIR, `${taskId}_${Date.now()}.png`), fullPage: false }); } catch {}
+
+        // ★ 保存登录态（Cookie 持久化，下次自动恢复）
+        try {
+            const state = await context.storageState();
+            fs.writeFileSync(stateFile, JSON.stringify(state));
+            logger.info(`[${taskId}] Saved state: ${state.cookies?.length || 0} cookies to ${stateFile}`);
+        } catch (e) {
+            logger.warn(`[${taskId}] Failed to save state: ${e.message}`);
+        }
+
+        await browser.close();
+
+        logger.info(`[${taskId}] Scout done: ${answer.length} chars, ${citedUrls.length} URLs`);
+        res.json({
+            success: true, platform, query, answer,
+            cited_urls: citedUrls, answer_length: answer.length,
+        });
+    } catch (err) {
+        logger.error(`[${taskId}] Scout failed: ${err.message}`);
+        try {
+            // 即使失败也尝试保存状态（可能有部分 Cookie）
+            if (context) {
+                const state = await context.storageState();
+                if (state.cookies?.length > 0) fs.writeFileSync(stateFile, JSON.stringify(state));
+            }
+        } catch {}
+        try { await browser?.close(); } catch {}
+        res.json({ success: false, error: err.message, text: "", cited_urls: [], platform });
+    }
+});
+
+// ── 原有 tasks 端点 ────────────────────────────────────
+
 app.get("/api/v1/tasks/:id", auth, (req, res) => {
     const task = tasks.get(req.params.id);
     if (!task) return res.status(404).json({ error: "task not found" });
@@ -274,12 +526,22 @@ app.get("/api/cache/list", (req, res) => {
     for (const [key, mod] of Object.entries(automations)) {
         if (!caches.find(c => c.platform_key === key)) {
             caches.push({
-                platform_key: key,
-                platform_name: mod.description || key,
-                created_at: null,
-                age_days: null,
-                valid: false,
-                size_kb: 0,
+                platform_key: key, platform_name: mod.description || key,
+                created_at: null, age_days: null, valid: false, size_kb: 0,
+            });
+        }
+    }
+
+    // 补充：AI 搜索平台（即使没缓存也列出，供运营助手展示）
+    const aiNames = {
+        doubao: "豆包", yuanbao: "腾讯元宝", baidu: "百度AI",
+        deepseek: "DeepSeek", qianwen: "通义千问", xf_xinghuo: "讯飞星火", kimi: "Kimi",
+    };
+    for (const [key, name] of Object.entries(aiNames)) {
+        if (!caches.find(c => c.platform_key === key)) {
+            caches.push({
+                platform_key: key, platform_name: name,
+                created_at: null, age_days: null, valid: false, size_kb: 0,
             });
         }
     }
@@ -410,6 +672,8 @@ app.post("/api/captcha/await", (req, res) => {
 // ══════════════════════════════════════════════════════════
 
 app.get("/", (req, res) => {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+    res.setHeader("Pragma", "no-cache");
     if (fs.existsSync(dashPath)) {
         return res.sendFile(dashPath);
     }
@@ -456,6 +720,7 @@ app.post("/api/v1/auth-login", auth, async (req, res) => {
   }
 
   const platformMap = {
+    // 发布平台
     toutiao:     { url: "https://mp.toutiao.com/",          name: "今日头条" },
     baijiahao:   { url: "https://baijiahao.baidu.com/",      name: "百家号" },
     wechat_mp:   { url: "https://mp.weixin.qq.com/",         name: "微信公众号" },
@@ -467,14 +732,14 @@ app.post("/api/v1/auth-login", auth, async (req, res) => {
     smzdm:       { url: "https://www.smzdm.com/",            name: "值得买" },
     douyin:      { url: "https://creator.douyin.com/",       name: "抖音" },
     kuaishou:    { url: "https://cp.kuaishou.com/",          name: "快手" },
-    // v2.6.0 AI平台授权 (Scout检测用)
-    doubao_ai:   { url: "https://www.doubao.com/chat/",      name: "豆包AI" },
-    yuanbao_ai:  { url: "https://yuanbao.tencent.com/chat/",  name: "腾讯元宝" },
-    baidu_ai:    { url: "https://chat.baidu.com/search",      name: "百度AI" },
-    xfyun_ai:    { url: "https://xinghuo.xfyun.cn/",          name: "讯飞星火" },
-    quark_ai:    { url: "https://ai.quark.cn/",               name: "夸克AI" },
-    nami_ai:     { url: "https://bot.n.cn/",                  name: "纳米AI" },
-    douyin_ai:   { url: "https://www.douyin.com/aisearch",    name: "抖音AI" },
+    // AI 搜索平台（Scout Agent 数据源）
+    doubao:      { url: "https://www.doubao.com/chat/",      name: "豆包" },
+    yuanbao:     { url: "https://yuanbao.tencent.com/chat/",  name: "腾讯元宝" },
+    baidu:       { url: "https://chat.baidu.com/search",      name: "百度AI" },
+    deepseek:    { url: "https://chat.deepseek.com/",         name: "DeepSeek" },
+    qianwen:     { url: "https://tongyi.aliyun.com/qianwen/", name: "通义千问" },
+    xf_xinghuo:  { url: "https://xinghuo.xfyun.cn/desk",       name: "讯飞星火" },
+    kimi:        { url: "https://kimi.moonshot.cn/",          name: "Kimi" },
   };
   const info = platformMap[platform];
   if (!info) return res.status(400).json({ error: "unknown platform" });
@@ -482,53 +747,66 @@ app.post("/api/v1/auth-login", auth, async (req, res) => {
   logger.info(`Auth-login: ${info.name} for ws=${workspace_id}`);
 
   try {
-    // v2.6.1: 持久化上下文 — 登录一次永久有效，所有脚本共享Cookie
-    const profileDir = path.join(__dirname, 'storage', 'browser-profile', 'shared');
-    if (!fs.existsSync(profileDir)) fs.mkdirSync(profileDir, { recursive: true });
-
-    const context = await chromium.launchPersistentContext(profileDir, {
-      channel: 'msedge',
-      headless: headless !== undefined ? headless : false,
+    // 加载已有登录态（如果存在）
+    const stateDir = path.join(STORAGE_DIR, String(workspace_id));
+    if (!fs.existsSync(stateDir)) fs.mkdirSync(stateDir, { recursive: true });
+    const stateFile = path.join(stateDir, `${platform}.json`);
+    const contextOpts = {
       viewport: { width: 1366, height: 768 },
-      args: ["--no-sandbox", "--disable-blink-features=AutomationControlled"],
-    });
-    const page = context.pages()[0] || await context.newPage();
-    await page.goto(info.url, { waitUntil: "domcontentloaded", timeout: 20000 });
-
-    // Wait for user to complete login (max 5 min)
-    logger.info(`Waiting for user to login on ${info.name}...`);
-    let loggedIn = false;
-    const startTime = Date.now();
-    const maxWait = 5 * 60 * 1000; // 5 min
-
-    while (!loggedIn && (Date.now() - startTime) < maxWait) {
-      await new Promise(r => setTimeout(r, 3000));
-      try {
-        const url = page.url();
-        const body = await page.textContent("body").catch(() => "");
-        // Detect successful login: URL changed from login page, or page has content creation elements
-        if (platform === "toutiao" && (url.includes("/profile") || body.includes("创作") || body.includes("发布"))) loggedIn = true;
-        else if (platform === "baijiahao" && (url.includes("baijiahao.baidu.com/builder") || body.includes("内容发布"))) loggedIn = true;
-        else if (platform === "xiaohongshu" && (url.includes("creator.xiaohongshu.com") && !url.includes("/login"))) loggedIn = true;
-        else if (platform === "sohu" && (url.includes("mp.sohu.com") && !url.includes("/login"))) loggedIn = true;
-      } catch {}
+      locale: "zh-CN",
+      timezoneId: "Asia/Shanghai",
+    };
+    if (fs.existsSync(stateFile)) {
+      try { contextOpts.storageState = JSON.parse(fs.readFileSync(stateFile, "utf-8")); } catch {}
     }
 
-    if (loggedIn) {
-      // 持久化上下文自动保存Cookie，无需手动storageState
-      logger.info(`Auth-login SUCCESS: ${info.name} (persistent)`);
-      reportToCloud(`auth-${platform}-${workspace_id}`, {
-        success: true, platform, workspace_id,
-        message: `${info.name} Cookie 已持久化`,
-      });
-      await context.close();
-      res.json({ success: true, message: `${info.name} 登录成功，Cookie已持久化` });
+    // 启动浏览器（反崩溃参数）
+    const browser = await chromium.launch({
+      channel: "msedge",
+      headless: headless !== undefined ? headless : false,
+      args: [
+        "--no-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-gpu",
+        "--disable-blink-features=AutomationControlled",
+      ],
+      timeout: 30000,
+    });
+    const context = await browser.newContext(contextOpts);
+    const page = await context.newPage();
+    await page.goto(info.url, { waitUntil: "domcontentloaded", timeout: 20000 });
+
+    // 所有平台统一流程：打开浏览器 → 等用户关闭窗口 → 保存 Cookie → 验证数量
+    logger.info(`[${info.name}] Browser opened — login and close window when done`);
+    await new Promise((resolve) => {
+      let checks = 0;
+      const timer = setInterval(() => {
+        checks++;
+        try {
+          if (page.isClosed() || !browser.isConnected()) { clearInterval(timer); resolve(); return; }
+          if (checks >= 150) { clearInterval(timer); resolve(); } // 5 分钟超时
+        } catch (e) { clearInterval(timer); resolve(); }
+      }, 2000);
+    });
+
+    let cookieCount = 0;
+    try {
+      const state = await context.storageState();
+      cookieCount = state.cookies?.length || 0;
+      fs.writeFileSync(stateFile, JSON.stringify(state));
+      logger.info(`[${info.name}] Saved ${cookieCount} cookies to ${stateFile}`);
+    } catch (e) { logger.warn(`[${info.name}] Save failed: ${e.message}`); }
+
+    await browser.close();
+
+    if (cookieCount > 2) {
+      res.json({ success: true, message: `${info.name} Cookie 已保存 (${cookieCount}个)` });
     } else {
-      await context.close();
-      res.json({ success: false, message: `登录超时（5分钟），请在浏览器中手动完成登录后重试` });
+      res.json({ success: false, message: `Cookie 数量过少 (${cookieCount}个)，可能未完成登录，请重试` });
     }
   } catch (err) {
     logger.error(`Auth-login error: ${err.message}`);
+    try { await browser?.close(); } catch {}
     res.status(500).json({ success: false, error: err.message });
   }
 });

@@ -15,16 +15,18 @@ use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
- * 单次内容发布 Job。
+ * 单次内容发布 Job（v2.6.1 新发布管线）。
  *
- * 一篇文章 × 一个平台 = 一个 Job。放入 distribution 队列，
- * 复用现有 DistributionRetryPolicy 的重试逻辑。
+ * 一篇文章 × 一个平台 = 一个 Job。放入 content-publish 专用队列，
+ * 与旧 distribution 队列完全隔离。
+ * Payload: { publishResultId: int } — 指向 ContentPublishResult 记录。
+ * 切勿与 ProcessArticleDistributionJob（旧管线）混用队列。
  */
 class ProcessContentPublishJob implements ShouldQueue
 {
     use Queueable;
 
-    public int $tries = 1;
+    public int $tries = 3;
 
     public int $timeout = 120;
 
@@ -85,7 +87,7 @@ class ProcessContentPublishJob implements ShouldQueue
             $backoff = min($baseDelay * pow(2, $retryCount), 600); // 最大 10 分钟
             static::dispatch($this->publishResultId)
                 ->delay(now()->addSeconds($backoff))
-                ->onQueue('distribution');
+                ->onQueue('content-publish');
 
             return;
         }
@@ -96,7 +98,7 @@ class ProcessContentPublishJob implements ShouldQueue
             $backoff = min(5 * pow(2, $retryCount), 300); // 最大 5 分钟
             static::dispatch($this->publishResultId)
                 ->delay(now()->addSeconds($backoff))
-                ->onQueue('distribution');
+                ->onQueue('content-publish');
 
             return;
         }
@@ -138,7 +140,7 @@ class ProcessContentPublishJob implements ShouldQueue
                 $backoff = min(30 * pow(2, $retryCount), 900); // 最大 15 分钟
                 static::dispatch($this->publishResultId)
                     ->delay(now()->addSeconds($backoff))
-                    ->onQueue('distribution');
+                    ->onQueue('content-publish');
             }
         } finally {
             $rateLimiter->releaseGlobalLock((int) $result->workspace_id, $result->platform_key);
@@ -167,7 +169,7 @@ class ProcessContentPublishJob implements ShouldQueue
             $result->increment('retry_count');
             static::dispatch($this->publishResultId)
                 ->delay(now()->addSeconds(60 * pow(2, $result->retry_count)))
-                ->onQueue('distribution');
+                ->onQueue('content-publish');
         } else {
             $result->forceFill([
                 'status' => 'failed',

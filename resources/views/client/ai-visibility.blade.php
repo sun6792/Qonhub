@@ -200,6 +200,95 @@
         </div>
     </div>
 
+    {{-- 📋 系统建议 — Review Agent 产出 --}}
+    @php $reviewRecommendations = $snapshotData['review_recommendations'] ?? $reviewRecommendations ?? []; @endphp
+    @if(!empty($reviewRecommendations))
+    <div class="bento-card p-5" style="background:rgba(22,24,40,0.9); border-color:rgba(165,180,252,0.2)">
+        <h2 class="text-base font-semibold mb-3" style="color:#c4b5fd">📋 系统优化建议</h2>
+        <div class="space-y-2">
+            @foreach($reviewRecommendations as $rec)
+            <div class="flex items-start gap-2 text-sm" style="color:rgba(255,255,255,0.7)">
+                <span style="color:#a5b4fc">▸</span>
+                <span>{{ $rec }}</span>
+            </div>
+            @endforeach
+        </div>
+    </div>
+    @endif
+
+    {{-- 💬 实时对话快照 — v2.6.1 新增 --}}
+    @if(!empty($snapshots))
+    <div class="bento-card p-5">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-base font-semibold text-ai-primary">💬 实时对话快照</h2>
+            <span class="text-xs text-ai-dim">最近 {{ count($snapshots) }} 次AI对话 · 品牌词检测</span>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            @foreach($snapshots as $s)
+            <div class="rounded-xl p-3.5 transition-all duration-200 hover:shadow-lg"
+                 style="background:rgba(255,255,255,0.03); border:1px solid {{ $s['color'] }}22; cursor:default">
+                <div class="flex items-center justify-between mb-2">
+                    <div class="flex items-center gap-2">
+                        <span class="text-base">{{ $s['icon'] }}</span>
+                        <span class="text-sm font-medium text-white">{{ $s['name'] }}</span>
+                        <span class="text-[10px] text-ai-dim">{{ $s['model'] }}</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        @if($s['mentioned'])
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-medium"
+                              style="background:rgba(34,197,94,0.15); color:#4ade80">✓ 已提及</span>
+                        @else
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-medium"
+                              style="background:rgba(251,191,36,0.15); color:#fbbf24">未提及</span>
+                        @endif
+                        <span class="text-[10px] text-ai-dim">{{ $s['snapshot_at'] }}</span>
+                    </div>
+                </div>
+                {{-- GEO 评分条 --}}
+                <div class="flex items-center gap-2 mb-2">
+                    <div class="flex-1 h-1.5 rounded-full" style="background:rgba(255,255,255,0.06)">
+                        <div class="h-full rounded-full transition-all duration-700" style="width:{{ $s['score'] }}%; background:{{ $s['score'] >= 70 ? '#4ade80' : ($s['score'] >= 30 ? '#fbbf24' : '#f87171') }}"></div>
+                    </div>
+                    <span class="text-[10px] font-mono" style="color:{{ $s['score'] >= 70 ? '#4ade80' : ($s['score'] >= 30 ? '#fbbf24' : '#f87171') }}">{{ $s['score'] }}/100</span>
+                </div>
+                {{-- 回答预览 --}}
+                <p class="text-xs leading-relaxed line-clamp-3" style="color:rgba(255,255,255,0.55)">{{ $s['preview'] ?: '(暂无回答)' }}</p>
+                @if($s['cited_url_count'] > 0)
+                <div class="mt-2 text-[10px]" style="color:{{ $s['color'] }}">
+                    🔗 引用 {{ $s['cited_url_count'] }} 个来源
+                </div>
+                @endif
+            </div>
+            @endforeach
+        </div>
+    </div>
+    @endif
+
+    {{-- 🔗 收录来源 — v2.6.1 新增 --}}
+    @if(!empty($citedSources))
+    <div class="bento-card p-5">
+        <h2 class="text-base font-semibold text-ai-primary mb-4">🔗 AI 收录来源</h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+            @foreach($citedSources as $cs)
+            <a href="{{ $cs['url'] }}" target="_blank" rel="noopener"
+               class="rounded-xl p-3 transition-all duration-200 block hover:shadow-md hover:no-underline"
+               style="background:rgba(255,255,255,0.03); border:1px solid {{ $cs['platform_color'] }}22">
+                <div class="flex items-center gap-2 mb-1">
+                    <span class="text-xs">{{ $cs['platform_icon'] }}</span>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded" style="background:{{ $cs['platform_color'] }}22; color:{{ $cs['platform_color'] }}">{{ $cs['platform_name'] }}</span>
+                </div>
+                <div class="text-xs font-medium text-white truncate" title="{{ $cs['url'] }}">
+                    {{ $cs['title'] ?: $cs['domain'] ?: parse_url($cs['url'], PHP_URL_HOST) }}
+                </div>
+                <div class="text-[10px] mt-1 truncate" style="color:rgba(255,255,255,0.35)">
+                    {{ $cs['domain'] ?: parse_url($cs['url'], PHP_URL_HOST) }}
+                </div>
+            </a>
+            @endforeach
+        </div>
+    </div>
+    @endif
+
     {{-- 提升建议 — 实色底衬不融合 --}}
     <div class="bento-card p-5" style="background:rgba(22,24,40,0.9); border-color:rgba(165,180,252,0.2)">
         <h3 class="font-bold text-sm mb-3" style="color:#ddd6fe">💡 如何提升AI搜索可见度？</h3>

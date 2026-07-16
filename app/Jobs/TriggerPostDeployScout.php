@@ -23,7 +23,7 @@ class TriggerPostDeployScout implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public $tries = 1;
+    public $tries = 3;
     public $timeout = 60;
 
     /** @var list<int> 复测延迟天数 */

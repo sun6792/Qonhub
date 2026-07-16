@@ -458,4 +458,69 @@ class AiVisibilityService
             'top_keywords' => $topKeywords,
         ];
     }
+
+    /**
+     * 获取工作空间的实时对话快照 + 引用来源（供客户端面板展示）。
+     *
+     * @return array{snapshots:list<array>, cited_sources:list<array>}
+     */
+    public function clientSnapshots(int $workspaceId): array
+    {
+        // 取出最近一次 Review 的系统建议
+        $latestReview = \App\Models\AgentExecution::query()
+            ->where('workspace_id', $workspaceId)
+            ->where('current_state', 'completed')
+            ->whereNotNull('review_output')
+            ->latest('completed_at')
+            ->value('review_output');
+
+        $snapshots = \App\Models\AgentConversationSnapshot::query()
+            ->where('workspace_id', $workspaceId)
+            ->whereNotNull('response_text')
+            ->orderByDesc('snapshot_at')
+            ->limit(20)
+            ->get();
+
+        $citedSources = \App\Models\AiCitedSource::query()
+            ->where('workspace_id', $workspaceId)
+            ->orderByDesc('created_at')
+            ->limit(30)
+            ->get();
+
+        $platforms = self::AI_PLATFORMS;
+
+        return [
+            'snapshots' => $snapshots->map(function ($s) use ($platforms) {
+                $p = $platforms[$s->ai_provider_code] ?? null;
+                return [
+                    'id' => (int) $s->id,
+                    'provider' => $s->ai_provider_code,
+                    'name' => $p['name'] ?? $s->ai_provider_code,
+                    'icon' => $p['icon'] ?? '🤖',
+                    'color' => $p['color'] ?? '#6366f1',
+                    'model' => $s->model_id,
+                    'mentioned' => (bool) $s->brand_mentioned,
+                    'score' => (int) ($s->geo_score ?? 0),
+                    'preview' => mb_substr((string) $s->response_text, 0, 300),
+                    'cited_url_count' => is_array($s->cited_urls) ? count($s->cited_urls) : 0,
+                    'snapshot_at' => $s->snapshot_at?->format('Y-m-d H:i'),
+                ];
+            })->all(),
+            'cited_sources' => $citedSources->map(function ($cs) use ($platforms) {
+                $p = $platforms[$cs->ai_platform] ?? null;
+                return [
+                    'id' => (int) $cs->id,
+                    'platform' => $cs->ai_platform,
+                    'platform_name' => $p['name'] ?? $cs->ai_platform,
+                    'platform_icon' => $p['icon'] ?? '🔗',
+                    'platform_color' => $p['color'] ?? '#6366f1',
+                    'url' => $cs->url,
+                    'domain' => $cs->domain ?? parse_url($cs->url, PHP_URL_HOST),
+                    'title' => $cs->title,
+                    'excerpt' => $cs->excerpt,
+                ];
+            })->all(),
+            'review_recommendations' => $latestReview['recommendations'] ?? [],
+        ];
+    }
 }

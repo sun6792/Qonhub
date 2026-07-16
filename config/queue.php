@@ -73,8 +73,8 @@ return [
             'driver' => 'redis',
             'connection' => env('REDIS_QUEUE_CONNECTION', 'default'),
             'queue' => env('REDIS_QUEUE', 'default'),
-            // 必须大于最长队列任务的 timeout（GeoFlow 文章任务为 300 秒），否则 Redis 会提前释放保留导致重复领取与 claim 失败
-            'retry_after' => (int) env('REDIS_QUEUE_RETRY_AFTER', 360),
+            // 必须大于 Horizon supervisor timeout (650s)，否则 Redis 提前释放导致重复执行
+            'retry_after' => (int) env('REDIS_QUEUE_RETRY_AFTER', 900),
             'block_for' => null,
             'after_commit' => false,
         ],

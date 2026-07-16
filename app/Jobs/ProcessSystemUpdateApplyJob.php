@@ -14,7 +14,7 @@ class ProcessSystemUpdateApplyJob implements ShouldQueue
 {
     use Queueable;
 
-    public int $tries = 1;
+    public int $tries = 3;
 
     public int $timeout = 900;
 

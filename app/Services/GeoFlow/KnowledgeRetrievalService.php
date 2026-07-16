@@ -115,6 +115,20 @@ class KnowledgeRetrievalService
             ? $this->fetchPgvectorScores($knowledgeBaseId, $query, max($candidateLimit, 16))
             : [];
 
+        // Hybrid: 混合 BM25 全文检索分数（精确匹配型号/术语/编号）
+        $bm25Scores = trim($query) !== ''
+            ? $this->fetchBm25Scores($knowledgeBaseId, $query, max($candidateLimit, 16))
+            : [];
+        // 融合：向量分数 + BM25 加权（向量 0.6 / BM25 0.4，RRF-style）
+        foreach ($bm25Scores as $chunkIdx => $bm25Score) {
+            $vectorScore = $pgvectorScores[$chunkIdx] ?? 0;
+            $pgvectorScores[$chunkIdx] = $vectorScore * 0.6 + $bm25Score * 0.4;
+            // 纯 BM25 命中（向量没找到）也加入候选
+            if (! isset($pgvectorScores[$chunkIdx]) || $vectorScore === 0) {
+                $pgvectorScores[$chunkIdx] = max($pgvectorScores[$chunkIdx] ?? 0, $bm25Score * 0.4);
+            }
+        }
+
         $rows = $this->loadCandidateRows($knowledgeBaseId, $queryTerms, $pgvectorScores, $candidateLimit);
         if ($rows === []) {
             return [];
@@ -723,6 +737,37 @@ class KnowledgeRetrievalService
             $scores[(int) ($row->chunk_index ?? 0)] = max(0.0, min(1.0, 1.0 - $distance));
         }
 
+        return $scores;
+    }
+
+    /**
+     * BM25 全文检索分数（基于 tsvector + ts_rank）。
+     */
+    private function fetchBm25Scores(int $knowledgeBaseId, string $query, int $candidateLimit): array
+    {
+        try {
+            $rows = DB::select(
+                'SELECT chunk_index,
+                        ts_rank_cd(ts_vector, plainto_tsquery(\'simple\', ?), 32) AS bm25_score
+                 FROM knowledge_chunks
+                 WHERE knowledge_base_id = ?
+                   AND ts_vector IS NOT NULL
+                   AND ts_vector @@ plainto_tsquery(\'simple\', ?)
+                 ORDER BY bm25_score DESC
+                 LIMIT ?',
+                [$query, $knowledgeBaseId, $query, max(1, $candidateLimit)]
+            );
+        } catch (\Throwable) {
+            return [];
+        }
+
+        $scores = [];
+        foreach ($rows as $row) {
+            $bm25 = (float) ($row->bm25_score ?? 0);
+            if ($bm25 > 0) {
+                $scores[(int) ($row->chunk_index ?? 0)] = $bm25;
+            }
+        }
         return $scores;
     }
 

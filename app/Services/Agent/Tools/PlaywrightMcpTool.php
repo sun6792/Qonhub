@@ -4,7 +4,7 @@ namespace App\Services\Agent\Tools;
 
 use App\Services\Agent\AgentToolInterface;
 use Illuminate\Support\Facades\Log;
-use Mcp\Client\ClientManager;
+use Laravel\Mcp\Client\ClientManager;
 
 /**
  * Playwright MCP 浏览器自动化工具 — Phase 4 唯一 MCP。

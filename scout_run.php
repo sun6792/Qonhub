@@ -22,7 +22,7 @@ foreach ($platforms as $code => $info) {
         CURLOPT_RETURNTRANSFER=>true, CURLOPT_POST=>true, CURLOPT_TIMEOUT=>30,
         CURLOPT_SSL_VERIFYPEER=>false,
         CURLOPT_HTTPHEADER=>['Content-Type: application/json','Authorization: Bearer '.$apiKey],
-        CURLOPT_POSTFIELDS=>json_encode(['model'=>'deepseek-chat','messages'=>[
+        CURLOPT_POSTFIELDS=>json_encode(['model'=>'deepseek-v4-flash','messages'=>[
             ['role'=>'system','content'=>'如实回答。知道就描述，不知道就说不知道。'],
             ['role'=>'user','content'=>$prompt]
         ],'max_tokens'=>200], JSON_UNESCAPED_UNICODE)

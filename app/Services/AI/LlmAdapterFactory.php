@@ -29,19 +29,11 @@ class LlmAdapterFactory
     {
         $providerCode = $providerRow['provider_code'] ?? '';
 
-        // 文心一言：专属适配器（非 OpenAI 兼容）
-        if ($providerCode === 'ernie') {
-            $adapter = new ErnieQianfanAdapter($providerRow, $this->apiKeyCrypto);
-            if ($encryptedApiKey && $this->apiKeyCrypto) {
-                $adapter->apiKey = $this->apiKeyCrypto->decrypt($encryptedApiKey);
-            }
-            return $adapter;
-        }
-
-        // 其余全部走 OpenAI 兼容适配器
-        $adapter = new OpenAiCompatibleAdapter($providerRow, $this->apiKeyCrypto);
-        if ($encryptedApiKey && $this->apiKeyCrypto) {
-            $adapter->apiKey = $this->apiKeyCrypto->decrypt($encryptedApiKey);
+        // 使用 provider 配置的 adapter_class，默认 OpenAI 兼容
+        $adapterClass = $providerRow['adapter_class'] ?? OpenAiCompatibleAdapter::class;
+        $adapter = new $adapterClass($providerRow, $this->apiKeyCrypto);
+        if ($encryptedApiKey) {
+            $adapter->apiKey = $this->resolveApiKey($encryptedApiKey);
         }
         return $adapter;
     }
@@ -62,5 +54,16 @@ class LlmAdapterFactory
         }
 
         return $this->create($provider->toArray(), $encryptedApiKey);
+    }
+
+    /**
+     * 智能解析 API Key：已解密的直接用，加密的才解密。
+     */
+    private function resolveApiKey(string $key): string
+    {
+        if (! str_starts_with($key, 'enc:v1:')) {
+            return $key; // 已解密（上层预处理）
+        }
+        return app(\App\Support\GeoFlow\ApiKeyCrypto::class)->decrypt($key);
     }
 }

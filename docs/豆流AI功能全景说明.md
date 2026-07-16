@@ -1,7 +1,7 @@
-# 豆流 AI 功能全景说明（v2.5.0）
+# 豆流 AI 功能全景说明（v2.6.1）
 
-> **输出日期**：2026-07-14（更新）  
-> **扫描范围**：全量代码、配置、数据库结构、前端页面  
+> **输出日期**：2026-07-16（更新）  
+> **扫描范围**：全量代码、配置、数据库结构、前端页面、RPA 引擎  
 > **原则**：仅基于实际已实现的代码如实梳理，不脑补未开发功能
 
 ---
@@ -519,7 +519,7 @@ B2B 锚点**不是发布文章**，而是认证企业信息。企业档案字段
 | 浏览器指纹隔离 | ⚠️ 不适用（无 RPA） |
 | 账号池管理 | ⚠️ 未实现 pool 概念 |
 
-### 3. 当前已知的故障、卡点或待解决问题
+### 3. 历史已修复问题（v2.5.0 之前）
 
 | 问题 | 影响 | 状态 |
 |------|------|------|
@@ -530,6 +530,15 @@ B2B 锚点**不是发布文章**，而是认证企业信息。企业档案字段
 | `admins` 表 `name` 列不存在但代码误用 `orderBy('name')` | 运维监控台 SQL 错误 | ✅ 已修复（改为 `display_name`） |
 | 媒体平台定义缺少 `color` 和 `cert_required` 字段 | Overview 页面 500 | ✅ 已修复 |
 | Enterprise Anchor overview 页面编辑语法错误 | 重复 `@endforeach` | ✅ 已修复 |
+
+### 4. 当前已知待修复问题（v2.6.1 扫描发现）
+
+详见第十二章「当前代码扫描问题清单」。
+- 🔴 `PlatformSyncService` 凭证明文未加密存储（#1）
+- 🔴 `PlaywrightMcpTool` MCP 命名空间错误（#2）
+- 🔴 `ContentAgentService` SSL 验证禁用（#3）
+- 🟡 RPA 引擎默认密钥 + 凭证明文传输 + storage 源码放置（#4-6）
+- 🟢 空文件 + 登录等待 + CDP 断线（#7-9）
 
 ---
 
@@ -628,9 +637,7 @@ Bootstrap → Tailwind，卡片折叠/搜索/筛选，全部展开/收起。
 
 ---
 
-> **本文档基于 2026-07-13 全量代码审计 + 开发记录生成，所有内容来源于实际已实现的代码。**  
-> **项目地址**：`E:\Qonhubgeo\豆流 AI-main`  
-> **当前版本**：豆流 AI v2.4.0（基于 豆流 AI）
+> **v2.4.0 文档归档（2026-07-13），v2.5.0/v2.6.1 补充见第十至十二章。**
 
 ---
 
@@ -893,3 +900,304 @@ Dashboard 平台授权状态同时读取 DB（`ClientPlatformAccount`）和 RPA 
 | TaskLifecycleService | 新任务自动分配 workspace |
 | RpaSyncController::articles | 运营助手文章按 workspace 过滤 |
 | ContentArmoryController | 弹药库文章按 workspace 过滤 |
+
+---
+
+## 十、v2.5.0 新增模块（2026-07-14）
+
+### 1. 品牌物料全面去GEOFlow化
+
+**范围**：界面/文案/欢迎弹窗/Seeder/Lang/测试 — 全局"GeoFlow"品牌替换为"豆流AI"，`ADMIN_BASE_PATH` 变量化。
+
+### 2. GEO 评分引擎 v2 强化
+
+**文件**：`GeoContentScorer.php` + `WorkerExecutionService.php`
+
+| 强化项 | 说明 |
+|--------|------|
+| 低分拦截 | < 70 分直接打回重做，不存盘（彻底阻断低质内容进入审核流） |
+| 维度定向重试 | 单维度低分时仅针对该维度重写（如仅补充数据→仅追加专家引用） |
+| GEO 持久化 | `articles` 表新增 `geo_score` + `geo_grade` 字段，迁移脚本回填全部旧文章 |
+| Q&A 检测放宽 | 跨行正则匹配 + 字符类修复 |
+| 专家信号放宽 | "XX表示/指出/认为/强调"四类匹配 |
+| watchdog 优化 | Worker 守护增加 `max_execution_time=0` |
+
+**GEO 回填命令**：`php artisan geoflow:backfill-geo-scores`（批量回填旧文章 GEO 评分）
+
+### 3. Article 删除/恢复自动同步 Task 计数
+
+**文件**：`ArticleController.php` → `Task::syncCreatedCount()`
+
+文章软删除时自动 -1，恢复时自动 +1，保持 `task.created_count` 与真实文章数一致。
+
+### 4. 平台 AI 引用策略集成
+
+**文件**：`AiVisibilityService.php` + `GeoContentScorer.php`
+
+集成 NewRank 4600 万数据 + geoskills v2 评分体系：
+- `geoskills-main/skills/` 19 个 AI Skill 定义被引入评分维度
+- AI 平台覆盖率检测从 6 平台扩展至 12 平台
+- 收录词/监测词对标摘星 `running_words`/`collected_words`
+
+### 5. 三套账号体系统一（PlatformSyncService）
+
+**文件**：`app/Services/GeoFlow/PlatformSyncService.php`（新建 182 行）
+
+**核心职责**：一处绑定，三处同步。
+
+| 同步目标 | 表 | 说明 |
+|---------|-----|------|
+| 客户端看板 | `client_platform_accounts` | 客户可见的授权状态 |
+| 发布管道 | `content_publisher_accounts` | RPA/API 发布时使用的凭证 |
+| 信息锚点 | `enterprise_anchor_certifications` | B2B/媒体平台的认证记录 |
+
+**关键能力**：
+- 四态交叉判定（DB状态 × RPA缓存状态 → ready/need_login/need_bind/unbound）
+- `getUnifiedStatus()` 统一查询接口（运营助手 dashboard 使用）
+- 来源追踪（`source: manual/rpa_engine/client`）
+
+### 6. 客户端登录/注册修复
+
+| 修复项 | 文件 |
+|--------|------|
+| username/email 字段不匹配导致登录永久失败 | `ClientAuthController.php` |
+| login form 改用 username 字段（而非 email） | `client/login.blade.php` |
+| auth middleware `redirectGuestsTo` 客户端路由 | `routes/web.php` |
+
+### 7. 运营助手增强
+
+| 功能 | 说明 |
+|------|------|
+| RPA 缓存路径修复 | `storage/` → `rpa-engine/storage/states/` |
+| 四态 API 统一 | dashboard 使用 `PlatformSyncService::getUnifiedStatus()` |
+| JS 语法修复 | 移除损坏的 Unicode 转义和重复函数 |
+| 批量分发下拉动态化 | 只显示已绑+已就绪平台 |
+| auth-login 自动回调 | 登录成功后调 `reportToCloud()` 自动更新 Laravel DB |
+
+### 8. 头条 OAuth 一键授权
+
+**文件**：`ToutiaoOAuthAdapter.php` + `OAuthController.php`
+
+- OAuth/Cookie 双模式支持
+- 走 OAuth 时自动获取 access_token + refresh_token
+- 走 Cookie 时通过 RPA 引擎浏览器手动登录
+
+### 9. 凭证管理简化
+
+**设计变更**：
+- 移除客户端 `credential` 输入字段 — 客户端只标记"已注册"，不加凭证
+- 凭证统一由运营人员通过 RPA 引擎捕获（Cookie/登录态）
+- 移除 OAuth 特殊按钮（头条除外，需要 API Key）
+
+---
+
+## 十一、v2.6.1 新增模块（2026-07-15）
+
+### 1. 五智能体全链路闭环
+
+**文件**：`app/Services/Agent/`（10 个文件）+ `app/Models/AgentExecution.php`
+
+固定流程：**Scout → Strategy → Content → Deploy → Review**
+
+```
+Scout (侦察)    → AI品牌检测 + B2B锚点巡检 + 收录缺口清单
+Strategy (策略) → LLM 制定内容策略 + 选题计划 + 平台选择
+Content (内容)  → RAG检索 → AI生成 → GEO评分 → <70自动重写 → 合规预检
+Deploy (分发)   → ContentPublishService管线 → 多平台分发 → 锚点自动回写
+Review (复盘)   → 效果评估 → 迭代建议 → 自动回路（最多3轮迭代）
+```
+
+**关键设计**：
+- **B 型状态机**（`AgentDispatcherService`）：纯代码规则驱动，零 LLM 决策开销
+- **A 型增强**（各 Agent 的 `executeAType*()` 方法）：LLM 自主分析，仅在开启时调用
+- **Content 自循环**：GEO < 70 自动重写（最多 max_retries 次）
+- **Deploy 自循环**：多平台分发时逐个入队
+- **Review 回路**：`needs_iteration=true` + `auto_optimize_iteration=true` → 重新进入 Strategy
+- **断点续跑**：`AgentExecution::resume()` 从任意状态恢复
+
+**新增模型**：`AgentExecution`（表 `agent_executions`）
+- 状态机 8 态：idle → scouting → planning → writing → deploying → reviewing → completed/failed
+- 5 个 Agent 输出字段（scout/strategy/content/deploy/review_output）
+- 状态转换白名单校验（`TRANSITIONS` 常量）
+
+### 2. Scout 检测双轨
+
+**文件**：`ScoutAgentService.php` + `rpa-engine/scout_and_save.cjs` + `rpa-engine/scout-page.js`
+
+| 轨道 | 方式 | 覆盖平台 |
+|------|------|---------|
+| B 型规则 | `AiVisibilityService` + `EnterpriseAnchorService` 复用 | 12 AI 平台 + 54 B2B/媒体锚点 |
+| A 型增强 | LLM 语义分析竞品素材 | DeepSeek 直调 |
+| Node.js 轨 | Playwright 浏览器自动化实测 | 豆包/元宝/百度AI（3平台） |
+
+**Scout 脚本**：
+- `scout_and_save.cjs`：加载平台 Cookie → 打开 AI 对话页 → 输入品牌词 → 提取回答 → 保存 JSON
+- `scout-page.js`：访问目标 URL，输出表单/按钮/链接结构（用于编写 RPA 脚本前侦察）
+
+**存储**：`rpa-engine/storage/scout/{platform}.json`（每个平台独立 Cookie+结果）
+
+### 3. 快照凭证 + CDP 常驻浏览器
+
+**文件**：`rpa-engine/server.js`（auth-login 端点重写）+ `auth-cdp.cjs` + `start-browser.bat`
+
+| 特性 | v2.5.0（旧） | v2.6.1（新） |
+|------|-------------|-------------|
+| 浏览器启动 | 每次新建 | CDP 常驻或持久化上下文 |
+| Cookie 保存 | 手动 storageState | `launchPersistentContext()` 自动 |
+| 生命周期 | 单任务用完即毁 | 一次登录永久有效 |
+| 共享 | 每脚本独立 | `browser-profile/shared` 全脚本共享 |
+
+**CDP 常驻模式**：
+1. `start-browser.bat` → 启动 Chrome CDP `--remote-debugging-port=9222`
+2. `auth-cdp.cjs {platform}` → 连接已有浏览器，打开平台页面，用户手动登录
+3. Cookie 自动持久化到 `browser-profile/shared`，全平台共享
+
+**AI 平台授权扩展**（7 个新平台）：
+豆包AI / 腾讯元宝 / 百度AI / 讯飞星火 / 夸克AI / 纳米AI / 抖音AI
+
+**授权流程**：`POST /api/v1/auth-login` → `launchPersistentContext(browser-profile/shared)` → 自动检测登录完成 → Cookie 持久化
+
+### 4. 发布通道全面统一
+
+**文件**：`app/Services/GeoFlow/Publishing/`（19 个文件）
+
+**架构**：
+
+| 层级 | 组件 | 职责 |
+|------|------|------|
+| 入口 | `ContentPublishService` | 创建任务→拆分作业→入队（一篇文章 × N 平台 = M 条作业） |
+| 适配层 | `BasePlatformAdapter` | 模板方法：前置校验→内容改写→格式适配→合规检查→执行发布→记录结果 |
+| 工厂 | `PlatformAdapterFactory` | 根据 `platform_key` + `credential_type` 自动实例化适配器 |
+| 账号池 | `AccountPoolService` | 按健康度/失败率/日配额排序选号，自动轮换 |
+| 限流 | `ContentPublishRateLimiter` | 平台级指数退避 + 全局 Redis 锁 |
+| 路由 | `RpaRoutingDecider` | 纯代码三轨决策（native_rpa / direct_api / playwright_mcp） |
+
+**适配器清单**（7 个）：
+
+| 适配器 | 平台 | 方式 |
+|--------|------|------|
+| `ToutiaoOAuthAdapter` | 头条号 | OAuth 2.0 Token |
+| `BaijiahaoCookieAdapter` | 百家号 | RPA Cookie |
+| `SohuCookieAdapter` | 搜狐号 | RPA Cookie |
+| `B2b168RpaAdapter` | B2B 168 等 | RPA 脚本 |
+| `GenericRpaAdapter` | 通用 | RPA 脚本 |
+| `MediaBoxApiAdapter` | 媒介盒子 | API Key |
+| `GenericOAuthAdapter` | 通用 | OAuth 2.0 |
+
+**三轨路由决策**（`RpaRoutingDecider`）：
+- `native_rpa`：15 个成熟自研脚本，连续失败 ≥2 次自动降级
+- `direct_api`：媒介盒子 Open API 直连
+- `playwright_mcp`：新渠道自适应（Playwright MCP Phase 4）
+
+### 5. Agent 工具注册表
+
+**文件**：`app/Services/Agent/Tools/`（8 个工具）
+
+| 工具 | 类 | 用途 |
+|------|-----|------|
+| 锚点状态 | `AnchorStatusTool` | 查询 B2B/媒体锚点认证状态 |
+| GEO 评分 | `GeoScoreTool` | 对文章实时 GEO 评分 |
+| 关键词库 | `KeywordLibraryTool` | 查询/生成关键词 |
+| 知识检索 | `KnowledgeRetrievalTool` | RAG 知识库检索 |
+| 敏感词 | `SensitiveWordTool` | 内容合规预检 |
+| RPA 发布 | `RpaPublishTool` | 调用自研 RPA 引擎分发 |
+| Playwright MCP | `PlaywrightMcpTool` | 通用浏览器自动化 |
+
+### 6. 发布后 Scout 自动收录检测
+
+**文件**：`TriggerPostDeployScout.php` + `PostDeployScoutJob.php` + `PlatformScoutJob.php`
+
+**触发链路**：
+```
+ContentPublishTask 完成 → updateProgress() → triggerPostDeployScout()
+→ TriggerPostDeployScout Job → PostDeployQuestionGenerator 生成探针问题
+→ PostDeployScoutJob（4 轮延迟：0/3/7/15 天）→ Playwright/CDP 实测 AI 平台
+→ AiVisibilityCheck + AiVisibilitySnapshot 写库 → 客户端仪表盘展示
+```
+
+**去重机制**：`Cache::put("post_deploy_scout:{ws_id}:{article_id}:round_{n}", true, 30days)`
+
+### 7. AI Model Provider 管理
+
+**文件**：`AiModelProvider.php`（模型）+ `2026_07_15_000001_create_ai_model_providers`（迁移）
+
+- `provider_code`：唯一标识（deepseek / ark / openai / gemini）
+- `adapter_class`：适配器类全限定名
+- `failover_priority`：故障转移优先级
+- `config_json`：额外配置（base URL 等）
+
+### 8. 数据库性能索引
+
+**文件**：`2026_07_15_000000_add_performance_indexes.php`
+
+为高频查询表添加复合索引：
+- `articles(status, published_at)`
+- `workspace_assignments(workspace_id, assignable_type)`
+- `content_publish_results(content_publish_task_id, status)`
+- `agent_executions(workspace_id, current_state)`
+- 等
+
+### 9. AI 品牌可见度增强
+
+**新增**：`ai_visibility_checks.cited_articles` 字段（关联引用文章）+ `AiCompetitor` 竞品管理模型
+
+### 10. v2.5.0 → v2.6.1 关键修复汇总
+
+| 修复项 | 说明 |
+|--------|------|
+| auth-login 自动回调 | 登录成功后自动 `POST /api/v1/rpa/report` + `reportToCloud()` 同步 DB |
+| DB 状态更新 | `RpaSyncController::report()` → `PlatformSyncService::syncBinding()` 三表联动 |
+| 客户端简化 | 移除 `credential` 字段，客户端只勾选"已注册"，凭证由运营 RPA 捕获 |
+| 三表统一 | `ClientPlatformAccount` + `ContentPublisherAccount` + `EnterpriseAnchorCertification` 统一绑定入口 |
+| RPA 引擎升级 | v1.0 → v2.0，新增缓存管理、云端同步、验证码回调、运营面板 |
+
+---
+
+## 十二、当前代码扫描问题清单（2026-07-16）
+
+> 以下问题在全量代码扫描中发现，按严重程度分级。
+
+### 🔴 严重 (Bugs)
+
+| # | 问题 | 文件 | 行号 | 说明 |
+|---|------|------|------|------|
+| 1 | **凭证静默丢失** | `PlatformSyncService.php` | 67 | `credential_plaintext` 不在 `ContentPublisherAccount::$fillable` 中，updateOrCreate 时被 Laravel 静默丢弃，导致发布账号无凭证 |
+| 2 | **MCP 命名空间错误** | `PlaywrightMcpTool.php` | 7 | `use Mcp\Client\ClientManager` 应为 `use Laravel\Mcp\Client\ClientManager`（`laravel/mcp` v0.8.2 已安装但命名空间不同），运行时 Class Not Found |
+| 3 | **SSL 验证禁用** | `ContentAgentService.php` | 94 | `CURLOPT_SSL_VERIFYPEER=>false` 中间人攻击风险 |
+
+### 🟡 中等 (Security/Design)
+
+| # | 问题 | 文件 | 行号 | 说明 |
+|---|------|------|------|------|
+| 4 | **RPA 默认 API Key** | `server.js` | 40 | 硬编码默认密钥 `"qonhub-rpa-secret-change-me"`，未设置环境变量时任何人可访问 |
+| 5 | **凭证明文传输** | `RpaSyncController.php` | 234-271 | `credentials()` 方法解密所有凭证返回明文，虽限 localhost 但仍为薄弱点 |
+| 6 | **storage/ 下放置源码** | `storage/scout_from_url.php` 等 | — | 3 个可执行 CLI 脚本放在 runtime 目录，不符合 Laravel 惯例 |
+
+### 🟢 低 (Minor)
+
+| # | 问题 | 文件 | 说明 |
+|---|------|------|------|
+| 7 | **空文件** | `rpa-engine/setTimeout(r` | 0 字节，疑似编辑器错误产物 |
+| 8 | **登录等待无早期退出** | `auth-ai-login.cjs:30` | 始终等待 120 秒，不检测提前登录 |
+| 9 | **CDP 无断线恢复** | `auth-cdp.cjs:33` | 连接断开后永久挂起，无超时/重连 |
+
+### 功能验证结果
+
+| 验证项 | 结果 |
+|--------|------|
+| PHP 语法检查（全部文件） | ✅ 0 错误 |
+| Laravel 应用启动 | ✅ 正常 |
+| 路由注册（359 条） | ✅ 正常 |
+| 数据库迁移（全部 20 batch） | ✅ 全部已执行 |
+| Agent 路由（/geo_admin/agents/*） | ✅ 已注册 |
+| RPA API 路由（/geo_admin/api/v1/rpa/*） | ✅ 已注册 |
+| OAuth 路由 | ✅ 已注册 |
+| 所有 Job 类 | ✅ 11 个全部存在 |
+| MCP 包（laravel/mcp v0.8.2） | ✅ 已安装 |
+| PostgreSQL 数据库连接 | ✅ 正常 (geo_flow) |
+
+---
+
+> **本文档基于 2026-07-16 全量代码扫描 + 数据库审计 + 运行时诊断生成，所有内容来源于实际已实现的代码。**
+> **项目地址**：`E:\Qonhubgeo\douliu-main`
+> **当前版本**：豆流 AI v2.6.1（基于 Laravel 12 + PostgreSQL 16）

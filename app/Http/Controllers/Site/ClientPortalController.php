@@ -169,9 +169,15 @@ class ClientPortalController extends Controller
         $workspace = Workspace::query()->whereKey((int) $client->workspace_id)->firstOrFail();
         $wid = (int) $workspace->id;
 
+        // 对话快照 + 引用来源
+        $snapshotData = $this->aiVisibilityService->clientSnapshots($wid);
+
         return view('client.ai-visibility', [
             'workspace' => $workspace,
             'overview' => $this->aiVisibilityService->dashboardOverview($wid),
+            'snapshots' => $snapshotData['snapshots'],
+            'citedSources' => $snapshotData['cited_sources'],
+            'snapshotData' => $snapshotData,  // 完整数据（含 review_recommendations）
             'top5' => $this->aiVisibilityService->brandTop5Share($wid),
             'visibilityData' => $this->aiVisibilityService->clientVisibilityData($wid),
             'runningWords' => $this->aiVisibilityService->runningWords($wid),

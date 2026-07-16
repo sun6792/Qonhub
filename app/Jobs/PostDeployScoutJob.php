@@ -21,7 +21,7 @@ class PostDeployScoutJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public $tries = 1;
+    public $tries = 3;
     public $timeout = 300;
 
     /** @var list<string> API 平台（直接调用 LlmOrchestrator） */

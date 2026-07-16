@@ -42,7 +42,21 @@
 
     {{-- AI回复原文 — 核心内容 --}}
     <div class="card">
-        <div style="color:#e0e0e0;font-size:14px;line-height:1.9;white-space:pre-wrap">{!! preg_replace('/(https?:\/\/[^\s\n\r]{10,})/', '<a href="$1" target="_blank" style="color:#a5b4fc;text-decoration:underline">$1</a>', e($check->response_snippet) ?: '暂未保存 AI 回复内容') !!}</div>
+        @php
+        $rawSnippet = $check->response_snippet ?: '暂未保存 AI 回复内容';
+        $safeText = e($rawSnippet);
+        // 安全转换URL为链接：先e()转义HTML，再匹配不含HTML实体的裸URL
+        $safeText = preg_replace_callback(
+            '#https?://[^\s\]\)>\"\'<&]{10,}#',
+            function ($m) {
+                $url = $m[0];
+                $safeUrl = htmlspecialchars($url, ENT_QUOTES, 'UTF-8');
+                return '<a href="'.$safeUrl.'" target="_blank" rel="noopener noreferrer" style="color:#a5b4fc;text-decoration:underline">'.$safeUrl.'</a>';
+            },
+            $safeText
+        );
+        @endphp
+        <div style="color:#e0e0e0;font-size:14px;line-height:1.9;white-space:pre-wrap">{!! $safeText !!}</div>
     </div>
 
     {{-- 引用文章 --}}
@@ -51,7 +65,7 @@
     <div class="card" style="border-color:rgba(165,180,252,0.2)">
         <div style="font-size:13px;font-weight:600;margin-bottom:10px;color:#a5b4fc">📰 被引用的已发布文章</div>
         @foreach(\App\Models\Article::whereIn('id', $citedIds)->get() as $art)
-        <a href="https://www.doubao.com/search?q={{ urlencode($art->title) }}" target="_blank" class="ref-link">
+        <a href="https://www.doubao.com/search?q={{ urlencode($art->title) }}" target="_blank" rel="noopener noreferrer" class="ref-link">
             📄 {{ $art->title }}
             <span style="color:#6b7280;font-size:11px;margin-left:8px">{{ $art->keywords }} · {{ $art->published_at?->format('Y-m-d') }}</span>
         </a>
@@ -70,10 +84,10 @@
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap">
                 @if(!empty($meta['thread_url']))
-                <a href="{{ $meta['thread_url'] }}" target="_blank" class="btn btn-primary">查看完整对话 →</a>
+                <a href="{{ $meta['thread_url'] }}" target="_blank" rel="noopener noreferrer" class="btn btn-primary">查看完整对话 →</a>
                 @endif
                 @if($platformInfo)
-                <a href="{{ $platformInfo['url'] }}" target="_blank" class="btn btn-outline">在平台验证 ↗</a>
+                <a href="{{ $platformInfo['url'] }}" target="_blank" rel="noopener noreferrer" class="btn btn-outline">在平台验证 ↗</a>
                 @endif
             </div>
         </div>

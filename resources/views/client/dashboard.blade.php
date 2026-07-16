@@ -20,6 +20,50 @@
         <p class="text-xs text-ai-dim mt-2">提交后运营团队将根据需求创建AI内容生成任务</p>
     </div>
 
+    {{-- 🏢 数字身份卡 — v2.7.0 整合企业档案+B2B锚点+平台授权 --}}
+    @php
+        $profile = $workspace->enterpriseProfile;
+        $napOk = $profile && $profile->company_full_name && ($profile->company_phone || $profile->company_website);
+        $boundCount = ($connectionStats['connected'] ?? 0);
+        $hasPublish = ($publishStats['recent_total'] ?? 0) > 0;
+    @endphp
+    <div class="bento-card p-5" style="background:rgba(22,24,40,0.9); border-color:rgba(129,140,248,0.25)">
+        <h2 class="text-base font-semibold mb-3" style="color:#ddd6fe">🏢 企业数字身份</h2>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+            <div class="space-y-1">
+                <div class="text-xs text-ai-dim">企业档案</div>
+                <span class="font-medium" style="color:{{ $napOk ? '#4ade80' : '#fbbf24' }}">
+                    {{ $napOk ? '✅ 已完善' : '⚠️ 待完善' }}
+                </span>
+                @if($profile && $profile->company_full_name)
+                <div class="text-xs text-ai-dim truncate" title="{{ $profile->company_full_name }}">{{ $profile->company_full_name }}</div>
+                @endif
+            </div>
+            <div class="space-y-1">
+                <div class="text-xs text-ai-dim">平台授权</div>
+                <span class="font-medium" style="color:{{ $boundCount > 0 ? '#4ade80' : '#9ca3af' }}">
+                    {{ $boundCount }} 个已绑定
+                </span>
+            </div>
+            <div class="space-y-1">
+                <div class="text-xs text-ai-dim">B2B 锚点</div>
+                @if($anchorData)
+                <span class="font-medium" style="color:{{ $anchorData['certified_count'] > 0 ? '#4ade80' : '#fbbf24' }}">
+                    {{ $anchorData['certified_count'] }}/{{ $anchorData['total_count'] }} 已认证
+                </span>
+                @else
+                <span class="font-medium" style="color:#9ca3af">未建档</span>
+                @endif
+            </div>
+            <div class="space-y-1">
+                <div class="text-xs text-ai-dim">近期分发</div>
+                <span class="font-medium" style="color:{{ $hasPublish ? '#4ade80' : '#9ca3af' }}">
+                    {{ $publishStats['recent_success'] ?? 0 }}/{{ $publishStats['recent_total'] ?? 0 }} 成功
+                </span>
+            </div>
+        </div>
+    </div>
+
     {{-- KPI Bento Grid — 统一 indigo 色系 --}}
     <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
         <div class="bento-card kpi-card p-5 text-center">

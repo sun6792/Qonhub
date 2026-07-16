@@ -41,10 +41,14 @@ class LlmOrchestratorService
         // ② 查找模型配置
         $aiModel = $this->resolveAiModel($request->providerCode, $request->modelId);
 
-        // ③ 创建适配器 + 解密 API Key
+        // ③ 创建适配器（API Key 解密后传入）
+        $rawApiKey = (string) ($aiModel->getRawOriginal('api_key') ?? '');
+        $decryptedApiKey = $rawApiKey !== ''
+            ? app(\App\Support\GeoFlow\ApiKeyCrypto::class)->decrypt($rawApiKey)
+            : '';
         $adapter = $this->adapterFactory->createByCode(
             $request->providerCode,
-            (string) ($aiModel->getRawOriginal('api_key') ?? ''),
+            $decryptedApiKey,
             $aiModel->model_id
         );
 
@@ -64,11 +68,26 @@ class LlmOrchestratorService
         // ⑥ 更新用量统计
         $this->incrementModelUsage($aiModel);
 
+        // ⑦ 自动保存对话快照（不阻塞主流程）
+        try {
+            \App\Models\AgentConversationSnapshot::create([
+                'agent_execution_id' => $request->agentExecutionId,
+                'workspace_id' => $request->workspaceId > 0 ? $request->workspaceId : 0,
+                'ai_provider_code' => $request->providerCode,
+                'model_id' => $request->modelId,
+                'prompt' => $this->extractLastUserMessage($request->messages),
+                'response_text' => mb_substr($result['text'] ?? '', 0, 10000),
+                'cited_urls' => $this->extractUrls($result['text'] ?? ''),
+                'snapshot_at' => now(),
+            ]);
+        } catch (\Throwable) { /* 快照保存失败不影响主流程 */ }
+
         return new ChatResponse(
             text: $result['text'] ?? '',
             tokensUsed: $tokensUsed,
             modelId: $result['model'] ?? $aiModel->model_id,
             providerCode: $request->providerCode,
+            workspaceId: $request->workspaceId > 0 ? $request->workspaceId : null,
         );
     }
 
@@ -303,9 +322,13 @@ class LlmOrchestratorService
      */
     private function callLlmRaw(string $providerCode, \App\Models\AiModel $aiModel, array $messages, array $options, array $tools): array
     {
+        $rawApiKey = (string) ($aiModel->getRawOriginal('api_key') ?? '');
+        $decryptedApiKey = $rawApiKey !== ''
+            ? app(\App\Support\GeoFlow\ApiKeyCrypto::class)->decrypt($rawApiKey)
+            : '';
         $adapter = $this->adapterFactory->createByCode(
             $providerCode,
-            (string) ($aiModel->getRawOriginal('api_key') ?? ''),
+            $decryptedApiKey,
             $aiModel->model_id
         );
 
@@ -405,5 +428,25 @@ class LlmOrchestratorService
             'total_used' => \Illuminate\Support\Facades\DB::raw('COALESCE(total_used,0)+1'),
             'updated_at' => now(),
         ]);
+    }
+
+    /**
+     * 从消息列表中提取最后一条用户消息的文本。
+     */
+    private function extractLastUserMessage(array $messages): string
+    {
+        $userMessages = array_filter($messages, fn ($m) => ($m['role'] ?? '') === 'user');
+        $last = end($userMessages);
+        return is_array($last) ? mb_substr((string) ($last['content'] ?? ''), 0, 5000) : '';
+    }
+
+    /**
+     * 从 AI 回答文本中提取所有 HTTP/HTTPS URL。
+     */
+    private function extractUrls(string $text): array
+    {
+        preg_match_all('#https?://[^\s\]\)>\"]+#', $text, $matches);
+        $urls = array_slice(array_unique($matches[0] ?? []), 0, 20);
+        return array_values($urls);
     }
 }

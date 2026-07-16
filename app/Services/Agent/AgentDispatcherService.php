@@ -33,6 +33,9 @@ class AgentDispatcherService
      */
     public function start(int $workspaceId, array $inputData = [], string $triggerType = 'manual', ?int $adminId = null): AgentExecution
     {
+        // 五智能体全链路最长 600 秒，防止管道阻塞
+        set_time_limit(600);
+
         $workspace = Workspace::query()->find($workspaceId);
         if (! $workspace) {
             throw new \InvalidArgumentException("工作空间不存在: {$workspaceId}");
@@ -137,7 +140,7 @@ class AgentDispatcherService
         }
     }
 
-    private function executeContent(AgentExecution $execution): void
+    private function executeContent(AgentExecution $execution, int $qualityRetries = 0): void
     {
         $execution->current_agent = AgentExecution::AGENT_CONTENT;
         $execution->save();
@@ -145,18 +148,28 @@ class AgentDispatcherService
         try {
             $output = $this->contentAgent->execute($execution);
 
-            // GEO < 70? 自循环重写
-            if (($output['geo_score'] ?? 0) < 70 && $execution->retry_count < $execution->max_retries) {
-                $execution->retry_count++;
+            // AI 调用本身失败（非质量问题）→ 跳过自循环重试，避免浪费配额
+            $generationError = $output['generation_error'] ?? null;
+
+            // GEO < 70 且非 AI 故障 → 自循环重写（质量重试，本地计数器，不影响 failure retry）
+            if (($output['geo_score'] ?? 0) < 70 && $generationError === null && $qualityRetries < 3) {
+                $qualityRetries++;
                 $execution->content_output = $output;
                 $execution->save();
-                Log::info('ContentAgent: GEO<70, retrying', [
+                Log::info('ContentAgent: GEO<70, quality retry', [
                     'execution_id' => $execution->id,
                     'geo_score' => $output['geo_score'],
-                    'retry' => $execution->retry_count,
+                    'quality_retry' => $qualityRetries,
                 ]);
-                $this->executeContent($execution);
+                $this->executeContent($execution, $qualityRetries);
                 return;
+            }
+
+            if ($generationError !== null) {
+                Log::warning('ContentAgent: AI call failed, skipping quality retries', [
+                    'execution_id' => $execution->id,
+                    'error' => $generationError,
+                ]);
             }
 
             $execution->saveAgentOutput(AgentExecution::AGENT_CONTENT, $output, AgentExecution::STATE_DEPLOYING);
@@ -198,7 +211,7 @@ class AgentDispatcherService
 
             if ($needsIteration && $autoIterationEnabled && $iterationCount < 3) {
                 // 回路：复盘→策略→内容→分发→复盘（新一轮迭代）
-                $execution->saveAgentOutput(AgentExecution::AGENT_REVIEW, $output, AgentExecution::STATE_PLANNING);
+                $execution->saveAgentOutput(AgentExecution::AGENT_REVIEW, $output, AgentExecution::STATE_SCOUTING);
                 $inputData = $execution->input_data ?? [];
                 $inputData['iteration'] = $iterationCount + 1;
                 $inputData['last_review'] = $output;
@@ -211,7 +224,7 @@ class AgentDispatcherService
                     'reason' => $output['recommendations'] ?? 'auto',
                 ]);
 
-                $this->executeStrategy($execution);
+                $this->executeScout($execution);
                 return;
             }
 

@@ -31,4 +31,8 @@ Thumbs.db
 
 # v2.6.0: 浏览器持久化数据（Cookie/缓存）
 rpa-engine/storage/browser-profile/
+rpa-engine/storage/states/
+rpa-engine/logs/
+rpa-engine/screenshots/
+redis/data/
 storage/browser-profile/

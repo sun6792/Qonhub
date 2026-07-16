@@ -16,7 +16,10 @@ class OpenAiCompatibleAdapter extends BaseLlmAdapter
     public function chat(string $modelId, array $messages, array $options): array
     {
         $baseUrl = rtrim($this->providerConfig['api_base_url'] ?? '', '/');
-        $url = str_ends_with($baseUrl, '/v1') ? "{$baseUrl}/chat/completions" : "{$baseUrl}/v1/chat/completions";
+        // 兼容 /v1、/v3 等版本路径：已有 /vN 则直接拼 /chat/completions
+        $url = preg_match('#/v\d+$#', $baseUrl)
+            ? "{$baseUrl}/chat/completions"
+            : "{$baseUrl}/v1/chat/completions";
 
         $body = array_merge(
             [
@@ -63,13 +66,13 @@ class OpenAiCompatibleAdapter extends BaseLlmAdapter
             if (! empty($apiKey)) {
                 $parts = explode('.', $apiKey);
                 if (count($parts) === 2) {
-                    $http->withToken($this->generateZhipuJwt($parts[0], $parts[1]));
+                    $http = $http->withToken($this->generateZhipuJwt($parts[0], $parts[1]));
                 } else {
-                    $http->withToken($apiKey);
+                    $http = $http->withToken($apiKey);
                 }
             }
         } else {
-            $http->withToken($this->apiKey ?? '');
+            $http = $http->withToken($this->apiKey ?? '');
         }
 
         // 厂商特定额外 headers
@@ -78,10 +81,30 @@ class OpenAiCompatibleAdapter extends BaseLlmAdapter
             $configJson = json_decode($configJson, true) ?: [];
         }
         foreach ($configJson['extra_headers'] ?? [] as $key => $value) {
-            $http->withHeader($key, $value);
+            $http = $http->withHeader($key, $value);
         }
 
-        return $this->sendRequest($url, $body);
+        // 直接发送（使用带Token的$http，不新建客户端）
+        $response = $http->post($url, $body);
+
+        if ($response->failed()) {
+            throw new \RuntimeException(
+                "LLM API error: HTTP {$response->status()} — " . ($response->body() ?: 'empty body')
+            );
+        }
+
+        $json = $response->json();
+        if (! is_array($json)) {
+            throw new \RuntimeException('LLM API returned non-JSON response');
+        }
+
+        if (isset($json['error'])) {
+            throw new \RuntimeException(
+                'LLM API error: ' . ($json['error']['message'] ?? json_encode($json['error']))
+            );
+        }
+
+        return $json;
     }
 
     /**

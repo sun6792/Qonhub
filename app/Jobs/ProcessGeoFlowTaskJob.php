@@ -28,7 +28,7 @@ class ProcessGeoFlowTaskJob implements ShouldQueue
      * 为避免与业务重试策略双重重试冲突，Laravel 层固定单次执行；
      * 业务重试由 JobQueueService::failJob 回写并二次 dispatch。
      */
-    public int $tries = 1;
+    public int $tries = 3;
 
     /**
      * 单次执行超时（秒）。

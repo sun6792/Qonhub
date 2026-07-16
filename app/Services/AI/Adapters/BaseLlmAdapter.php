@@ -82,9 +82,15 @@ abstract class BaseLlmAdapter
     /**
      * 发送 HTTP 请求并处理异常。
      */
-    protected function sendRequest(string $url, array $body): array
+    /**
+     * 发送 HTTP 请求。
+     *
+     * @param  \Illuminate\Http\Client\PendingRequest|null  $http  可选：已配置认证的客户端
+     */
+    protected function sendRequest(string $url, array $body, ?\Illuminate\Http\Client\PendingRequest $http = null): array
     {
-        $response = $this->httpClient()->post($url, $body);
+        $client = $http ?? $this->httpClient();
+        $response = $client->post($url, $body);
 
         if ($response->failed()) {
             throw new RuntimeException(

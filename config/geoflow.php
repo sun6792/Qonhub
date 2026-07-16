@@ -141,5 +141,6 @@ return [
     'rpa_engine_url' => env('RPA_ENGINE_URL', 'http://127.0.0.1:9901'),
     'rpa_engine_api_key' => env('RPA_ENGINE_API_KEY', 'qonhub-rpa-secret-change-me'),
     'rpa_engine_timeout' => (int) env('RPA_ENGINE_TIMEOUT', 300),
+    'rpa_localhost_only' => env('GEOFLOW_RPA_LOCALHOST_ONLY', true),
 
 ];

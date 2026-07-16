@@ -27,7 +27,7 @@ class PlatformScoutJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public $tries = 1;
+    public $tries = 3;
     public $timeout = 180;
 
     /** @var list<string> 有真实可调用 API 的平台 */
@@ -143,7 +143,7 @@ class PlatformScoutJob implements ShouldQueue
                 CURLOPT_SSL_VERIFYPEER => false,
                 CURLOPT_HTTPHEADER => ['Content-Type: application/json', 'Authorization: Bearer ' . $apiKey],
                 CURLOPT_POSTFIELDS => json_encode([
-                    'model' => 'deepseek-chat',
+                    'model' => 'deepseek-v4-flash',
                     'messages' => [
                         ['role' => 'system', 'content' => '你是品牌监测助手。如实回答是否知道这个品牌及其业务。不知道就说不知道。'],
                         ['role' => 'user', 'content' => $prompt],

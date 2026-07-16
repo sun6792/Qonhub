@@ -16,15 +16,16 @@ class TokenQuotaService
      */
     public function hasQuota(int $workspaceId, string $providerCode): bool
     {
-        $quota = $this->getQuota($workspaceId, $providerCode);
-        if ($quota['quota_monthly'] <= 0) {
-            return true; // 0 = 不限
+        try {
+            $quota = $this->getQuota($workspaceId, $providerCode);
+            if ($quota['quota_monthly'] <= 0) {
+                return true; // 0 = 不限
+            }
+            $this->autoReset($workspaceId, $providerCode);
+            return $quota['used_this_month'] < $quota['quota_monthly'];
+        } catch (\Throwable) {
+            return true; // 配额服务异常时不阻塞
         }
-
-        // 自动重置月初额度
-        $this->autoReset($workspaceId, $providerCode);
-
-        return $quota['used_this_month'] < $quota['quota_monthly'];
     }
 
     /**
@@ -36,14 +37,16 @@ class TokenQuotaService
             return;
         }
 
-        WorkspaceAiTokenQuota::query()
-            ->where('workspace_id', $workspaceId)
-            ->where('provider_code', $providerCode)
-            ->increment('used_this_month', $tokens);
+        try {
+            WorkspaceAiTokenQuota::query()
+                ->where('workspace_id', $workspaceId)
+                ->where('provider_code', $providerCode)
+                ->increment('used_this_month', $tokens);
+        } catch (\Throwable) { /* DB quota failure shouldn't block */ }
 
-        // 同步更新 Redis 缓存
-        $key = "quota:{$workspaceId}:{$providerCode}";
-        Cache::increment($key, $tokens);
+        try {
+            Cache::increment("quota:{$workspaceId}:{$providerCode}", $tokens);
+        } catch (\Throwable) { /* Redis cache failure shouldn't block */ }
     }
 
     /**

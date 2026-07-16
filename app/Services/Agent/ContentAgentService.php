@@ -72,6 +72,8 @@ class ContentAgentService
         $geoGrade = 'F';
         $retries = $execution->retry_count ?? 0;
 
+        $generationError = null;
+
         try {
             if ($task && $task->ai_model_id) {
                 // 有 Task → 走完整 Worker 流程
@@ -84,31 +86,35 @@ class ContentAgentService
                 $content = $result['content'] ?? '';
                 $articleId = $result['article_id'] ?? null;
             } else {
-                // 无 Task → 直调 AI 生成（PHP curl 直连，绕过 Laravel HTTP）
+                // 无 Task → 走 LlmOrchestratorService（复用 proxy / logging / token quota 全栈）
                 $prompt = $this->buildContentPrompt($title, implode(' ', $keywords), $brandName, $knowledgeContext);
-                $apiKey = $this->resolveDeepSeekKey();
-                if ($apiKey) {
-                    $ch = curl_init('https://api.deepseek.com/v1/chat/completions');
-                    curl_setopt_array($ch, [
-                        CURLOPT_RETURNTRANSFER=>true, CURLOPT_POST=>true, CURLOPT_TIMEOUT=>60,
-                        CURLOPT_SSL_VERIFYPEER=>false,
-                        CURLOPT_HTTPHEADER=>['Content-Type: application/json','Authorization: Bearer '.$apiKey],
-                        CURLOPT_POSTFIELDS=>json_encode(['model'=>'deepseek-chat','messages'=>[
-                            ['role'=>'system','content'=>'你是专业的B2B内容营销写手。'],
-                            ['role'=>'user','content'=>$prompt]
-                        ],'max_tokens'=>4096], JSON_UNESCAPED_UNICODE)
+                try {
+                    $response = app(LlmOrchestratorService::class)->chat(new \App\Services\AI\ChatRequest(
+                        providerCode: 'deepseek',
+                        modelId: 'deepseek-v4-flash',
+                        messages: [
+                            ['role' => 'system', 'content' => '你是专业的B2B内容营销写手。'],
+                            ['role' => 'user', 'content' => $prompt],
+                        ],
+                        options: ['max_tokens' => 4096],
+                        workspaceId: $wsId,
+                        agentExecutionId: (int) $execution->id,
+                    ));
+                    $content = $response->text ?? '';
+                } catch (\Throwable $e) {
+                    Log::warning('ContentAgent: AI direct call failed', [
+                        'error' => $e->getMessage(),
+                        'workspace_id' => $wsId,
                     ]);
-                    $resp = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
-                    if ($code===200) {
-                        $d = json_decode($resp,true);
-                        $content = $d['choices'][0]['message']['content'] ?? '';
-                    }
+                    $content = '';
+                    $generationError = $e->getMessage();
                 }
                 $articleId = null;
             }
         } catch (\Throwable $e) {
             Log::warning('ContentAgent: AI generation failed, continuing without content', ['error' => $e->getMessage()]);
             $content = '';
+            $generationError = $e->getMessage();
         }
 
         // ③.5 弹药库改写 — GeoPlatformRules 注入 prompt
@@ -130,6 +136,7 @@ class ContentAgentService
                 $article = Article::query()->create([
                     'task_id' => $task ? (int) $task->id : null,
                     'title' => $title,
+                    'slug' => \Illuminate\Support\Str::slug($title) . '-' . \Illuminate\Support\Str::random(6),
                     'content' => $content,
                     'excerpt' => mb_substr(strip_tags($content), 0, 200),
                     'keywords' => implode(',', $keywords),
@@ -137,6 +144,14 @@ class ContentAgentService
                     'is_ai_generated' => true,
                     'geo_score' => $geoScore,
                     'geo_grade' => $geoGrade,
+                    'category_id' => \App\Models\Category::firstOrCreate(
+                        ['slug' => 'ai-generated'],
+                        ['name' => 'AI智能生成', 'description' => 'Agent管道自动生成', 'sort_order' => 99]
+                    )->id,
+                    'author_id' => \App\Models\Author::firstOrCreate(
+                        ['name' => 'AI写手'],
+                        ['bio' => 'GEO Agent管道自动生成', 'email' => 'ai-agent@qonhub.local']
+                    )->id,
                 ]);
                 $articleId = (int) $article->id;
 
@@ -163,6 +178,7 @@ class ContentAgentService
             'geo_grade' => $geoGrade,
             'content_length' => mb_strlen($content),
             'retries' => $retries,
+            'generation_error' => $generationError,
             'generated_at' => now()->toIso8601String(),
         ];
     }
@@ -199,7 +215,7 @@ class ContentAgentService
 
             $response = app(LlmOrchestratorService::class)->chat(new \App\Services\AI\ChatRequest(
                 providerCode: 'deepseek',
-                modelId: 'deepseek-chat',
+                modelId: 'deepseek-v4-flash',
                 messages: [
                     ['role' => 'system', 'content' => '你是GEO内容优化专家。请诊断文章低分原因，输出具体可执行的改进建议。'],
                     ['role' => 'user', 'content' => "文章标题：{$title}\nGEO评分：{$geoScore}/100\n各维度得分：\n{$dimensionSummary}\n\n请诊断：\n1. 主要失分维度及原因\n2. 具体改进方向(增加Q&A结构/数据引用/专家信号/删除虚词)\n3. 重写后的目标分数预估\n\n输出简洁的改进建议列表。"],
@@ -216,14 +232,6 @@ class ContentAgentService
         } catch (\Throwable $e) {
             return ['success' => false, 'error' => $e->getMessage(), 'geo_score' => $geoScore];
         }
-    }
-
-    private function resolveDeepSeekKey(): ?string {
-        try {
-            $model = \App\Models\AiModel::where('status','active')->first();
-            if (!$model) return null;
-            return app(\App\Support\GeoFlow\ApiKeyCrypto::class)->decrypt((string)$model->getRawOriginal('api_key'));
-        } catch (\Throwable) { return null; }
     }
 
     private function resolveTaskKbIds(Task $task): array

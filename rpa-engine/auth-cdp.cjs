@@ -27,10 +27,25 @@ if (!cfg) { console.log('未知平台: ' + platform); process.exit(1); }
     await page.goto(cfg.url, { waitUntil: 'domcontentloaded', timeout: 20000 });
     console.log(`${cfg.name} 已打开，请在浏览器中登录。`);
     console.log('登录完成后 Cookie 自动持久化，永远不需要重新登录。');
-    console.log('浏览器窗口保持打开，登录完关闭此终端即可。');
+    console.log('浏览器窗口保持打开。（超时30分钟自动退出）');
 
-    // 保持运行
-    await new Promise(() => {});
+    // 轮询保持运行：每30秒检查CDP连接健康，最多30分钟
+    const deadline = Date.now() + 30 * 60 * 1000;
+    while (Date.now() < deadline) {
+      await new Promise(r => setTimeout(r, 30000));
+      try {
+        // 健康检查：尝试获取任意页面标题
+        const pages = browser.contexts()[0]?.pages() || [];
+        if (pages.length > 0) {
+          await pages[0].title();
+        }
+      } catch (e) {
+        console.log('⚠️ CDP 连接丢失，正在退出...');
+        console.log('请重新运行 start-browser.bat 启动浏览器');
+        break;
+      }
+    }
+    console.log('CDP 认证会话结束。');
   } catch (e) {
     console.log('❌ 连接失败！请先双击运行 start-browser.bat 启动常驻浏览器');
     console.log('错误: ' + e.message);

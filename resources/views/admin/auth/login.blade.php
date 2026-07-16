@@ -76,7 +76,7 @@
                             @if (($initialAdminHint['mode'] ?? '') === 'known')
                                 <div class="flex items-center justify-between gap-3">
                                     <span class="text-gray-500">{{ __('admin.login.first_login_password') }}</span>
-                                    <code class="rounded bg-gray-100 px-2 py-1 font-mono text-xs text-gray-900">{{ $initialAdminHint['password'] ?? '' }}</code>
+                                    <code class="rounded bg-gray-100 px-2 py-1 font-mono text-xs text-gray-900">{{ \Illuminate\Support\Str::mask($initialAdminHint['password'] ?? '', '*', 2) }}</code>
                                 </div>
                             @else
                                 <div class="rounded-lg bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800">

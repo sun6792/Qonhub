@@ -24,10 +24,30 @@ async function loginOne(platform) {
   console.log(`========================================`);
   
   await page.goto(platform.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
-  
-  // Wait for user to login (max 2 minutes)
-  console.log('等待登录中... (最长2分钟)');
-  await new Promise(r => setTimeout(r, 120000));
+
+  // 轮询检测登录完成（最多2分钟，每5秒检查一次）
+  console.log('等待登录中... (最长2分钟，登录完成自动继续)');
+  const startTime = Date.now();
+  const maxWait = 120000;  // 2分钟上限
+  let loggedIn = false;
+
+  while (!loggedIn && (Date.now() - startTime) < maxWait) {
+    await new Promise(r => setTimeout(r, 5000));  // 每5秒检查一次
+    try {
+      const url = page.url();
+      const title = await page.title().catch(() => '');
+      // 检测登录成功：URL 跳转到非登录页，或页面标题包含用户内容
+      if (!url.includes('/login') && !url.includes('/signin') && title) {
+        loggedIn = true;
+        console.log(`检测到登录完成: ${title}`);
+        break;
+      }
+    } catch { /* 页面加载中，继续等待 */ }
+  }
+
+  if (!loggedIn) {
+    console.log('⚠️ 登录超时（2分钟），将保存当前状态');
+  }
   
   const state = await page.context().storageState();
   const stateFile = path.join(STATE_DIR, `${platform.key}.json`);

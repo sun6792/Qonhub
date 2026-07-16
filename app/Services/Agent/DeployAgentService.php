@@ -107,15 +107,37 @@ class DeployAgentService
             }
         }
 
-        // ── 锚点状态：由 ProcessContentPublishJob 执行时自动回写 ──
-        // BasePlatformAdapter::syncAnchorCertification() + cascadeCertifySuccess()
-        // 在 publish/register 成功后自动调用，无需 DeployAgent 重复实现。
+        // ── 等待 ContentPublishTask 执行完成（最长 120 秒轮询）──
+        $publishedChannels = [];
+        $failedChannels = [];
+        $timedOut = false;
+
+        if ($taskId) {
+            $deadline = now()->addSeconds(120);
+            while (now()->lt($deadline)) {
+                $task->refresh();
+                if (in_array($task->status, ['completed', 'partial_failed'], true)) break;
+                sleep(2);
+            }
+            $timedOut = ! in_array($task->status, ['completed', 'partial_failed'], true);
+            // 从实际执行结果汇总通道状态
+            $publishedChannels = $task->results()
+                ->where('status', 'success')
+                ->pluck('platform_key')->unique()->values()->all();
+            $failedChannels = $task->results()
+                ->where('status', 'failed')
+                ->pluck('platform_key')->unique()->values()->all();
+        }
 
         return [
             'task_id' => $taskId,
             'total_jobs' => $totalJobs,
             'platform_count' => count($platforms),
             'route_summary' => $routeSummary,
+            'published_channels' => $publishedChannels,
+            'failed_channels' => $failedChannels,
+            'timed_out' => $timedOut,                            // ← Review 可区分超时
+            'agent_execution_id' => (int) $execution->id,        // ← 快照关联
             'deployed_at' => now()->toIso8601String(),
         ];
     }
@@ -129,7 +151,7 @@ class DeployAgentService
         try {
             $response = app(LlmOrchestratorService::class)->chat(new ChatRequest(
                 providerCode: 'deepseek',
-                modelId: 'deepseek-chat',
+                modelId: 'deepseek-v4-flash',
                 messages: [
                     ['role' => 'system', 'content' => '你是RPA自动化运维专家。分析发布失败的错误信息，判断失败类型（CAPTCHA/认证过期/内容拒绝/限流/未知），输出推荐处理方案。'],
                     ['role' => 'user', 'content' => "平台：{$platformKey}\n错误信息：{$errorMessage}\n\n请判断：\n1. 失败类型分类（captcha/auth_expired/content_rejected/rate_limited/unknown）\n2. 推荐处理方案（retry/switch_account/fallback_playwright/manual_review）\n3. 是否需要人工介入"],

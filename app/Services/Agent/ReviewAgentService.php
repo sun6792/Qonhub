@@ -62,7 +62,11 @@ class ReviewAgentService
         // ③ 优化建议
         $recommendations = [];
         $geoScore = $allOutputs['content']['geo_score'] ?? 0;
-        if ($geoScore < 70) {
+        $generationError = $allOutputs['content']['generation_error'] ?? null;
+
+        if ($generationError !== null) {
+            $recommendations[] = 'AI内容生成失败（API不可用），建议检查AI模型API Key配置';
+        } elseif ($geoScore < 70) {
             $recommendations[] = 'GEO评分低于70，建议增加Q&A结构、数据引用和专家信号';
         }
         if (($allOutputs['deploy']['failed_channels'] ?? []) !== []) {
@@ -71,13 +75,18 @@ class ReviewAgentService
         if (($allOutputs['scout']['anchor_status']['pending'] ?? 0) > 0) {
             $recommendations[] = '存在未认证B2B平台锚点，建议补充企业认证提升AI引用率';
         }
+        if (($allOutputs['deploy']['timed_out'] ?? false)) {
+            $recommendations[] = '分发任务执行超时（>120秒），建议检查队列Worker是否正常运行';
+        }
         if (empty($recommendations)) {
             $recommendations[] = '各项指标正常，建议定期巡检保持收录状态';
         }
 
         // B型规则兜底：判断是否需要迭代
-        $needsIteration = ($allOutputs['content']['geo_score'] ?? 0) < 70
-            || count($allOutputs['deploy']['failed_channels'] ?? []) > 0;
+        // 注意：AI 生成故障（API不可用）不触发迭代，因为重试也无法成功
+        $needsIteration = ($generationError === null && ($allOutputs['content']['geo_score'] ?? 0) < 70)
+            || count($allOutputs['deploy']['failed_channels'] ?? []) > 0
+            || ($allOutputs['deploy']['timed_out'] ?? false);
 
         return [
             'summary' => $summary,
@@ -118,7 +127,7 @@ PROMPT;
 
             $response = app(LlmOrchestratorService::class)->chat(new ChatRequest(
                 providerCode: 'deepseek',
-                modelId: 'deepseek-chat',
+                modelId: 'deepseek-v4-flash',
                 messages: [
                     ['role' => 'system', 'content' => $systemPrompt],
                     ['role' => 'user', 'content' => "全链路执行数据：\n{$summaryJson}"],

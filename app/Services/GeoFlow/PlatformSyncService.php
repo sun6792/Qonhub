@@ -7,6 +7,7 @@ use App\Models\ContentPublisherAccount;
 use App\Models\EnterpriseAnchorCertification;
 use App\Models\EnterpriseProfile;
 use App\Support\GeoFlow\ApiKeyCrypto;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -37,19 +38,21 @@ class PlatformSyncService
         $source = $payload['source'] ?? 'manual';
         $result = ['platform_key' => $platformKey, 'workspace_id' => $workspaceId];
 
-        // ═══ 1. ClientPlatformAccount（客户端可见）═══════
-        $clientData = [
-            'platform_account_name' => $platformName,
-            'status' => 'active',
-            'last_verified_at' => now(),
-            'expires_at' => now()->addDays(30),
-        ];
-        if (! empty($payload['credential'])) {
-            $clientData['credential_ciphertext'] = $this->crypto->encrypt($payload['credential']);
-        }
-        $cpa = ClientPlatformAccount::query()->updateOrCreate(
-            ['workspace_id' => $workspaceId, 'platform_key' => $platformKey],
-            $clientData
+        // 三表写入包裹在事务中：任意一步失败则全部回滚
+        return DB::transaction(function () use ($workspaceId, $platformKey, $platformName, $source, $payload, $result) {
+            // ═══ 1. ClientPlatformAccount（客户端可见）═══════
+            $clientData = [
+                'platform_account_name' => $platformName,
+                'status' => 'active',
+                'last_verified_at' => now(),
+                'expires_at' => now()->addDays(30),
+            ];
+            if (! empty($payload['credential'])) {
+                $clientData['credential_ciphertext'] = $this->crypto->encrypt($payload['credential']);
+            }
+            $cpa = ClientPlatformAccount::query()->updateOrCreate(
+                ['workspace_id' => $workspaceId, 'platform_key' => $platformKey],
+                $clientData
         );
         $result['client_account_id'] = (int) $cpa->id;
         $result['client_account_status'] = $cpa->status;
@@ -64,7 +67,7 @@ class PlatformSyncService
             'last_health_status' => 'healthy',
         ];
         if (! empty($payload['credential'])) {
-            $publisherData['credential_plaintext'] = $payload['credential'];
+            $publisherData['credential_ciphertext'] = $this->crypto->encrypt($payload['credential']);
         }
         $pubAccount = ContentPublisherAccount::query()->updateOrCreate(
             ['workspace_id' => $workspaceId, 'platform_key' => $platformKey],
@@ -98,6 +101,7 @@ class PlatformSyncService
         ]);
 
         return $result;
+        }); // DB::transaction 结束
     }
 
     /**

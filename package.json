@@ -5,7 +5,9 @@
     "type": "module",
     "scripts": {
         "build": "vite build",
-        "dev": "vite"
+        "dev": "vite",
+        "start": "concurrently -k -n srv,queue,vite -c blue,green,yellow \"php artisan serve --host=127.0.0.1 --port=18080\" \"php artisan queue:work redis --queue=geoflow,distribution,content-publish,theme-replication,agent_scout,default --sleep=1 --tries=3 --timeout=600\" \"vite\"",
+        "start-server": "concurrently -k -n srv,queue -c blue,green \"php artisan serve --host=127.0.0.1 --port=18080\" \"php artisan queue:work redis --queue=geoflow,distribution,content-publish,theme-replication,agent_scout,default --sleep=1 --tries=3 --timeout=600\""
     },
     "devDependencies": {
         "@tailwindcss/vite": "^4.0.0",

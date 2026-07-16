@@ -111,44 +111,81 @@ export class BasePlatformScript {
 
     // ── 浏览器启动 ────────────────────────────────────────
 
+    /**
+     * 启动浏览器实例。
+     *
+     * 支持两种后端（由 RPA_BACKEND 环境变量控制）：
+     *   - 'local'（默认）：本地 Edge/CDP 浏览器，保持现有行为不变
+     *   - 'browserless'：对接 Docker 化 browserless 集群（ws://browserless:3000）
+     */
     async launchBrowser() {
-        const launchOpts = {
-            headless: this.headless,
-            args: [
-                "--no-sandbox",
-                "--disable-blink-features=AutomationControlled",
-                "--disable-features=IsolateOrigins,site-per-process",
-            ],
-        };
-
-        if (this.proxy) {
-            launchOpts.proxy = { server: this.proxy };
-        }
-
-        launchOpts.channel = BROWSER_CHANNEL;
-        const browser = await chromium.launch(launchOpts);
+        const backend = process.env.RPA_BACKEND || 'local';
 
         // [改造] storageState 持久化：按 workspaceId + platform 分层隔离
         const stateDir = path.join(__dirname, "..", "storage", "states", String(this.workspaceId));
         if (!fs.existsSync(stateDir)) fs.mkdirSync(stateDir, { recursive: true });
         const stateFile = path.join(stateDir, `${this.constructor.platform}.json`);
-        const contextOpts = {
-            userAgent: this.randomUA(),
-            viewport: { width: 1366 + this.rand(-100, 100), height: 768 + this.rand(-50, 50) },
-            locale: "zh-CN",
-            timezoneId: "Asia/Shanghai",
-            permissions: [],
-            geolocation: undefined,
-        };
-        if (fs.existsSync(stateFile)) {
-            try {
-                contextOpts.storageState = JSON.parse(fs.readFileSync(stateFile, "utf-8"));
-                this.log(`Loaded saved login state from ${stateFile}`);
-            } catch { /* corrupted, ignore */ }
-        }
 
-        const context = await browser.newContext(contextOpts);
-        const page = await context.newPage();
+        let browser, context, page;
+
+        if (backend === 'browserless') {
+            // ── Browserless 模式：连接 Docker Chrome 集群 ──
+            const wsUrl = process.env.BROWSERLESS_WS_URL || 'ws://browserless:3000';
+            const token = process.env.BROWSERLESS_TOKEN || '';
+            const wsEndpoint = token ? `${wsUrl}?token=${token}` : wsUrl;
+
+            this.log(`Connecting to browserless: ${wsUrl}`);
+            browser = await chromium.connectOverCDP(wsEndpoint);
+
+            // browserless 默认有一个 context，复用已有 context 保持 profiles
+            context = browser.contexts()[0];
+            // 加载已保存的 storageState 到已有 context
+            if (fs.existsSync(stateFile)) {
+                try {
+                    const state = JSON.parse(fs.readFileSync(stateFile, "utf-8"));
+                    if (state.cookies && state.cookies.length > 0) {
+                        await context.addCookies(state.cookies);
+                        this.log(`Loaded ${state.cookies.length} cookies from ${stateFile}`);
+                    }
+                } catch { /* corrupted, ignore */ }
+            }
+            page = await context.newPage();
+        } else {
+            // ── 本地模式：启动本地 Edge 浏览器 ──
+            const launchOpts = {
+                headless: this.headless,
+                args: [
+                    "--no-sandbox",
+                    "--disable-blink-features=AutomationControlled",
+                    "--disable-features=IsolateOrigins,site-per-process",
+                ],
+            };
+
+            if (this.proxy) {
+                launchOpts.proxy = { server: this.proxy };
+            }
+
+            launchOpts.channel = BROWSER_CHANNEL;
+            browser = await chromium.launch(launchOpts);
+
+            const contextOpts = {
+                userAgent: this.randomUA(),
+                viewport: { width: 1366 + this.rand(-100, 100), height: 768 + this.rand(-50, 50) },
+                locale: "zh-CN",
+                timezoneId: "Asia/Shanghai",
+                permissions: [],
+                geolocation: undefined,
+            };
+            if (fs.existsSync(stateFile)) {
+                try {
+                    contextOpts.storageState = JSON.parse(fs.readFileSync(stateFile, "utf-8"));
+                    this.log(`Loaded saved login state from ${stateFile}`);
+                } catch { /* corrupted, ignore */ }
+            }
+
+            context = await browser.newContext(contextOpts);
+            page = await context.newPage();
+        }
 
         // 双层指纹伪装：stealth 插件（全局）+ 国产平台补丁（页面层）
         await page.addInitScript(CN_STEALTH_PATCH);
@@ -245,10 +282,14 @@ export class BasePlatformScript {
             password: ['input[name*="password"]', 'input[name*="pwd"]', 'input[type="password"]', 'input[placeholder*="密码"]'],
             username: ['input[name*="username"]', 'input[name*="account"]', 'input[name*="user"]', 'input[placeholder*="账号"]', 'input[placeholder*="用户名"]'],
             contact: ['input[name*="contact"]', 'input[name*="person"]', 'input[name*="lxr"]', 'input[placeholder*="联系人"]', 'input[placeholder*="姓名"]'],
+            credit_code: ['input[name*="credit"]', 'input[name*="tyxydm"]', 'input[name*="uscc"]', 'input[placeholder*="信用"]', 'input[placeholder*="统一"]'],
+            legal_person: ['input[name*="legal"]', 'input[name*="frdb"]', 'input[name*="person"]', 'input[placeholder*="法人"]', 'input[placeholder*="代表"]'],
             address: ['input[name*="address"]', 'input[name*="xxdz"]', 'textarea[name*="address"]', 'input[placeholder*="地址"]'],
             scope: ['textarea[name*="scope"]', 'textarea[name*="jyfw"]', 'textarea[placeholder*="经营"]', 'textarea[name*="intro"]'],
             products: ['textarea[name*="product"]', 'textarea[name*="zycp"]', 'textarea[placeholder*="产品"]', 'textarea[placeholder*="主营"]'],
             website: ['input[name*="website"]', 'input[name*="qywz"]', 'input[name*="url"]', 'input[placeholder*="网址"]', 'input[placeholder*="官网"]'],
+            province: ['select[name*="province"]', 'select[name*="sssf"]'],
+            city: ['select[name*="city"]', 'select[name*="sscs"]'],
         };
         await this.typeHuman(page, patterns[hint] || [hint], text);
     }
@@ -347,8 +388,23 @@ export class BasePlatformScript {
         let result = { success: false, shop_url: "", account_id: "", error: "", status: "error" };
 
         try {
+            // Step 1: 注册 + 登录
             result = await this.registerFlow(page);
             result.account_id = result.account_id || this.genAccount().username;
+            this.log(`Register flow completed: ${result.success ? 'success' : 'failed'}`);
+
+            // Step 2: 企业认证（如果子类实现了 certifyFlow）
+            if (result.success && typeof this.certifyFlow === 'function') {
+                try {
+                    const certResult = await this.certifyFlow(page);
+                    result = { ...result, ...certResult };
+                    this.log(`Certify flow completed: ${certResult.shop_url || 'no shop URL'}`);
+                } catch (certErr) {
+                    this.log(`⚠️ Certify flow failed (register succeeded): ${certErr.message}`);
+                    // 注册成功了但认证失败，不覆盖整个 result 为失败
+                    result.certify_error = certErr.message;
+                }
+            }
         } catch (err) {
             this.log(`❌ ${err.message}`);
             result.error = err.message;

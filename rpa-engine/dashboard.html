@@ -5,643 +5,248 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Qonhub 运营助手</title>
 <style>
-  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#f1f5f9;color:#1e293b;min-height:100vh}
-  .topbar{background:#fff;border-bottom:1px solid #e2e8f0;padding:12px 24px;display:flex;align-items:center;justify-content:space-between;gap:16px}
-  .topbar h1{font-size:18px;font-weight:700;color:#1e40af;white-space:nowrap}
-  .topbar .meta{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
-  .topbar select,.topbar input{padding:8px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;outline:none}
-  .topbar select:focus,.topbar input:focus{border-color:#6366f1;box-shadow:0 0 0 3px rgba(99,102,241,.15)}
-  .btn{padding:8px 16px;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;transition:all .15s}
-  .btn-primary{background:#6366f1;color:#fff}.btn-primary:hover{background:#4f46e5}
-  .btn-danger{background:#ef4444;color:#fff}.btn-danger:hover{background:#dc2626}
-  .btn-outline{background:#fff;border:1px solid #d1d5db;color:#374151}.btn-outline:hover{background:#f9fafb}
-  .btn-sm{padding:5px 10px;font-size:12px}
-  .container{max-width:1200px;margin:0 auto;padding:24px;display:grid;grid-template-columns:1fr 1fr;gap:20px}
-  @media(max-width:800px){.container{grid-template-columns:1fr}}
-  .card{background:#fff;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden}
-  .card-header{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid #f1f5f9}
-  .card-header h2{font-size:15px;font-weight:700}
-  .card-body{padding:16px 20px;max-height:500px;overflow-y:auto}
-  .task-item,.cache-item{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid #f8fafc;gap:12px}
-  .task-item:last-child,.cache-item:last-child{border-bottom:none}
-  .badge{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:20px;font-size:11px;font-weight:600}
-  .badge-valid{background:#dcfce7;color:#166534}
-  .badge-expired{background:#fef3c7;color:#92400e}
-  .badge-empty{background:#f1f5f9;color:#94a3b8}
-  .badge-running{background:#dbeafe;color:#1e40af}
-  .badge-done{background:#dcfce7;color:#166534}
-  .badge-fail{background:#fee2e2;color:#991b1b}
-  .stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:16px 20px;border-bottom:1px solid #f1f5f9}
-  .stat-item{text-align:center}
-  .stat-value{font-size:24px;font-weight:800}
-  .stat-label{font-size:11px;color:#64748b;margin-top:2px}
-  .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:999;align-items:center;justify-content:center}
-  .modal-overlay.active{display:flex}
-  .modal{background:#fff;border-radius:16px;padding:24px;width:360px;box-shadow:0 20px 60px rgba(0,0,0,.15)}
-  .modal h3{font-size:16px;margin-bottom:16px}
-  .modal input{width:100%;padding:10px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;margin-bottom:12px}
-  .modal input:focus{border-color:#6366f1;outline:none}
-  .modal .actions{display:flex;gap:8px;justify-content:flex-end}
-  .empty-state{text-align:center;padding:40px 20px;color:#94a3b8}
-  .empty-state .icon{font-size:40px;margin-bottom:8px}
-  .log-area{max-height:150px;overflow-y:auto;font-size:11px;font-family:monospace;background:#1e293b;color:#e2e8f0;padding:12px;border-radius:8px;margin-top:8px;white-space:pre-wrap}
-  .refresh{font-size:12px;color:#6366f1;cursor:pointer}.refresh:hover{text-decoration:underline}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#f1f5f9;color:#1e293b;min-height:100vh}
+.topbar{background:#fff;border-bottom:1px solid #e2e8f0;padding:12px 24px;display:flex;align-items:center;justify-content:space-between;gap:16px}
+.topbar h1{font-size:18px;font-weight:700;color:#1e40af}
+.topbar select,.topbar input{padding:8px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;outline:none}
+.btn{padding:8px 16px;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;transition:all .15s}
+.btn-primary{background:#6366f1;color:#fff}.btn-primary:hover{background:#4f46e5}
+.btn-danger{background:#ef4444;color:#fff}
+.btn-outline{background:#fff;border:1px solid #d1d5db;color:#374151}
+.btn-sm{padding:5px 10px;font-size:12px}
+.container{max-width:1200px;margin:0 auto;padding:24px;display:grid;grid-template-columns:1fr 1fr;gap:20px}
+@media(max-width:800px){.container{grid-template-columns:1fr}}
+.card{background:#fff;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden}
+.card-header{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid #f1f5f9}
+.card-header h2{font-size:15px;font-weight:700}
+.card-body{padding:16px 20px;max-height:500px;overflow-y:auto}
+.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:20px;font-size:11px;font-weight:600}
+.badge-valid{background:#dcfce7;color:#166534}
+.badge-expired{background:#fef3c7;color:#92400e}
+.badge-empty{background:#f1f5f9;color:#94a3b8}
+.empty-state{text-align:center;padding:40px 20px;color:#94a3b8}
+.log-area{max-height:150px;overflow-y:auto;font-size:11px;font-family:monospace;background:#1e293b;color:#e2e8f0;padding:12px;border-radius:8px;margin-top:8px;white-space:pre-wrap}
+.stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:16px 20px;border-bottom:1px solid #f1f5f9}
+.stat-item{text-align:center}.stat-value{font-size:24px;font-weight:800}.stat-label{font-size:11px;color:#64748b;margin-top:2px}
 </style>
 </head>
 <body>
-
-<!-- ═══════ 顶栏 ═══════ -->
 <div class="topbar">
   <h1>🤖 Qonhub 运营助手</h1>
-  <div class="meta">
+  <div style="display:flex;align-items:center;gap:12px">
     <span style="font-size:12px;padding:4px 10px;border-radius:20px;background:#dcfce7;color:#166534;font-weight:600">🖥️ 桌面模式</span>
-    <span style="font-size:11px;color:#94a3b8">浏览器可见操作</span>
-    <label style="font-size:13px;color:#64748b;white-space:nowrap">当前客户</label>
-    <select id="wsSelect" onchange="switchWorkspace()">
-      <option value="">-- 选择客户 --</option>
-    </select>
+    <label>当前客户</label>
+    <select id="wsSelect" onchange="switchWorkspace()"><option value="">-- 选择客户 --</option></select>
     <span id="wsStats" style="font-size:12px;color:#94a3b8"></span>
     <button class="btn btn-outline btn-sm" onclick="refreshAll()">🔄 刷新</button>
   </div>
 </div>
 
-<!-- ═══════ 主体 ═══════ -->
 <div class="container">
+  <!-- AI 搜索平台授权 -->
+  <div class="card" style="grid-column:1/-1;border:2px solid #818cf8">
+    <div class="card-header" style="background:#eef2ff">
+      <h2>🤖 AI 搜索平台授权</h2>
+      <span style="font-size:11px;color:#6366f1;font-weight:600">品牌AI可见度监测 — 登录后Cookie自动保存</span>
+    </div>
+    <div class="card-body" id="aiAuthList">
+      <div class="empty-state"><p>选择客户后自动加载...</p></div>
+    </div>
+  </div>
 
-  <!-- 左栏：任务 -->
+  <!-- 发布平台授权 -->
   <div class="card">
-    <div class="card-header">
-      <h2>📋 待执行任务</h2>
-      <button class="btn btn-outline btn-sm" onclick="pullTasks()">从云端拉取</button>
-    </div>
-    <div class="stats-row" id="taskStats">
-      <div class="stat-item"><div class="stat-value" id="statTotal">0</div><div class="stat-label">总任务</div></div>
-      <div class="stat-item"><div class="stat-value" id="statSuccess" style="color:#16a34a">0</div><div class="stat-label">成功</div></div>
-      <div class="stat-item"><div class="stat-value" id="statFail" style="color:#dc2626">0</div><div class="stat-label">失败</div></div>
-      <div class="stat-item"><div class="stat-value" id="statPending" style="color:#6366f1">0</div><div class="stat-label">待处理</div></div>
-    </div>
-    <div class="card-body" id="taskList">
-      <div class="empty-state"><div class="icon">📭</div><p>下拉选择客户后拉取任务</p></div>
-    </div>
+    <div class="card-header"><h2>🔐 发布平台授权</h2><span style="font-size:11px;color:#94a3b8">用于内容分发</span></div>
+    <div class="card-body" id="authList"><div class="empty-state"><p>选择客户后查看</p></div></div>
   </div>
 
-  <!-- 右栏：缓存 -->
+  <!-- 缓存状态 -->
   <div class="card">
-    <div class="card-header">
-      <h2>🔑 缓存状态</h2>
-      <button class="btn btn-outline btn-sm" onclick="loadCache()">刷新缓存</button>
-    </div>
-    <div class="card-body" id="cacheList">
-      <div class="empty-state"><div class="icon">📦</div><p>选择客户后查看缓存状态</p></div>
-    </div>
-    <div id="logArea" class="log-area" style="margin:0 20px 16px">就绪，等待操作...</div>
+    <div class="card-header"><h2>📦 缓存状态</h2><button class="btn btn-outline btn-sm" onclick="loadCache()">刷新</button></div>
+    <div class="card-body" id="cacheList"><div class="empty-state"><p>选择客户后查看</p></div></div>
   </div>
-
-  <!-- [新增] 平台授权 -->
-  <div class="card">
-    <div class="card-header">
-      <h2>🔐 平台授权</h2>
-      <span class="text-xs text-gray-400" id="authStatus">需手动登录</span>
-    </div>
-    <div class="card-body" id="authList">
-      <div class="empty-state"><div class="icon">🔑</div><p>选择客户后查看授权状态</p></div>
-    </div>
-  </div>
-
-  <!-- P0 弹药库批量分发中心 -->
-  <div class="card" style="grid-column:1/-1">
-    <div class="card-header">
-      <h2>📰 弹药库 · 批量分发</h2>
-      <div style="display:flex;align-items:center;gap:12px">
-        <select id="distPlatform" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:13px">
-          <option value="">选择平台...</option>
-          <option value="toutiao">📰 今日头条</option>
-          <option value="baijiahao">📝 百家号</option>
-          <option value="xiaohongshu">📕 小红书</option>
-          <option value="sohu">🟢 搜狐号</option>
-        </select>
-        <button class="btn btn-primary btn-sm" onclick="bulkDistribute()">🚀 全选发送</button>
-        <button class="btn btn-outline btn-sm" onclick="loadArticles()">🔄 刷新</button>
-        <span id="distStatus" style="font-size:12px;color:#94a3b8">0篇</span>
-      </div>
-    </div>
-    <div style="padding:8px 20px;background:#f8fafc;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;gap:8px">
-      <input type="checkbox" id="selectAll" onchange="toggleSelectAll(this)" style="width:16px;height:16px">
-      <label for="selectAll" style="font-size:12px;color:#64748b;cursor:pointer">全选</label>
-      <span id="selectedCount" style="font-size:11px;color:#6366f1;font-weight:600">0</span>
-      <span style="font-size:11px;color:#94a3b8">篇已选</span>
-    </div>
-    <div class="card-body" id="articleList" style="max-height:400px">
-      <div class="empty-state"><div class="icon">📭</div><p>选择客户后加载文章</p></div>
-    </div>
-    <div id="publishProgress" style="display:none;padding:12px 20px;background:#eef2ff;border-top:1px solid #e0e7ff">
-      <div style="display:flex;justify-content:space-between;margin-bottom:6px">
-        <span style="font-size:12px;font-weight:600;color:#4338ca" id="progressText">分发中...</span>
-        <span style="font-size:12px;color:#6366f1" id="progressCount">0/0</span>
-      </div>
-      <div style="background:#e0e7ff;border-radius:4px;height:6px">
-        <div id="progressBar" style="background:linear-gradient(90deg,#6366f1,#8b5cf6);height:6px;border-radius:4px;width:0%;transition:width 0.3s"></div>
-      </div>
-    </div>
-  </div>
-
 </div>
 
-<!-- ═══════ 验证码弹窗 ═══════ -->
-<div class="modal-overlay" id="captchaModal">
-  <div class="modal">
-    <h3>🔢 请输入验证码</h3>
-    <p style="font-size:13px;color:#64748b;margin-bottom:12px" id="captchaInfo"></p>
-    <input type="text" id="captchaInput" placeholder="输入验证码" maxlength="10" autofocus>
-    <div class="actions">
-      <button class="btn btn-outline" onclick="closeCaptcha()">取消</button>
-      <button class="btn btn-primary" onclick="submitCaptcha()">确认提交</button>
-    </div>
-  </div>
-</div>
+<div class="log-area" id="logArea" style="margin:0 24px 16px">就绪，等待操作...</div>
 
 <script>
-// ═══════ CONFIG ═══════
 const API = "http://127.0.0.1:9901";
 const API_KEY = "qonhub-rpa-secret-change-me";
-const h = (sel) => document.getElementById(sel);
-
-// ═══════ WORKSPACE ═══════
-let wsList = [];
+const CLOUD = "http://127.0.0.1:18080/geo_admin";
 let currentWs = "";
+let wsList = [];
+
+const AI_AUTH_PLATFORMS = [
+  { key: "doubao", name: "豆包", icon: "🟢", hint: "字节跳动AI助手" },
+  { key: "yuanbao", name: "腾讯元宝", icon: "💎", hint: "腾讯AI助手" },
+  { key: "baidu", name: "百度AI", icon: "🔵", hint: "百度搜索AI" },
+  { key: "deepseek", name: "DeepSeek", icon: "🐳", hint: "深度求索" },
+  { key: "qianwen", name: "通义千问", icon: "🟠", hint: "阿里云AI" },
+  { key: "xf_xinghuo", name: "讯飞星火", icon: "🔥", hint: "科大讯飞" },
+  { key: "kimi", name: "Kimi", icon: "🌙", hint: "月之暗面" },
+];
+
+const AUTH_PLATFORMS = [
+  { key: "toutiao", name: "今日头条", icon: "📰" },
+  { key: "baijiahao", name: "百家号", icon: "📝" },
+  { key: "sohu", name: "搜狐号", icon: "🟢" },
+  { key: "xiaohongshu", name: "小红书", icon: "📕" },
+];
+
+function h(id) { return document.getElementById(id); }
+function log(msg) { const el = h("logArea"); el.textContent += msg + "\n"; el.scrollTop = el.scrollHeight; }
+
+async function loadAiAuthPlatforms() {
+  if (!currentWs) return;
+  const el = h("aiAuthList");
+  el.innerHTML = '<div class="empty-state"><p>⏳ 加载中...</p></div>';
+  let cachePlatforms = {};
+  try {
+    const resp = await fetch(API + "/api/cache/list?workspace_id=" + currentWs);
+    const data = await resp.json();
+    (data.caches || []).forEach(c => { cachePlatforms[c.platform_key] = c; });
+  } catch(e) { log("⚠️ 缓存读取失败: " + e.message); }
+  el.innerHTML = AI_AUTH_PLATFORMS.map(p => {
+    const cache = cachePlatforms[p.key];
+    const loggedIn = cache && cache.valid;
+    return '<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid #f1f5f9;gap:12px">'
+      + '<div style="display:flex;align-items:center;gap:8px"><span style="font-size:20px">' + p.icon + '</span>'
+      + '<div><div style="font-size:14px;font-weight:600">' + p.name + '</div>'
+      + '<div style="font-size:11px;color:#94a3b8">' + p.hint + '</div></div></div>'
+      + '<div style="display:flex;align-items:center;gap:8px">'
+      + '<span style="font-size:11px;padding:2px 8px;border-radius:12px;background:' + (loggedIn ? '#dcfce7' : '#fef3c7') + '">' + (loggedIn ? '✅ 已登录' : '⚠️ 未登录') + '</span>'
+      + '<button class="btn btn-sm btn-primary" onclick="authAiLogin(\'' + p.key + '\')">🔑 ' + (loggedIn ? '重新登录' : '一键登录') + '</button>'
+      + '</div></div>';
+  }).join("");
+}
+
+async function authAiLogin(platform) {
+  if (!currentWs) return alert("请先选择客户");
+  localStorage.setItem("rpa_current_ws", currentWs);
+  const p = AI_AUTH_PLATFORMS.find(x => x.key === platform);
+  const name = p ? p.name : platform;
+  if (!confirm("将打开浏览器窗口登录「" + name + "」\n\n登录成功后关闭浏览器窗口，Cookie自动保存。")) return;
+  log("🔑 正在打开 " + name + " 登录页...");
+  const btns = h("aiAuthList").querySelectorAll("button");
+  btns.forEach(b => { b.disabled = true; b.textContent = "登录中..."; });
+  try {
+    const resp = await fetch(API + "/api/v1/auth-login", {
+      method: "POST", headers: { "Content-Type": "application/json", "X-Api-Key": API_KEY },
+      body: JSON.stringify({ platform, workspace_id: currentWs, headless: false }),
+    });
+    const data = await resp.json();
+    if (data.success) { log("✅ " + data.message); alert("✅ " + name + " Cookie已保存"); }
+    else { log("⚠️ " + data.message); alert("⚠️ " + name + ": " + data.message); }
+  } catch (e) { log("❌ 授权失败: " + e.message); alert("授权失败: " + e.message); }
+  await new Promise(r => setTimeout(r, 1500));
+  await loadAiAuthPlatforms();
+}
+
+async function loadAuthPlatforms() {
+  if (!currentWs) return;
+  const el = h("authList");
+  el.innerHTML = '<div class="empty-state"><p>⏳ 加载中...</p></div>';
+  let cachePlatforms = {};
+  try {
+    const resp = await fetch(API + "/api/cache/list?workspace_id=" + currentWs);
+    const data = await resp.json();
+    (data.caches || []).forEach(c => { cachePlatforms[c.platform_key] = c; });
+  } catch(e) {}
+  el.innerHTML = AUTH_PLATFORMS.map(p => {
+    const cache = cachePlatforms[p.key];
+    const loggedIn = cache && cache.valid;
+    return '<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid #f1f5f9">'
+      + '<div style="display:flex;align-items:center;gap:8px"><span>' + p.icon + '</span> <span style="font-weight:600">' + p.name + '</span>'
+      + '<span style="font-size:11px;padding:2px 8px;border-radius:12px;background:' + (loggedIn ? '#dcfce7' : '#fef3c7') + '">' + (loggedIn ? '✅ 已登录' : '⚠️ 未登录') + '</span></div>'
+      + '<button class="btn btn-sm btn-primary" onclick="authLogin(\'' + p.key + '\')">🔑 ' + (loggedIn ? '重新登录' : '授权登录') + '</button></div>';
+  }).join("");
+}
+
+async function authLogin(platform) {
+  if (!currentWs) return alert("请先选择客户");
+  localStorage.setItem("rpa_current_ws", currentWs);
+  const p = AUTH_PLATFORMS.find(x => x.key === platform);
+  const name = p ? p.name : platform;
+  if (!confirm("将打开浏览器窗口登录「" + name + "」\n\n登录成功后关闭浏览器窗口，Cookie自动保存。")) return;
+  log("🔑 正在打开 " + name + " 登录页...");
+  const btns = h("authList").querySelectorAll("button");
+  btns.forEach(b => { b.disabled = true; b.textContent = "登录中..."; });
+  try {
+    const resp = await fetch(API + "/api/v1/auth-login", {
+      method: "POST", headers: { "Content-Type": "application/json", "X-Api-Key": API_KEY },
+      body: JSON.stringify({ platform, workspace_id: currentWs, headless: false }),
+    });
+    const data = await resp.json();
+    if (data.success) { log("✅ " + data.message); alert("✅ " + data.message); }
+    else { log("⚠️ " + data.message); alert("⚠️ " + data.message); }
+  } catch (e) { log("❌ 授权失败: " + e.message); alert("授权失败: " + e.message); }
+  await new Promise(r => setTimeout(r, 1500));
+  loadAuthPlatforms();
+}
+
+async function loadCache() {
+  if (!currentWs) return;
+  const el = h("cacheList");
+  try {
+    const resp = await fetch(API + "/api/cache/list?workspace_id=" + currentWs);
+    const data = await resp.json();
+    if (!data.caches || data.caches.length === 0) { el.innerHTML = '<div class="empty-state"><p>无缓存数据</p></div>'; return; }
+    el.innerHTML = data.caches.map(c => {
+      const valid = c.valid; const size = c.size_kb || 0;
+      return '<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f1f5f9">'
+        + '<span>' + (c.platform_name || c.platform_key) + '</span>'
+        + '<span class="badge ' + (valid ? 'badge-valid' : 'badge-empty') + '">' + (valid ? '✅ 有效 ' + size + 'kb' : '无缓存') + '</span></div>';
+    }).join("");
+  } catch(e) { el.innerHTML = '<div class="empty-state"><p>加载失败</p></div>'; }
+}
 
 async function loadWorkspaces() {
   try {
-    const resp = await fetch(`${CLOUD}/api/v1/rpa/my-workspaces`, {headers: {'X-Api-Key': API_KEY}});
+    const resp = await fetch(CLOUD + "/api/v1/rpa/my-workspaces", {headers: {"X-Api-Key": API_KEY}});
     const data = await resp.json();
     wsList = data.workspaces || [];
-    if (wsList.length === 0) {
-      // fallback: localStorage backup
-      wsList = JSON.parse(localStorage.getItem("rpa_workspaces") || "[]");
-    } else {
-      localStorage.setItem("rpa_workspaces", JSON.stringify(wsList));
-    }
-  } catch (e) {
+    if (wsList.length === 0) wsList = JSON.parse(localStorage.getItem("rpa_workspaces") || "[]");
+    else localStorage.setItem("rpa_workspaces", JSON.stringify(wsList));
+  } catch(e) {
     wsList = JSON.parse(localStorage.getItem("rpa_workspaces") || "[]");
     log("⚠️ 云端不可达，使用本地缓存");
   }
+  if (wsList.length === 0) wsList = [{id: 7, name: "默认客户 #7"}];
   renderWsSelect();
 }
 
 function renderWsSelect() {
   const sel = h("wsSelect");
-  sel.innerHTML = '<option value="">-- 选择客户（从云端加载）--</option>';
-  wsList.forEach(w => {
-    sel.innerHTML += `<option value="${w.id}" ${currentWs===w.id?'selected':''}>${w.name}</option>`;
-  });
+  sel.innerHTML = '<option value="">-- 选择客户 --</option>' + wsList.map(w => '<option value="' + w.id + '">' + w.name + ' (#' + w.id + ')</option>').join("");
 }
 
-async function switchWorkspace() {
-  const val = h("wsSelect").value;
-  currentWs = val;
-  h("wsStats").textContent = val ? `WS-${val}` : "";
-  if (val) {
-    await Promise.all([pullTasks(), loadCache(), loadAuthPlatforms(), loadArticles()]);
-    localStorage.setItem("rpa_current_ws", val);
-  }
-}
-
-// ═══════ TASKS ═══════
-async function pullTasks() {
-  if (!currentWs) return log("请先选择客户");
-  log(`正在拉取 WS-${currentWs} 的任务...`);
-  try {
-    const resp = await fetch(`${API}/api/tasks/pull?workspace_id=${currentWs}`);
-    const data = await resp.json();
-    const tasks = data.tasks || data || [];
-    renderTasks(Array.isArray(tasks) ? tasks : []);
-    log(`拉取完成: ${tasks.length} 个任务`);
-  } catch (e) {
-    log(`❌ 拉取失败: ${e.message}（云端可能未启动）`);
-    renderTasks([]);
-  }
-}
-
-function renderTasks(tasks) {
-  const el = h("taskList");
-  if (!tasks.length) {
-    el.innerHTML = '<div class="empty-state"><div class="icon">✨</div><p>暂无待执行任务</p></div>';
-    return;
-  }
-  el.innerHTML = tasks.map(t => `
-    <div class="task-item">
-      <div style="flex:1">
-        <div style="font-size:13px;font-weight:600">${t.platform_name||t.platform||t.platform_key}</div>
-        <div style="font-size:11px;color:#64748b">${t.description||t.action||'企业认证'}</div>
-        ${t.status ? `<span class="badge badge-${t.status==='completed'?'done':t.status==='failed'?'fail':'running'}">${t.status}</span>` : ''}
-      </div>
-      <button class="btn btn-primary btn-sm" onclick="executeTask('${t.platform||t.platform_key}','${t.action||'register_and_certify'}')">▶ 执行</button>
-    </div>
-  `).join("");
-}
-
-async function executeTask(platform, action) {
-  if (!currentWs) return alert("请先选择客户");
-  log(`▶ 执行: ${platform} (ws=${currentWs})`);
-  h("taskList").querySelectorAll("button").forEach(b => b.disabled = true);
-  try {
-    const resp = await fetch(`${API}/api/v1/register`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Api-Key": API_KEY },
-      body: JSON.stringify({
-        platform,
-        action,
-        account: { username: `qy_${Date.now().toString(36)}` },
-        enterprise: { company_name: `WS-${currentWs}`, workspace_id: currentWs },
-        options: { workspace_id: currentWs },
-      }),
-    });
-    const data = await resp.json();
-    log(`✅ 任务已提交: ${data.task_id}`);
-    // 轮询任务结果
-    pollTaskResult(data.task_id);
-  } catch (e) {
-    log(`❌ 提交失败: ${e.message}`);
-  } finally {
-    h("taskList").querySelectorAll("button").forEach(b => b.disabled = false);
-  }
-}
-
-async function pollTaskResult(taskId) {
-  log(`⏳ 等待任务完成: ${taskId}`);
-  let attempts = 0;
-  const maxAttempts = 60;
-  const poll = setInterval(async () => {
-    attempts++;
-    try {
-      const resp = await fetch(`${API}/api/v1/tasks/${taskId}?api_key=${API_KEY}`);
-      const t = await resp.json();
-      if (t.status === "completed") {
-        clearInterval(poll);
-        log(`✅ 任务完成! ${JSON.stringify(t.result||{})}`);
-        pullTasks();
-        updateStats();
-        return;
-      }
-      if (t.status === "failed") {
-        clearInterval(poll);
-        log(`❌ 任务失败: ${t.error}`);
-        pullTasks();
-        updateStats();
-        return;
-      }
-      if (attempts >= maxAttempts) {
-        clearInterval(poll);
-        log(`⏰ 任务超时: ${taskId}`);
-        return;
-      }
-    } catch {
-      clearInterval(poll);
-      log(`⚠️ 轮询中断`);
-    }
-  }, 2000);
-}
-
-// ═══════ CACHE ═══════
-async function loadCache() {
+function switchWorkspace() {
+  currentWs = h("wsSelect").value;
   if (!currentWs) return;
-  try {
-    const resp = await fetch(`${API}/api/cache/list?workspace_id=${currentWs}`);
-    const data = await resp.json();
-    renderCache(data.caches || []);
-  } catch (e) { log(`❌ 缓存查询失败: ${e.message}`); }
-}
-
-function renderCache(caches) {
-  const el = h("cacheList");
-  if (!caches.length) {
-    el.innerHTML = '<div class="empty-state"><div class="icon">📦</div><p>无缓存数据</p></div>';
-    return;
-  }
-  el.innerHTML = caches.map(c => `
-    <div class="cache-item">
-      <div style="flex:1">
-        <div style="font-size:13px;font-weight:600">${c.platform_name}</div>
-        <div style="font-size:11px;color:#64748b">
-          ${c.created_at ? `创建于 ${new Date(c.created_at).toLocaleDateString()} (${c.age_days}天前)` : '未创建缓存'}
-        </div>
-      </div>
-      <span class="badge ${c.valid ? 'badge-valid' : (c.created_at ? 'badge-expired' : 'badge-empty')}">
-        ${c.valid ? `✅ 有效` : (c.created_at ? '⚠️ 已过期' : '📝 无缓存')}
-      </span>
-      ${c.created_at ? `<button class="btn btn-danger btn-sm" onclick="clearCache('${c.platform_key}')">清除</button>` : ''}
-    </div>
-  `).join("");
-}
-
-
-// ═══════ STATS ═══════
-function updateStats() {
-  let total = 0, success = 0, fail = 0, pending = 0;
-  const items = h("taskList").querySelectorAll(".task-item");
-  items.forEach(item => {
-    total++;
-    if (item.querySelector(".badge-done")) success++;
-    else if (item.querySelector(".badge-fail")) fail++;
-    else pending++;
-  });
-  h("statTotal").textContent = total;
-  h("statSuccess").textContent = success;
-  h("statFail").textContent = fail;
-  h("statPending").textContent = pending;
-}
-
-// ═══════ CAPTCHA ═══════
-let captchaCallback = null;
-
-function showCaptcha(info, callback) {
-  h("captchaInfo").textContent = info || "请输入验证码";
-  h("captchaInput").value = "";
-  h("captchaModal").classList.add("active");
-  h("captchaInput").focus();
-  captchaCallback = callback;
-}
-
-function closeCaptcha() {
-  h("captchaModal").classList.remove("active");
-  if (captchaCallback) captchaCallback(null);
-  captchaCallback = null;
-}
-
-function submitCaptcha() {
-  const code = h("captchaInput").value.trim();
-  if (!code) return alert("请输入验证码");
-  h("captchaModal").classList.remove("active");
-  if (captchaCallback) captchaCallback(code);
-  captchaCallback = null;
-}
-
-document.getElementById("captchaInput").addEventListener("keydown", e => {
-  if (e.key === "Enter") submitCaptcha();
-  if (e.key === "Escape") closeCaptcha();
-});
-
-// ═══════ UTILS ═══════
-function log(msg) {
-  const el = h("logArea");
-  const time = new Date().toLocaleTimeString();
-  el.textContent = `[${time}] ${msg}\n` + el.textContent;
-}
-
-// [新增] 文章列表 + 分发
-const CLOUD = "http://127.0.0.1:18080/geo_admin";
-
-async function loadArticles() {
-  if (!currentWs) return;
-  try {
-    const resp = await fetch(CLOUD + "/api/v1/rpa/articles?workspace_id=" + currentWs, {headers: {'X-Api-Key': API_KEY}});
-    const data = await resp.json();
-    renderArticles(data.articles || []);
-    log("文章加载完成: " + (data.articles || []).length + " 篇");
-  } catch (e) { log("❌ 文章加载失败: " + e.message); }
-}
-
-let distChannels = []; // 客户绑定的平台 + API渠道
-
-async function loadDistChannels() {
-  if (!currentWs) { distChannels = []; return; }
-  try {
-    // 客户已绑平台
-    const platResp = await fetch(CLOUD + "/api/v1/rpa/client-platforms?workspace_id=" + currentWs, {headers: {'X-Api-Key': API_KEY}});
-    const platData = await platResp.json();
-    const bound = (platData.platforms || []).map(function(p) {
-      return {key: p.key + '_publish', name: p.name, type: 'rpa', bound: true, hasCache: p.has_cache};
-    });
-
-    // API渠道（始终可用）
-    const chResp = await fetch(CLOUD + "/api/v1/rpa/distribution-channels", {headers: {'X-Api-Key': API_KEY}});
-    const chData = await chResp.json();
-    const apiChannels = (chData.channels || []).filter(function(c) { return c.type === 'api'; });
-
-    distChannels = bound.concat(apiChannels);
-    var bCount = bound.length;
-    h("distStatus").textContent = bCount + " 已绑 · 文章旁 [🚀一键分发]";
-    log("渠道: " + bCount + "绑定 + " + apiChannels.length + "API");
-  } catch(e) { distChannels = []; log("⚠️ " + e.message); }
-}
-
-var selectedArticleIds = [];
-
-function toggleSelectAll(cb) {
-  var checks = document.querySelectorAll('.article-check');
-  checks.forEach(function(c) { c.checked = cb.checked; });
-  updateSelectedCount();
-}
-
-function updateSelectedCount() {
-  var checks = document.querySelectorAll('.article-check:checked');
-  selectedArticleIds = Array.from(checks).map(function(c) { return parseInt(c.value); });
-  h("selectedCount").textContent = selectedArticleIds.length;
-  h("selectAll").checked = checks.length > 0 && checks.length === document.querySelectorAll('.article-check').length;
-}
-
-function renderArticles(articles) {
-  var el = h("articleList");
-  h("distStatus").textContent = articles.length + '篇';
-  if (!articles.length) {
-    el.innerHTML = '<div class="empty-state"><div class="icon">📭</div><p>该客户暂无已发布文章</p></div>';
-    return;
-  }
-  el.innerHTML = articles.map(function(a) {
-    var title = (a.title || '').substring(0, 60);
-    return '<div class="task-item">' +
-      '<input type="checkbox" class="article-check" value="' + a.id + '" onchange="updateSelectedCount()" style="width:15px;height:15px;cursor:pointer">' +
-      '<div style="flex:1;margin-left:8px"><div style="font-size:13px;font-weight:600">' + title + '</div><div style="font-size:11px;color:#64748b">' + (a.published_at || '') + '</div></div>' +
-      '</div>';
-  }).join("");
-  updateSelectedCount();
-}
-
-async function bulkDistribute() {
-  if (!currentWs) return alert("请先选择客户");
-  var platform = h("distPlatform").value;
-  if (!platform) return alert("请先选择目标平台");
-  if (selectedArticleIds.length === 0) return alert("请至少勾选一篇文章");
-
-  var platformNames = {toutiao:'今日头条',baijiahao:'百家号',xiaohongshu:'小红书',sohu:'搜狐号'};
-  if (!confirm('将 ' + selectedArticleIds.length + ' 篇文章批量分发到「' + (platformNames[platform]||platform) + '」？')) return;
-
-  log("🚀 批量分发: " + selectedArticleIds.length + "篇 → " + platform);
-
-  // Show progress
-  var progressEl = h("publishProgress");
-  progressEl.style.display = "block";
-  h("progressText").textContent = "正在提交分发任务...";
-  h("progressBar").style.width = "10%";
-
-  try {
-    var resp = await fetch(CLOUD + "/api/v1/rpa/bulk-distribute", {
-      method: "POST",
-      headers: {"Content-Type": "application/json", "X-Api-Key": API_KEY},
-      body: JSON.stringify({
-        workspace_id: parseInt(currentWs),
-        platform: platform,
-        article_ids: selectedArticleIds,
-      }),
-    });
-    var data = await resp.json();
-    if (data.ok) {
-      h("progressText").textContent = "✅ 分发任务已创建";
-      h("progressBar").style.width = "100%";
-      h("progressCount").textContent = data.total_jobs + " 个作业";
-      log("✅ " + data.message);
-      setTimeout(function() { progressEl.style.display = "none"; }, 3000);
-    } else {
-      h("progressText").textContent = "❌ " + (data.error || "失败");
-      h("progressBar").style.width = "0%";
-    }
-  } catch(e) {
-    h("progressText").textContent = "❌ " + e.message;
-    log("❌ 批量分发失败: " + e.message);
-  }
+  localStorage.setItem("rpa_current_ws", currentWs);
+  h("wsStats").textContent = "WS-" + currentWs;
+  loadAiAuthPlatforms();
+  loadAuthPlatforms();
+  loadCache();
+  log("✅ 已切换到 WS-" + currentWs);
 }
 
 function refreshAll() {
-  if (currentWs) { pullTasks(); loadCache(); loadArticles(); updateStats(); loadAuthPlatforms(); }
-  loadDistChannels();
-  log("🔄 已刷新");
+  if (currentWs) { loadAiAuthPlatforms(); loadAuthPlatforms(); loadCache(); }
 }
 
-// ═══════ 平台授权 ═══════
-const AUTH_PLATFORMS = [
-  { key: "toutiao", name: "今日头条", icon: "📰", url: "https://mp.toutiao.com/" },
-  { key: "baijiahao", name: "百家号", icon: "📝", url: "https://baijiahao.baidu.com/" },
-  { key: "wechat_mp", name: "微信公众号", icon: "💬", url: "https://mp.weixin.qq.com/" },
-  { key: "sohu", name: "搜狐号", icon: "🟢", url: "https://mp.sohu.com/" },
-  { key: "xiaohongshu", name: "小红书", icon: "📕", url: "https://creator.xiaohongshu.com/" },
-  { key: "wangyihao", name: "网易号", icon: "🌐", url: "https://mp.163.com/" },
-  { key: "bilibili", name: "B站", icon: "🎬", url: "https://member.bilibili.com/" },
-  { key: "qiehao", name: "企鹅号", icon: "🐧", url: "https://om.qq.com/" },
-  { key: "smzdm", name: "值得买", icon: "🛒", url: "https://www.smzdm.com/" },
-  { key: "douyin", name: "抖音", icon: "🎵", url: "https://creator.douyin.com/" },
-  { key: "kuaishou", name: "快手", icon: "⚡", url: "https://cp.kuaishou.com/" },
-];
-
-async function loadAuthPlatforms() {
-  if (!currentWs) return;
-  const el = h("authList");
-  el.innerHTML = '<div class="empty-state"><div class="icon">⏳</div><p>加载中...</p></div>';
-
-  let dbPlatforms = {}, cachePlatforms = {};
-  try {
-    const dbResp = await fetch(`${CLOUD}/api/v1/rpa/client-platforms?workspace_id=${currentWs}`, {headers: {'X-Api-Key': API_KEY}});
-    const dbData = await dbResp.json();
-    (dbData.platforms || []).forEach(p => { dbPlatforms[p.key] = p; });
-  } catch(e) { log("⚠️ 云端平台状态读取失败: "+e.message); }
-
-  try {
-    const cacheResp = await fetch(`${API}/api/cache/list?workspace_id=${currentWs}`);
-    const cacheData = await cacheResp.json();
-    (cacheData.caches || []).forEach(c => { cachePlatforms[c.platform_key] = c; });
-  } catch(e) { log("⚠️ RPA缓存读取失败: "+e.message); }
-
-  el.innerHTML = AUTH_PLATFORMS.map(p => {
-    const unified = dbPlatforms[p.key] || {};
-    const cache = cachePlatforms[p.key];
-    const dbOk = unified.db_status === 'active';
-    const cacheOk = (cache && cache.valid) || unified.cache_valid;
-    const status = unified.status || (dbOk && cacheOk ? 'ready' : (!dbOk && cacheOk ? 'need_bind' : 'unbound'));
-
-    let statusText, statusClass, btnText, btnAction;
-    if (status === 'ready') {
-      statusText = unified.status_label || '可分发'; statusClass = 'badge-valid';
-      btnText = '重新授权'; btnAction = `authLogin('${p.key}')`;
-    } else if (status === 'need_bind') {
-      statusText = unified.status_label || '待绑定'; statusClass = 'badge-fail';
-      btnText = '清缓存'; btnAction = `clearCache('${p.key}')`;
-    } else if (dbOk && !cacheOk) {
-      statusText = unified.status_label || '需登录'; statusClass = 'badge-expired';
-      btnText = '授权登录'; btnAction = `authLogin('${p.key}')`;
-    } else {
-      statusText = unified.status_label || '未绑定'; statusClass = 'badge-empty';
-      btnText = '授权登录'; btnAction = `authLogin('${p.key}')`;
-    }
-
-    return `<div class="cache-item">
-      <div style="flex:1">
-        <span style="font-size:14px;margin-right:6px">${p.icon}</span>
-        <span style="font-size:13px;font-weight:600">${p.name}</span>
-        <span class="badge ${statusClass}" style="margin-left:6px">${statusText}</span>
-        <span style="font-size:10px;color:#94a3b8;margin-left:4px">DB:${dbOk?'✓':'✗'} 缓存:${cacheOk?'✓':'✗'}</span>
-      </div>
-      <button class="btn btn-primary btn-sm" onclick="${btnAction}">${btnText}</button>
-    </div>`;
-  }).join("");
-  h("authStatus").textContent = `WS-${currentWs} | 统一四态校验`;
-
-  // 动态填充分发平台下拉（仅显示已就绪的平台）
-  const distSel = h("distPlatform");
-  distSel.innerHTML = '<option value="">选择平台...</option>';
-  let readyCount = 0;
-  AUTH_PLATFORMS.forEach(p => {
-    const u = dbPlatforms[p.key] || {};
-    if (u.publish_ready || u.status === 'ready') {
-      distSel.innerHTML += `<option value="${p.key}">${p.icon} ${p.name}</option>`;
-      readyCount++;
-    }
-  });
-  h("distStatus").textContent = readyCount + '平台就绪';
-}
-
-async function clearCache(platform) {
-  if (!confirm('清除 ' + platform + ' 的本地Cookie缓存？')) return;
-  try {
-    const resp = await fetch(API + '/api/cache/clear', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ workspace_id: currentWs, platform_key: platform }),
-    });
-    const data = await resp.json();
-    log(data.success ? 'OK ' + platform + ' 缓存已清除' : 'WARN ' + data.message);
-    loadAuthPlatforms();
-  } catch(e) { log('ERROR 清除失败: '+e.message); }
-}
-
-async function authLogin(platform) {
-  if (!currentWs) return alert("请先选择客户");
-  if (!confirm(`将打开浏览器窗口，请在浏览器中手动登录${AUTH_PLATFORMS.find(p=>p.key===platform)?.name||platform}。登录成功后点击确定。`)) return;
-  log(`🔑 正在打开 ${platform} 登录页...`);
-  h("authList").querySelectorAll("button").forEach(b => b.disabled = true);
-  try {
-    const resp = await fetch(`${API}/api/v1/auth-login`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Api-Key": API_KEY },
-      body: JSON.stringify({ platform, workspace_id: currentWs, headless: false }),
-    });
-    const data = await resp.json();
-    if (data.success) { log(`✅ ${data.message}`); alert(data.message); }
-    else { log(`⚠️ ${data.message}`); alert(data.message); }
-  } catch (e) { log(`❌ 授权失败: ${e.message}`); alert("授权失败: " + e.message); }
-  h("authList").querySelectorAll("button").forEach(b => b.disabled = false);
-  loadAuthPlatforms();
-}
-
-// ═══════ INIT ═══════
 (async () => {
-  // 恢复上次选的 workspace
-  const saved = localStorage.getItem("rpa_current_ws");
-  // 尝试从 URL 参数获取 workspace 列表
-  const urlWs = new URLSearchParams(location.search).get("workspaces");
-  if (urlWs) {
-    try {
-      wsList = JSON.parse(decodeURIComponent(urlWs));
-      localStorage.setItem("rpa_workspaces", JSON.stringify(wsList));
-    } catch {}
-  }
+  let saved = localStorage.getItem("rpa_current_ws");
+  if (!saved) saved = "7";
+  currentWs = saved;
   await loadWorkspaces();
-  if (saved) {
-    currentWs = saved;
-    h("wsSelect").value = saved;
-    h("wsStats").textContent = `WS-${saved}`;
-    refreshAll();
-  }
-  log("✅ 运营助手就绪");
+  h("wsSelect").value = saved;
+  h("wsStats").textContent = "WS-" + saved;
+  loadAiAuthPlatforms();
+  loadAuthPlatforms();
+  loadCache();
+  log("✅ 运营助手就绪 (WS-" + saved + ")");
 })();
 </script>
 </body>

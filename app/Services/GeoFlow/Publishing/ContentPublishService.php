@@ -247,7 +247,7 @@ class ContentPublishService
 
             ProcessContentPublishJob::dispatch((int) $result->id)
                 ->delay(now()->addSeconds($delaySeconds))
-                ->onQueue('distribution');
+                ->onQueue('content-publish');
         }
     }
 
