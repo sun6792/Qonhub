@@ -88,12 +88,112 @@ class ReviewAgentService
             || count($allOutputs['deploy']['failed_channels'] ?? []) > 0
             || ($allOutputs['deploy']['timed_out'] ?? false);
 
+        // ④ 情报分析：从 Scout 快照提取可操作洞察，指导下轮探测策略
+        $iteration = (int) ($execution->input_data['iteration'] ?? 0);
+        $scoutBrief = $this->generateScoutBrief($allOutputs, $visibilityData, $recommendations, $iteration);
+
         return [
             'summary' => $summary,
             'visibility_report' => $visibilityData,
             'recommendations' => $recommendations,
+            'scout_brief' => $scoutBrief,
             'needs_iteration' => $needsIteration,
             'reviewed_at' => now()->toIso8601String(),
+        ];
+    }
+
+    /**
+     * 情报分析：从全链路数据提取可操作洞察，指导下轮 Scout 探测策略。
+     * 非 LLM 调用，纯规则引擎 — 速度快、可解释、零成本。
+     */
+    private function generateScoutBrief(array $outputs, array $visibility, array $recommendations, int $iteration): array
+    {
+        $scout = $outputs['scout'] ?? [];
+        $snapshots = $scout['live_snapshots'] ?? [];
+        $deploy = $outputs['deploy'] ?? [];
+
+        // 分析每个平台的回答
+        $whatAiKnows = [];
+        $whatAiDoesntKnow = [];
+        $competitorMentions = [];
+        $discoveredKeywords = [];
+        $effectivePlatforms = [];
+
+        foreach ($snapshots as $s) {
+            $name = $s['name'] ?? $s['provider'] ?? 'unknown';
+            $preview = $s['preview'] ?? '';
+
+            if ($s['mentioned'] && $s['score'] > 0) {
+                $effectivePlatforms[] = $name;
+                if ($preview) {
+                    $whatAiKnows[] = "{$name}: " . mb_substr($preview, 0, 100);
+                }
+            } else {
+                $whatAiDoesntKnow[] = $name;
+            }
+
+            // 从快照提取行业关键词
+            if ($preview && mb_strlen($preview) > 50) {
+                preg_match_all('/[\x{4e00}-\x{9fa5}]{2,6}/u', $preview, $m);
+                $words = array_diff($m[0] ?? [], ['请问','是否','知道','这个','如果','什么','可以','一个','不过','但是','因为','所以','而且','然后','就是','或者','详细','描述','品牌','产品','回答','如实','以下','并不了','或产品','在我的知']);
+                $freq = array_count_values($words);
+                arsort($freq);
+                $top = array_slice(array_keys($freq), 0, 8);
+                $discoveredKeywords = array_unique(array_merge($discoveredKeywords, $top));
+            }
+        }
+
+        // 确定下一轮探测阶段
+        $mentionedCount = count($effectivePlatforms);
+        $totalCount = count($snapshots);
+        $mentionRate = $totalCount > 0 ? $mentionedCount / $totalCount : 0;
+
+        $phase = match(true) {
+            $iteration === 0 || $mentionRate < 0.3 => 'brand_awareness',    // 品牌认知
+            $mentionRate < 0.6 => 'industry_positioning',                   // 行业定位
+            $mentionRate < 0.8 => 'competitive_comparison',                 // 竞品对比
+            default => 'authority_building',                                // 权威建立
+        };
+
+        // 根据阶段生成建议问题角度
+        $suggestedAngles = match($phase) {
+            'brand_awareness' => [
+                '产业集群角度 — "XX地区制造业有哪些代表企业"',
+                '产品类型角度 — "国内做YY产品的企业有哪些"',
+            ],
+            'industry_positioning' => [
+                '技术优势角度 — "XX领域的技术领先企业有哪些"',
+                '应用场景角度 — "用于YY场景的设备供应商有哪些"',
+            ],
+            'competitive_comparison' => [
+                '对比角度 — "XX和YY在产品技术上有什么差异"',
+                '性价比角度 — "国内泵阀企业中哪些性价比较高"',
+            ],
+            'authority_building' => [
+                '创新角度 — "XX企业在流体控制领域有哪些创新"',
+                '案例角度 — "XX企业的泵阀产品在哪些重大项目中使用"',
+            ],
+        };
+
+        // 避免的问题（AI已确认不知道的角度）
+        $avoid = [];
+        if ($iteration >= 1 && $mentionRate < 0.5) {
+            $avoid[] = '直接问"你知道XX品牌吗"（前几轮效果差）';
+        }
+
+        return [
+            'phase' => $phase,
+            'iteration' => $iteration,
+            'what_ai_knows' => $whatAiKnows,
+            'what_ai_doesnt_know' => $whatAiDoesntKnow,
+            'competitor_mentions' => $competitorMentions,
+            'discovered_keywords' => array_values($discoveredKeywords),
+            'suggested_angles' => $suggestedAngles,
+            'avoid' => $avoid,
+            'effective_platforms' => $effectivePlatforms,
+            'mention_rate' => round($mentionRate * 100),
+            'published_channels' => $deploy['published_channels'] ?? [],
+            'failed_channels' => $deploy['failed_channels'] ?? [],
         ];
     }
 

@@ -93,18 +93,26 @@ class ScoutAgentService
      */
     public function executeLiveBrandScout(int $workspaceId, string $brandName, int $agentExecutionId = 0): array
     {
+        // 读取 Review 上一轮产出的情报（迭代时才有）
+        $scoutBrief = null;
+        if ($agentExecutionId > 0) {
+            $execution = \App\Models\AgentExecution::find($agentExecutionId);
+            $lastReview = $execution?->input_data['last_review'] ?? [];
+            $scoutBrief = $lastReview['scout_brief'] ?? null;
+        }
+
         $results = [];
 
         // ── RPA 真实浏览器搜索 ──
         $rpaAvailable = $this->isRpaAvailable();
         if ($rpaAvailable) {
-            $rpaPlatforms = ['yuanbao', 'baidu'];  // 仅无 API 的平台走 RPA，其余走 API 避免验证码
+            $rpaPlatforms = ['yuanbao', 'baidu'];
             $results = array_merge($results, $this->executeRpaScout($rpaPlatforms, $brandName, $workspaceId));
         }
 
         // ── API 对话 ──
         $apiPlatforms = $this->resolveAvailableScoutPlatforms();
-        $results = array_merge($results, $this->executeApiScout($apiPlatforms, $brandName, $workspaceId, $agentExecutionId));
+        $results = array_merge($results, $this->executeApiScout($apiPlatforms, $brandName, $workspaceId, $agentExecutionId, $scoutBrief));
 
         return $results;
     }
@@ -169,39 +177,42 @@ class ScoutAgentService
         } catch (\Throwable) {}
     }
 
-    /** API 对话搜索 */
-    private function executeApiScout(array $platforms, string $brandName, int $workspaceId, int $agentExecutionId): array
+    /** API 对话搜索 — 支持情报驱动的自适应问题策略 */
+    private function executeApiScout(array $platforms, string $brandName, int $workspaceId, int $agentExecutionId, ?array $scoutBrief = null): array
     {
         $results = [];
         $orchestrator = app(LlmOrchestratorService::class);
+
+        // 根据 Review 情报构建自适应问题（无情报时用默认问题）
+        $question = $this->buildAdaptiveQuestion($brandName, $scoutBrief);
 
         foreach ($platforms as $platform) {
             try {
                 $ws = $platform['web_search'] ?? false;
 
-                // DeepSeek 联网搜索：走 Anthropic 端点（非 OpenAI 兼容）
+                // DeepSeek 联网搜索：走 Anthropic 端点
                 if ($ws === 'deepseek_anthropic') {
                     $result = $this->deepseekAnthropicSearch($brandName, $workspaceId, $agentExecutionId);
                     $results[] = $result;
                     continue;
                 }
 
-                // 联网搜索参数（各平台格式不同）
+                // 联网搜索参数
                 $extraOptions = ['max_tokens' => 1024, 'temperature' => 0.3];
                 if ($ws === true || $ws === 'search') {
-                    $extraOptions['tools'] = [['type' => 'search']];           // 豆包
+                    $extraOptions['tools'] = [['type' => 'search']];
                 } elseif ($ws === 'enable_search') {
-                    $extraOptions['enable_search'] = true;                      // 通义千问
+                    $extraOptions['enable_search'] = true;
                 } elseif ($ws === 'tools') {
-                    $extraOptions['tools'] = [['type' => 'web_search', 'web_search' => ['enable' => true]]]; // 讯飞星火
+                    $extraOptions['tools'] = [['type' => 'web_search', 'web_search' => ['enable' => true]]];
                 }
 
                 $response = $orchestrator->chat(new ChatRequest(
                     providerCode: $platform['provider'],
                     modelId: $platform['model'],
                     messages: [
-                        ['role' => 'system', 'content' => '你是一个诚实的AI助手。请如实回答你是否知道以下品牌/产品，知道就详细描述，不知道就说不知道。'],
-                        ['role' => 'user', 'content' => "请问你是否知道「{$brandName}」这个品牌/产品？如果知道，请详细描述它的业务和特点。"],
+                        ['role' => 'system', 'content' => '你是一个诚实的AI助手。请如实回答用户的问题，知道就详细描述，不知道就说不知道。'],
+                        ['role' => 'user', 'content' => $question],
                     ],
                     options: $extraOptions,
                     workspaceId: $workspaceId,
@@ -227,6 +238,38 @@ class ScoutAgentService
             }
         }
         return $results;
+    }
+
+    /**
+     * 自适应问题构建：根据 Review 情报选择最优探测问题。
+     * 无情报时（首轮）用默认品牌认知问题；有情报时根据 phase 选择策略。
+     */
+    private function buildAdaptiveQuestion(string $brandName, ?array $scoutBrief): string
+    {
+        // 首轮：无情报，用默认问题
+        if ($scoutBrief === null) {
+            return "请问你是否知道「{$brandName}」这个品牌/产品？如果知道，请详细描述它的业务和特点。";
+        }
+
+        // 有情报：根据 Review 分析的阶段选择问题策略
+        $phase = $scoutBrief['phase'] ?? 'brand_awareness';
+        $iteration = $scoutBrief['iteration'] ?? 1;
+        $angles = $scoutBrief['suggested_angles'] ?? [];
+        $avoid = $scoutBrief['avoid'] ?? [];
+
+        // 如果上一轮"直接问品牌"效果差，避免重复
+        $askDirectly = ! in_array('直接问"你知道XX品牌吗"（前几轮效果差）', $avoid);
+
+        return match ($phase) {
+            'industry_positioning' => $askDirectly
+                ? "请问你是否知道「{$brandName}」这个品牌？它所在的行业有哪些代表性企业？请详细描述。"
+                : "请问在{$brandName}所在的行业中，有哪些做得比较好的企业？它们各自有什么特点？",
+            'competitive_comparison' => "请问在{$brandName}所处的细分市场里，主要有哪些竞争对手？{$brandName}和它们相比有什么优势或差异？",
+            'authority_building' => "请问{$brandName}在技术创新或产品质量方面有哪些突出表现？它和行业头部企业在技术上有什么差距或优势？",
+            default => $askDirectly
+                ? "请问你是否知道「{$brandName}」这个品牌/产品？如果知道，请详细描述它的业务和特点。"
+                : "请问在{$brandName}所在地区，这个行业的代表企业有哪些？请详细介绍。",
+        };
     }
 
     /** DeepSeek 联网搜索 — 走 Anthropic 端点（非 OpenAI 兼容） */
