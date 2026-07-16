@@ -177,24 +177,4 @@ services:
       - production
 
 volumes:
-  # ── v2.6.0 Phase 4: Playwright MCP 浏览器自动化服务 ──
-  playwright-mcp:
-    image: mcr.microsoft.com/playwright/mcp:latest
-    container_name: qonhub-playwright-mcp
-    restart: unless-stopped
-    ports:
-      - "${MCP_PLAYWRIGHT_PORT:-8931}:8931"
-    environment:
-      - PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
-    volumes:
-      - playwright-browsers:/ms-playwright
-      - rpa-engine/storage/states:/states:ro  # 只读挂载Cookie文件
-    healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:8931/health',r=>{process.exit(r.statusCode===200?0:1)})"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-    networks:
-      - qonhub
-
   geoflow-node-modules:
