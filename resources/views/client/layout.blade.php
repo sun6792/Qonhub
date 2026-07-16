@@ -155,35 +155,25 @@
             </div>
         </nav>
 
-        {{-- Tab Navigation — 五步引导式工作流 v2.6.0 --}}
+        {{-- 客户端导航 — 四步核心工作流 --}}
         <div style="background:rgba(13,14,26,0.85); backdrop-filter:blur(12px); border-bottom:1px solid rgba(165,180,252,0.08);">
         <div class="max-w-7xl mx-auto px-4 pt-4 pb-3">
             <div class="flex items-center space-x-1 flex-wrap gap-y-2">
-                {{-- 步骤引导线 --}}
-                <span class="text-[10px] text-ai-dim mr-1 whitespace-nowrap">GEO五步：</span>
                 <a href="{{ route('client.dashboard') }}"
                    class="nav-link px-3 py-2 rounded-xl text-xs font-medium {{ request()->routeIs('client.dashboard') ? 'active' : '' }}">
-                    ① 总览
+                    🏠 总览
                 </a>
-                <span class="text-ai-dim text-[10px]">→</span>
-                <a href="{{ route('client.platforms') }}"
-                   class="nav-link px-3 py-2 rounded-xl text-xs font-medium {{ request()->routeIs('client.platforms') ? 'active' : '' }}">
-                    ② 授权
+                <a href="{{ route('client.content-publish.certify') }}"
+                   class="nav-link px-3 py-2 rounded-xl text-xs font-medium {{ request()->routeIs('client.content-publish.certify*') ? 'active' : '' }}">
+                    🏢 入驻
                 </a>
-                <span class="text-ai-dim text-[10px]">→</span>
                 <a href="{{ route('client.content-publish.index') }}"
                    class="nav-link px-3 py-2 rounded-xl text-xs font-medium {{ request()->routeIs('client.content-publish.*') ? 'active' : '' }}">
-                    ③ 发布
+                    🚀 发布
                 </a>
-                <span class="text-ai-dim text-[10px]">→</span>
                 <a href="{{ route('client.ai-visibility') }}"
-                   class="nav-link px-3 py-2 rounded-xl text-xs font-medium {{ request()->routeIs('client.ai-visibility') ? 'active' : '' }}">
-                    ④ 检测
-                </a>
-                <span class="text-ai-dim text-[10px]">→</span>
-                <a href="{{ route('client.competitiveness') }}"
-                   class="nav-link px-3 py-2 rounded-xl text-xs font-medium {{ request()->routeIs('client.competitiveness*') ? 'active' : '' }}">
-                    ⑤ 报表
+                   class="nav-link px-3 py-2 rounded-xl text-xs font-medium {{ request()->routeIs('client.ai-visibility*') ? 'active' : '' }}">
+                    🔍 检测
                 </a>
                 <span class="flex-1"></span>
                 <a href="{{ route('client.articles') }}"
