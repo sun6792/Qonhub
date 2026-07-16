@@ -36,3 +36,5 @@ rpa-engine/logs/
 rpa-engine/screenshots/
 redis/data/
 storage/browser-profile/
+docs/interview-*
+docs/豆流AI-*.docx

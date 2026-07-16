@@ -175,6 +175,19 @@ document.querySelectorAll('.platform-check').forEach(cb => {
     });
 });
 
+// 自动勾选已绑定的平台（一键发布核心逻辑）
+document.querySelectorAll('.platform-check').forEach(cb => {
+    const label = cb.closest('label');
+    const hasCheck = label?.querySelector('.text-emerald-500'); // ✓ 已绑定标记
+    if (hasCheck) { cb.checked = true; }
+});
+// 更新二级checkbox状态
+document.querySelectorAll('.level2-check').forEach(cb => {
+    const group = cb.dataset.group;
+    const groupCbs = document.querySelectorAll(`.platform-check[data-group="${group}"]`);
+    const allChecked = groupCbs.length > 0 && Array.from(groupCbs).every(c => c.checked);
+    cb.checked = allChecked;
+});
 updateCounts();
 </script>
 @endpush

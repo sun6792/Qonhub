@@ -800,6 +800,11 @@ app.post("/api/v1/auth-login", auth, async (req, res) => {
     await browser.close();
 
     if (cookieCount > 2) {
+      // 同步到 Laravel 后端（更新 ClientPlatformAccount + ContentPublisherAccount + Anchor）
+      reportToCloud(`auth-${platform}-${workspace_id}`, {
+        success: true, platform, workspace_id,
+        message: `${info.name} Cookie 已保存 (${cookieCount}个)`,
+      });
       res.json({ success: true, message: `${info.name} Cookie 已保存 (${cookieCount}个)` });
     } else {
       res.json({ success: false, message: `Cookie 数量过少 (${cookieCount}个)，可能未完成登录，请重试` });

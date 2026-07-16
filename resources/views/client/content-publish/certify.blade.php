@@ -163,6 +163,11 @@
                         id="certify-submit-btn" disabled>
                     🚀 一键认证所选平台
                 </button>
+                <button type="button" onclick="oneClickAll()"
+                        class="rounded-lg px-6 py-2.5 text-sm font-medium text-white"
+                        style="background:linear-gradient(135deg,#6366f1,#8b5cf6)">
+                    ⚡ 一键入驻全部
+                </button>
             </div>
             <p class="text-xs text-ai-dim mt-2">
                 💡 认证后，企业的工商信息将自动入驻以上B2B平台，被主流大模型收录引用。
@@ -211,6 +216,13 @@ document.querySelectorAll('input[name="platform_keys[]"]').forEach(cb => {
 });
 function selectAllB2B() {
     document.querySelectorAll('input[name="platform_keys[]"]:not(:checked)').forEach(cb => cb.click());
+    document.getElementById('certify-submit-btn').disabled = false;
+}
+function oneClickAll() {
+    // 全选所有未认证平台
+    document.querySelectorAll('input[name="platform_keys[]"]:not(:checked)').forEach(cb => cb.checked = true);
+    // 立即提交
+    document.getElementById('certify-form').submit();
 }
 </script>
 @endsection
