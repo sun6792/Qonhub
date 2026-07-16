@@ -64,6 +64,61 @@
         </div>
     </div>
 
+    {{-- 📡 平台资产总览 — B2B认证 + 发布授权 + 最近任务 --}}
+    <div class="bento-card p-5">
+        <div class="flex items-center justify-between mb-3">
+            <h2 class="text-base font-semibold" style="color:#ddd6fe">📡 平台资产</h2>
+            <div class="flex gap-2">
+                <a href="{{ route('client.content-publish.certify') }}" class="text-xs px-3 py-1.5 rounded-lg" style="background:rgba(99,102,241,0.15);color:#a5b4fc">🏢 B2B入驻</a>
+                <a href="{{ route('client.content-publish.create') }}" class="text-xs px-3 py-1.5 rounded-lg" style="background:rgba(34,197,94,0.15);color:#4ade80">🚀 一键发布</a>
+            </div>
+        </div>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+            <div class="space-y-1">
+                <div class="text-xs text-ai-dim">B2B 认证</div>
+                <span class="font-medium" style="color:{{ ($platformAssets['b2b_certified']??0) > 0 ? '#4ade80' : '#fbbf24' }}">
+                    {{ $platformAssets['b2b_certified'] ?? 0 }}/{{ $platformAssets['b2b_total'] ?? 0 }}
+                </span>
+                <div class="text-xs text-ai-dim">已认证平台</div>
+            </div>
+            <div class="space-y-1">
+                <div class="text-xs text-ai-dim">发布授权</div>
+                <span class="font-medium" style="color:{{ ($platformAssets['publish_authorized']??0) > 0 ? '#4ade80' : '#9ca3af' }}">
+                    {{ $platformAssets['publish_authorized'] ?? 0 }}/{{ $platformAssets['publish_total'] ?? 0 }}
+                </span>
+                <div class="text-xs text-ai-dim">已授权平台</div>
+            </div>
+            <div class="space-y-1">
+                <div class="text-xs text-ai-dim">发布任务</div>
+                <span class="font-medium" style="color:#a5b4fc">{{ $publishStats['total_tasks'] ?? 0 }}</span>
+                <div class="text-xs text-ai-dim">累计任务</div>
+            </div>
+            <div class="space-y-1">
+                <div class="text-xs text-ai-dim">7日成功率</div>
+                @php $rate = ($publishStats['recent_total'] ?? 0) > 0 ? round(($publishStats['recent_success']??0)/($publishStats['recent_total']??1)*100) : 0; @endphp
+                <span class="font-medium" style="color:{{ $rate >= 80 ? '#4ade80' : ($rate >= 50 ? '#fbbf24' : '#f87171') }}">{{ $rate }}%</span>
+                <div class="text-xs text-ai-dim">{{ $publishStats['recent_success'] ?? 0 }}/{{ $publishStats['recent_total'] ?? 0 }} 成功</div>
+            </div>
+        </div>
+        {{-- 最近任务 --}}
+        @if(!empty($platformAssets['recent_publish_tasks']))
+        <div class="mt-4 border-t pt-3" style="border-color:rgba(255,255,255,0.06)">
+            <div class="text-xs text-ai-dim mb-2">最近发布任务</div>
+            <div class="space-y-1">
+                @foreach($platformAssets['recent_publish_tasks'] as $pt)
+                <a href="{{ route('client.content-publish.show', $pt['id']) }}" class="flex items-center justify-between text-xs hover:bg-indigo-50/5 rounded px-2 py-1">
+                    <span class="text-ai-primary truncate mr-2">{{ $pt['name'] }}</span>
+                    <span class="text-ai-dim mr-2">{{ $pt['created_at'] }}</span>
+                    <span class="px-1.5 py-0.5 rounded-full text-[10px] {{ $pt['status'] === 'completed' ? 'bg-emerald-500/10 text-emerald-400' : ($pt['status'] === 'failed' ? 'bg-red-500/10 text-red-400' : 'bg-blue-500/10 text-blue-400') }}">
+                        {{ $pt['status'] === 'completed' ? '✅' : ($pt['status'] === 'failed' ? '❌' : '⏳') }} {{ $pt['progress'] }}%
+                    </span>
+                </a>
+                @endforeach
+            </div>
+        </div>
+        @endif
+    </div>
+
     {{-- KPI Bento Grid — 统一 indigo 色系 --}}
     <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
         <div class="bento-card kpi-card p-5 text-center">

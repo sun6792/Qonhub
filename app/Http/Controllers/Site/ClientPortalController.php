@@ -99,6 +99,44 @@ class ClientPortalController extends Controller
                 ->count(),
         ];
 
+        // 平台资产聚合（B2B认证 + 发布授权 — 统一客户端视图）
+        $platformAssets = [
+            'b2b_certified' => 0,
+            'b2b_total' => 0,
+            'publish_authorized' => 0,
+            'publish_total' => 0,
+            'recent_publish_tasks' => [],
+        ];
+
+        // B2B 认证
+        if ($anchorData) {
+            $platformAssets['b2b_certified'] = $anchorData['certified_count'];
+            $platformAssets['b2b_total'] = $anchorData['total_count'];
+        }
+
+        // 发布平台授权
+        $publisherAccounts = \App\Models\ContentPublisherAccount::query()
+            ->where('workspace_id', (int) $workspace->id)
+            ->where('status', 'active')
+            ->get();
+        $platformAssets['publish_authorized'] = $publisherAccounts->count();
+        $platformAssets['publish_total'] = $connectionStats['total'] ?? 0;
+
+        // 最近发布任务
+        $platformAssets['recent_publish_tasks'] = \App\Models\ContentPublishTask::query()
+            ->where('workspace_id', (int) $workspace->id)
+            ->orderByDesc('created_at')
+            ->limit(5)
+            ->get()
+            ->map(fn($t) => [
+                'id' => $t->id,
+                'name' => $t->task_name,
+                'status' => $t->status,
+                'progress' => $t->total_jobs > 0 ? round($t->completed_jobs / $t->total_jobs * 100) : 0,
+                'created_at' => $t->created_at?->format('m-d H:i'),
+            ])
+            ->all();
+
         return view('client.dashboard', [
             'workspace' => $workspace,
             'articles' => $articles,
@@ -110,6 +148,7 @@ class ClientPortalController extends Controller
             'connectionStats' => $connectionStats,
             'anchorData' => $anchorData,
             'publishStats' => $publishStats,
+            'platformAssets' => $platformAssets,
         ]);
     }
 
