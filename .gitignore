@@ -39,3 +39,6 @@ storage/browser-profile/
 docs/interview-*
 docs/豆流AI-*.docx
 social-auto-upload/
+MultiPost-Extension/node_modules
+MultiPost-Extension/.plasmo
+MultiPost-Extension/build/chrome-mv3-prod/.plasmo

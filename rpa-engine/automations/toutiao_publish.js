@@ -29,69 +29,73 @@ class ToutiaoPublishScript extends BasePlatformScript {
         await this.wait(3000, 5000);
         await this.ss(page, "02_editor");
 
-        // Step 3: 填标题 — 多重策略确保输入生效
+        // Step 3: 填标题 — 原生setter绕过React状态管理
         this.log("Step 3: Title...");
         const safeTitle = (article.title || '空发科技').substring(0, 30);
-        let titleDone = false;
-        // 策略A: 找第一个可见的 input/textarea
-        for (const sel of ['input[placeholder*="标题"]', 'textarea[placeholder*="标题"]', 'input:not([type="hidden"]):not([readonly])']) {
-            try {
-                const el = page.locator(sel).first();
-                if (await el.isVisible({timeout: 2000}).catch(() => false)) {
-                    await el.click({ force: true });
-                    await this.wait(300, 500);
-                    await el.fill(''); // 清空
-                    await el.fill(safeTitle); // fill 直接设值+派发事件
-                    // 验证是否填入
-                    const val = await el.inputValue().catch(() => '');
-                    if (val === safeTitle) { titleDone = true; this.log('Title OK via fill'); break; }
-                }
-            } catch {}
-        }
-        // 策略B: fill不行就用 keyboard
-        if (!titleDone) {
-            this.log('Title: fill failed, trying keyboard...');
-            await page.keyboard.press('Control+a');
-            await page.keyboard.press('Backspace');
-            for (const ch of safeTitle) {
-                await page.keyboard.type(ch);
-                await page.waitForTimeout(30);
+        const titleDone = await page.evaluate((title) => {
+            const ta = document.querySelector('textarea[placeholder*="标题"]');
+            if (!ta) return false;
+            ta.focus();
+            // 使用原生setter绕过React的value劫持
+            const nativeSetter = Object.getOwnPropertyDescriptor(
+                window.HTMLTextAreaElement.prototype, 'value'
+            )?.set;
+            if (nativeSetter) {
+                nativeSetter.call(ta, title);
+            } else {
+                ta.value = title;
             }
+            ta.dispatchEvent(new Event('input', { bubbles: true }));
+            ta.dispatchEvent(new Event('change', { bubbles: true }));
+            ta.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
+            return true;
+        }, safeTitle);
+        this.log(`Title: ${titleDone ? 'OK' : 'fallback'}`);
+        if (!titleDone) {
+            for (const ch of safeTitle) { await page.keyboard.type(ch); await page.waitForTimeout(30); }
         }
         await this.ss(page, "03_title_done");
-        await this.wait(500, 1000);
+        await this.wait(1000, 1500);
 
-        // Step 4: 填正文 — 剪贴板粘贴（所有富文本编辑器都支持）
-        this.log("Step 4: Body via clipboard...");
-        const bodyContent = (article.body || article.content || "空发科技致力于AI软件开发。")
+        // Step 4: 填正文 — 原生setter绕过React + ClipboardEvent paste
+        this.log("Step 4: Body...");
+        const bodyContent = (article.body || article.content || '')
             .replace(/<br\s*\/?>/gi, '\n')
             .replace(/<\/p>/gi, '\n')
             .replace(/<[^>]+>/g, '')
             .replace(/\n{3,}/g, '\n\n')
             .trim();
-        // 写入剪贴板
-        await page.evaluate((text) => {
-            const ta = document.createElement('textarea');
-            ta.value = text;
-            document.body.appendChild(ta);
-            ta.select();
-            document.execCommand('copy');
-            document.body.removeChild(ta);
-        }, bodyContent);
-        // 找到并聚焦编辑器
-        const bodyEl = page.locator('[contenteditable="true"], .ProseMirror, .ql-editor, [data-slate-editor]').first();
-        if (await bodyEl.isVisible({timeout: 5000}).catch(() => false)) {
-            await bodyEl.click({ force: true });
-            await this.wait(500, 1000);
-            await bodyEl.click({ force: true }); // 双击确保焦点
-            await this.wait(300, 500);
-            // Ctrl+V 粘贴
-            await page.keyboard.press('Control+v');
-            await this.wait(1000, 2000);
-            this.log('Body pasted via Ctrl+V');
-        } else {
-            this.log('⚠️ Editor body not found, trying keyboard insertText');
-            await page.keyboard.insertText(bodyContent.substring(0, 500));
+        const bodyHtml = bodyContent ? bodyContent.split('\n\n').map(p => `<p>${p}</p>`).join('') : '<p></p>';
+        const bodyOk = await page.evaluate((html) => {
+            const editor = document.querySelector('div[contenteditable="true"]');
+            if (!editor) return false;
+            editor.focus();
+            // 先用原生innerHTML设置内容
+            const nativeSetter = Object.getOwnPropertyDescriptor(
+                window.HTMLElement.prototype, 'innerHTML'
+            )?.set;
+            if (nativeSetter) {
+                nativeSetter.call(editor, html);
+            } else {
+                editor.innerHTML = html;
+            }
+            // 再触发paste事件（React富文本编辑器监听此事件同步状态）
+            const dt = new DataTransfer();
+            dt.setData('text/html', html);
+            editor.dispatchEvent(new ClipboardEvent('paste', {
+                bubbles: true, cancelable: true, clipboardData: dt,
+            }));
+            editor.dispatchEvent(new Event('input', { bubbles: true }));
+            editor.dispatchEvent(new Event('change', { bubbles: true }));
+            return true;
+        }, bodyHtml);
+        this.log(`Body: ${bodyOk ? 'OK' : 'fallback'} (${bodyContent.length} chars)`);
+        if (!bodyOk) {
+            const bodyEl = page.locator('[contenteditable="true"]').first();
+            if (await bodyEl.isVisible({timeout: 3000}).catch(() => false)) {
+                await bodyEl.click({ force: true });
+                await page.keyboard.press('Control+v');
+            }
         }
         await this.ss(page, "04_body_done");
         await this.wait(1000, 2000);
@@ -114,35 +118,60 @@ class ToutiaoPublishScript extends BasePlatformScript {
             } catch {}
         }
 
-        // Step 6: 点击发布
+        // Step 6: 关闭遮挡 + 点击"预览并发布"
         this.log("Step 6: Publish...");
-        await this.simulateMouseHover(page);
-        await this.wait(1000, 2000);
+        // 多次按Esc确保关闭所有弹窗/抽屉
+        for (let i = 0; i < 3; i++) {
+            await page.keyboard.press('Escape');
+            await this.wait(300, 500);
+        }
         await this.ss(page, "06_before_publish");
 
-        // 优先找"预览并发布"，再找"发布"
-        const publishBtn = await this.findElement(page, [
-            'button:has-text("预览并发布")', 'button:has-text("发布")',
-            'button:has-text("确认发布")', '.publish-btn', '[class*="publish"]'
-        ]);
-        if (publishBtn) {
-            await publishBtn.scrollIntoViewIfNeeded();
-            await this.wait(500, 1000);
-            await publishBtn.click();
-            await this.wait(3000, 5000);
-        } else {
-            this.log("⚠️ 未找到发布按钮");
-        }
+        // 用 MultiPost 同样的选择器找发布按钮
+        const clicked = await page.evaluate(() => {
+            const buttons = document.querySelectorAll('button.publish-btn');
+            const btn = Array.from(buttons).find(b => b.textContent?.includes('预览并发布'));
+            if (btn) { btn.click(); return true; }
+            // fallback: 找任何包含"发布"的button
+            const allBtns = document.querySelectorAll('button');
+            const fallback = Array.from(allBtns).find(b => b.textContent?.includes('发布') && !b.textContent?.includes('定时'));
+            if (fallback) { fallback.click(); return true; }
+            return false;
+        });
+        this.log(`Publish button clicked: ${clicked}`);
+        await this.wait(3000, 5000);
 
-        // 确认发布弹出框
-        const confirmBtn = await this.findElement(page, [
-            'button:has-text("确认")', 'button:has-text("确定发布")',
-            'button:has-text("确认并发布")'
-        ], 5000);
-        if (confirmBtn) {
-            await confirmBtn.click();
-            await this.wait(3000, 5000);
-        }
+        // Step 6.5: 确认发布弹窗 — MultiPost 漏了这一步！
+        this.log("Step 6.5: Confirm dialog...");
+        const confirmed = await page.evaluate(() => {
+            const buttons = document.querySelectorAll('button');
+            const btn = Array.from(buttons).find(b =>
+                b.textContent?.includes('确认') || b.textContent?.includes('确定发布') || b.textContent?.includes('确认并发布')
+            );
+            if (btn && btn.offsetParent !== null) { btn.click(); return true; }
+            return false;
+        });
+        this.log(`Confirm clicked: ${confirmed}`);
+        await this.wait(3000, 5000);
+
+        // Step 6.6: 预览页最终发布按钮（页面可能跳转到预览URL）
+        this.log("Step 6.6: Final publish on preview...");
+        const finalClicked = await page.evaluate(() => {
+            // 预览页可能跳转到了 weitoutiao/publish 或类似预览URL
+            // 找任何可见的发布/确认按钮
+            const allBtns = document.querySelectorAll('button');
+            for (const btn of allBtns) {
+                if (btn.offsetParent === null) continue; // 不可见
+                const text = btn.textContent || '';
+                if (text.includes('发布') && !text.includes('定时') && !text.includes('预览')) {
+                    btn.click();
+                    return text.trim();
+                }
+            }
+            return false;
+        });
+        this.log(`Final publish: ${finalClicked || 'not found (may already be published)'}`);
+        await this.wait(3000, 5000);
         await this.ss(page, "07_published");
 
         // Step 7: 检测结果
