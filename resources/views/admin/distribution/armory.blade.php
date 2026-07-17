@@ -76,7 +76,9 @@
                     <option value="{{ $tpl['key'] }}">{{ $tpl['name'] }}</option>
                     @endforeach
                 </select>
-                <button onclick="batchPublish()" class="rounded bg-indigo-600 px-3 py-1.5 text-sm text-white font-medium hover:bg-indigo-700">🚀 批量改写并发布</button>
+                <input type="datetime-local" id="batchScheduleTime" class="rounded border-gray-300 text-sm" title="定时发布时间">
+                <button onclick="batchPublish()" class="rounded bg-indigo-600 px-3 py-1.5 text-sm text-white font-medium hover:bg-indigo-700">🚀 立即发布</button>
+                <button onclick="batchSchedulePublish()" class="rounded bg-amber-500 px-3 py-1.5 text-sm text-white font-medium hover:bg-amber-600">⏰ 定时发布</button>
                 <span id="batchStatus" class="text-xs text-gray-500"></span>
             </div>
 
@@ -449,6 +451,30 @@
             bar.classList.add('hidden');
         }
     };
+    window.batchSchedulePublish = async function() {
+        const checked = document.querySelectorAll('.article-checkbox:checked');
+        const platform = document.getElementById('batchPlatform').value;
+        const scheduledAt = document.getElementById('batchScheduleTime').value;
+        const status = document.getElementById('batchStatus');
+        const wsId = document.querySelector('select[name=\"workspace_id\"]')?.value || {{ $workspaceId }} || 0;
+        if (!platform) { alert('请选择发布平台'); return; }
+        if (!scheduledAt) { alert('请选择定时发布时间'); return; }
+        if (checked.length === 0) { alert('请勾选文章'); return; }
+        const ids = Array.from(checked).map(c => parseInt(c.value));
+        if (!confirm('将 ' + ids.length + ' 篇文章定时发布于 ' + scheduledAt + ' 到 ' + platform + '，确认？')) return;
+
+        try {
+            const resp = await fetch('{{ route('admin.distribution.armory.schedule-publish') }}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': CSRF },
+                body: JSON.stringify({ article_ids: ids, workspace_id: parseInt(wsId), platform: platform, scheduled_at: scheduledAt })
+            });
+            const data = await resp.json();
+            if (data.ok) { alert(data.message); status.textContent = '⏰ ' + data.message; }
+            else { alert('失败: ' + (data.error || '未知错误')); }
+        } catch(e) { alert('请求失败: ' + e.message); }
+    };
+
     window.batchPublish = async function() {
         const checked = document.querySelectorAll('.article-checkbox:checked');
         const platform = document.getElementById('batchPlatform').value;

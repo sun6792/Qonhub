@@ -418,6 +418,37 @@ class ContentArmoryController extends Controller
     }
 
     /**
+     * 定时发布 — 将文章加入 publishing_schedules 队列。
+     */
+    public function schedulePublish(Request $request): \Illuminate\Http\JsonResponse
+    {
+        $payload = $request->validate([
+            'article_ids' => ['required', 'array', 'min:1'],
+            'article_ids.*' => ['integer', 'exists:articles,id'],
+            'workspace_id' => ['required', 'integer', 'exists:workspaces,id'],
+            'platform' => ['required', 'string', 'in:toutiao_publish,baijiahao_publish,xiaohongshu_publish,sohu_publish'],
+            'scheduled_at' => ['required', 'date', 'after:now'],
+        ]);
+
+        $count = 0;
+        foreach ($payload['article_ids'] as $articleId) {
+            \App\Models\PublishingSchedule::create([
+                'workspace_id' => (int) $payload['workspace_id'],
+                'article_id' => (int) $articleId,
+                'platform' => $payload['platform'],
+                'scheduled_at' => $payload['scheduled_at'],
+                'status' => 'pending',
+            ]);
+            $count++;
+        }
+
+        return response()->json([
+            'ok' => true,
+            'message' => "{$count} 篇文章已加入定时发布队列，将于 {$payload['scheduled_at']} 自动发布到 {$payload['platform']}",
+        ]);
+    }
+
+    /**
      * @param  array{key:string, name:string, prompt:string, style:string}  $template
      */
     private function rewriteWithAi(Article $article, array $template, string $diagnosisFixPrompt = ''): string

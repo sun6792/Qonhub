@@ -178,6 +178,7 @@ Route::prefix($adminPrefix)->name('admin.')->middleware(['admin.locale'])->group
             Route::post('armory/rewrite', [\App\Http\Controllers\Admin\ContentArmoryController::class, 'rewrite'])->name('armory.rewrite');
             Route::post('armory/publish', [\App\Http\Controllers\Admin\ContentArmoryController::class, 'publishToChannels'])->name('armory.publish');
             Route::post('armory/publish-to-rpa', [\App\Http\Controllers\Admin\ContentArmoryController::class, 'publishToRpa'])->name('armory.publish-rpa');
+            Route::post('armory/schedule-publish', [\App\Http\Controllers\Admin\ContentArmoryController::class, 'schedulePublish'])->name('armory.schedule-publish');
             Route::get('armory/channels', [\App\Http\Controllers\Admin\ContentArmoryController::class, 'availableChannels'])->name('armory.channels');
         });
 

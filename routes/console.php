@@ -26,3 +26,8 @@ Schedule::command('geoflow:schedule-tasks')->everyMinute();
  * AI 品牌可见度检测：每日凌晨 2:00 自动对所有活跃 Workspace 执行一轮检测。
  */
 Schedule::command('geoflow:check-visibility')->dailyAt('02:00');
+
+/**
+ * 定时分发：每分钟扫描 publishing_schedules，到时间的文章自动发布。
+ */
+Schedule::command('publish:scheduled')->everyMinute();
