@@ -44,7 +44,7 @@ class Article extends Model
             'author_id' => 'integer',
             'task_id' => 'integer',
             'view_count' => 'integer',
-            'is_ai_generated' => 'integer',
+            'is_ai_generated' => 'boolean',
             'geo_score' => 'integer',
             'geo_score_data' => 'json',
             'is_hot' => 'boolean',

@@ -109,7 +109,7 @@
                         },
                         body: new FormData(form),
                     });
-                    const payload = await response.json().catch(() => ({}));
+                    const payload = await response.json().catch((e) => { console.error('Job delete parse error:', e); return {}; });
                     if (! response.ok || ! payload.ok) {
                         throw new Error(payload.message || 'delete failed');
                     }

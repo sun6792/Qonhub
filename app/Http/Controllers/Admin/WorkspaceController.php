@@ -168,7 +168,7 @@ class WorkspaceController extends Controller
         // v2.6.0: 智能体配置合并到 workspace.config JSON
         $config = $workspace->config ?? [];
         $config['auto_deploy_scout'] = (bool) ($payload['auto_deploy_scout'] ?? ($config['auto_deploy_scout'] ?? true));
-        $config['auto_optimize_iteration'] = (bool) ($payload['auto_optimize_iteration'] ?? ($config['auto_optimize_iteration'] ?? false));
+        $config['auto_optimize_iteration'] = (bool) ($payload['auto_optimize_iteration'] ?? ($config['auto_optimize_iteration'] ?? true));
         $payload['config'] = $config;
         unset($payload['auto_deploy_scout'], $payload['auto_optimize_iteration']);
 

@@ -78,6 +78,7 @@ Route::prefix($adminPrefix)->name('admin.')->middleware(['admin.auth', 'admin.lo
         Route::get('/task/{taskId}', [\App\Http\Controllers\Admin\ContentPublishController::class, 'taskDetail'])->name('task')->whereNumber('taskId');
         Route::post('/task/{taskId}/retry', [\App\Http\Controllers\Admin\ContentPublishController::class, 'retry'])->name('retry')->whereNumber('taskId');
         Route::post('/task/{taskId}/cancel', [\App\Http\Controllers\Admin\ContentPublishController::class, 'cancel'])->name('cancel')->whereNumber('taskId');
+        Route::post('/task/{taskId}/delete', [\App\Http\Controllers\Admin\ContentPublishController::class, 'destroy'])->name('delete')->whereNumber('taskId');
         Route::get('/task/{taskId}/progress', [\App\Http\Controllers\Admin\ContentPublishController::class, 'taskProgress'])->name('progress')->whereNumber('taskId');
     });
 });
@@ -100,6 +101,7 @@ Route::middleware('web')->prefix('client')->name('client.')->group(function (): 
         Route::get('/competitiveness', [ClientPortalController::class, 'competitiveness'])->name('competitiveness');
         Route::post('/content-request', [ClientPortalController::class, 'contentRequestStore'])->name('content-request.store');
         Route::post('/enterprise-profile/save', [ClientPortalController::class, 'enterpriseProfileSave'])->name('enterprise-profile.save');
+        Route::get('/agent-report/{executionId}', [ClientPortalController::class, 'agentReport'])->name('agent-report')->whereNumber('executionId');
         Route::post('/competitiveness/store', [ClientPortalController::class, 'competitorStore'])->name('competitiveness.store');
         Route::post('/competitiveness/delete/{id}', [ClientPortalController::class, 'competitorDelete'])->name('competitiveness.delete')->whereNumber('id');
         Route::get('/platforms', [ClientPortalController::class, 'platforms'])->name('platforms');

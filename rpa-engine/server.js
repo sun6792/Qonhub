@@ -99,14 +99,30 @@ if (!fs.existsSync(dashPath)) {
     logger.warn("dashboard.html not found — dashboard will 404");
 }
 
-// [新增] CORS for local dashboard
+// CORS — restrict to configured origins (default: only localhost for security)
+const CORS_ORIGIN = process.env.RPA_CORS_ORIGIN || "http://127.0.0.1:18080";
 app.use((req, res, next) => {
-    res.header("Access-Control-Allow-Origin", "*");
+    const requestOrigin = req.headers.origin || "";
+    const allowedOrigins = CORS_ORIGIN.split(",").map(s => s.trim());
+    const isAllowed = allowedOrigins.includes("*") || allowedOrigins.includes(requestOrigin) || !requestOrigin;
+    if (isAllowed) {
+        res.header("Access-Control-Allow-Origin", requestOrigin || allowedOrigins[0]);
+    }
     res.header("Access-Control-Allow-Headers", "Content-Type, X-Api-Key");
     res.header("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
     if (req.method === "OPTIONS") return res.sendStatus(200);
     next();
 });
+
+// Sanitize workspace_id — reject path traversal and dangerous characters
+function sanitizeWsId(raw) {
+    const id = String(raw || "default");
+    // Reject values that contain path traversal, null bytes, or shell metacharacters
+    if (/[.\/\\\x00]/.test(id) || id.includes("..") || id.includes("~") || id.length > 64) {
+        throw new Error("Invalid workspace_id: contains forbidden characters or exceeds max length");
+    }
+    return id;
+}
 
 // Auth middleware
 function auth(req, res, next) {
@@ -114,6 +130,11 @@ function auth(req, res, next) {
     if (key !== API_KEY) return res.status(401).json({ error: "unauthorized" });
     next();
 }
+
+// NOTE: Auth is applied per-route via inline `auth` middleware.
+// When adding new routes, always include `auth` unless the route is
+// intentionally public (health check, dashboard UI).
+// Public routes: GET /api/v1/health, GET /
 
 // ══════════════════════════════════════════════════════════
 //  原始接口（保留不变）
@@ -132,7 +153,7 @@ app.get("/api/v1/health", (req, res) => {
 app.post("/api/v1/register", auth, async (req, res) => {
     const taskId = randomUUID();
     const { platform, account, enterprise, options } = req.body;
-    const workspaceId = options?.workspace_id || enterprise?.workspace_id || "default";
+    const workspaceId = sanitizeWsId(options?.workspace_id || enterprise?.workspace_id || "default");
 
     if (!platform || !account || !enterprise) {
         return res.status(400).json({ error: "missing required fields: platform, account, enterprise" });
@@ -195,6 +216,7 @@ app.post("/api/v1/register", auth, async (req, res) => {
 app.post("/api/v1/publish", auth, async (req, res) => {
     const taskId = randomUUID();
     const { platform, account, content, options } = req.body;
+    const wsId = sanitizeWsId(options?.workspace_id || "default");
 
     if (!platform || !content) {
         return res.status(400).json({ error: "missing required fields: platform, content" });
@@ -210,15 +232,15 @@ app.post("/api/v1/publish", auth, async (req, res) => {
         if (!automation) {
             throw new Error(`No automation registered for platform: ${platform}`);
         }
-        // 发布脚本：优先 publish，fallback execute（baijiahao/toutiao/xiaohongshu 用 execute 处理发布）
-        const handler = automation.publish || automation.execute;
+        // 发布脚本：优先 publish → publishFlow → execute
+        const handler = automation.publish || automation.publishFlow || automation.execute;
         const result = await handler({
             taskId, account,
-            enterprise: { workspace_id: options?.workspace_id || "default" },
+            enterprise: { workspace_id: wsId },
             options: {
                 headless: HEADLESS,
                 screenshotDir: SCREENSHOT_DIR,
-                workspace_id: options?.workspace_id || "default",
+                workspace_id: wsId,
                 timeout: options?.timeout_seconds || 300,
                 article: content, // 发布脚本从 options.article 读内容
                 ...options,
@@ -310,9 +332,9 @@ app.post("/api/v1/scout", auth, async (req, res) => {
     const cfg = SCOUT_PLATFORMS[platform];
     if (!cfg) return res.status(400).json({ error: "unsupported platform: " + platform });
 
-    const wsId = workspace_id || "default";
+    const wsId = sanitizeWsId(workspace_id || "default");
     const taskId = `scout_${platform}_${Date.now()}`;
-    const stateDir = path.join(STORAGE_DIR, String(wsId));
+    const stateDir = path.join(STORAGE_DIR, wsId);
     if (!fs.existsSync(stateDir)) fs.mkdirSync(stateDir, { recursive: true });
     const stateFile = path.join(stateDir, `${platform}.json`);
 
@@ -494,8 +516,8 @@ app.use("/screenshots", auth, express.static(SCREENSHOT_DIR));
  * GET /api/cache/list?workspace_id=7
  * 列出某客户所有平台缓存状态 [新增]
  */
-app.get("/api/cache/list", (req, res) => {
-    const wsId = req.query.workspace_id || "default";
+app.get("/api/cache/list", auth, (req, res) => {
+    const wsId = sanitizeWsId(req.query.workspace_id || "default");
     const wsDir = path.join(STORAGE_DIR, String(wsId));
     const caches = [];
 
@@ -554,13 +576,14 @@ app.get("/api/cache/list", (req, res) => {
  * Body: { workspace_id, platform_key }
  * 清除指定客户+平台的会话缓存 [新增]
  */
-app.post("/api/cache/clear", (req, res) => {
+app.post("/api/cache/clear", auth, (req, res) => {
     const { workspace_id, platform_key } = req.body;
     if (!workspace_id || !platform_key) {
         return res.status(400).json({ error: "missing workspace_id or platform_key" });
     }
 
-    const stateFile = path.join(STORAGE_DIR, String(workspace_id), `${platform_key}.json`);
+    const wsId = sanitizeWsId(workspace_id);
+    const stateFile = path.join(STORAGE_DIR, wsId, `${platform_key}.json`);
     if (fs.existsSync(stateFile)) {
         fs.unlinkSync(stateFile);
         logger.info(`Cache cleared: ws=${workspace_id} platform=${platform_key}`);
@@ -577,8 +600,8 @@ app.post("/api/cache/clear", (req, res) => {
  * GET /api/tasks/pull?workspace_id=7
  * 从云端拉取待执行任务 [新增]
  */
-app.get("/api/tasks/pull", async (req, res) => {
-    const wsId = req.query.workspace_id || "default";
+app.get("/api/tasks/pull", auth, async (req, res) => {
+    const wsId = sanitizeWsId(req.query.workspace_id || "default");
     try {
         // 尝试调用 Laravel 后端接口拉取任务
         const resp = await fetch(`${GEOFLOW_API_URL}/api/v1/rpa/pending-tasks?workspace_id=${wsId}`, {
@@ -608,7 +631,7 @@ app.get("/api/tasks/pull", async (req, res) => {
  * Body: { task_id, success, shop_url, account_id, error, workspace_id, platform }
  * 上报任务执行结果到云端 [新增]
  */
-app.post("/api/tasks/report", async (req, res) => {
+app.post("/api/tasks/report", auth, async (req, res) => {
     const payload = req.body;
     try {
         const resp = await fetch(`${GEOFLOW_API_URL}/api/v1/rpa/report`, {
@@ -635,7 +658,7 @@ app.post("/api/tasks/report", async (req, res) => {
 // [新增] 验证码回调（用于运行中的 RPA 流程）
 const captchaStore = new Map(); // taskId -> { resolve, reject }
 
-app.post("/api/captcha/submit", (req, res) => {
+app.post("/api/captcha/submit", auth, (req, res) => {
     const { task_id, code } = req.body;
     if (!task_id || !code) {
         return res.status(400).json({ error: "missing task_id or code" });
@@ -652,7 +675,7 @@ app.post("/api/captcha/submit", (req, res) => {
 });
 
 // [新增] 等待验证码（RPA 脚本调用此函数挂起）
-app.post("/api/captcha/await", (req, res) => {
+app.post("/api/captcha/await", auth, (req, res) => {
     const { task_id } = req.body;
     const timeout = req.body.timeout || 120000;
     const codePromise = new Promise((resolve, reject) => {
@@ -675,7 +698,10 @@ app.get("/", (req, res) => {
     res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
     res.setHeader("Pragma", "no-cache");
     if (fs.existsSync(dashPath)) {
-        return res.sendFile(dashPath);
+        const html = fs.readFileSync(dashPath, "utf-8")
+            .replace("__RPA_API_KEY__", API_KEY);
+        res.setHeader("Content-Type", "text/html; charset=utf-8");
+        return res.send(html);
     }
     res.status(404).send("<h1>dashboard.html not found</h1><p>Place dashboard.html in the rpa-engine directory.</p>");
 });
@@ -694,7 +720,7 @@ async function reportToCloud(taskId, payload) {
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         logger.info(`Reported to cloud: taskId=${taskId}`);
     } catch (err) {
-        logger.warn(`Cloud report failed (will retry): ${err.message}`);
+        logger.warn(`Cloud report failed (saved locally for manual retry): ${err.message}`);
         const reportDir = path.join(__dirname, "storage", "reports");
         if (!fs.existsSync(reportDir)) fs.mkdirSync(reportDir, { recursive: true });
         fs.writeFileSync(
@@ -746,22 +772,32 @@ app.post("/api/v1/auth-login", auth, async (req, res) => {
 
   logger.info(`Auth-login: ${info.name} for ws=${workspace_id}`);
 
+  let browser;
   try {
-    // 加载已有登录态（如果存在）
-    const stateDir = path.join(STORAGE_DIR, String(workspace_id));
+    const wsId = sanitizeWsId(workspace_id);
+    const stateDir = path.join(STORAGE_DIR, wsId);
     if (!fs.existsSync(stateDir)) fs.mkdirSync(stateDir, { recursive: true });
     const stateFile = path.join(stateDir, `${platform}.json`);
+
     const contextOpts = {
       viewport: { width: 1366, height: 768 },
       locale: "zh-CN",
       timezoneId: "Asia/Shanghai",
     };
+
+    // 加载已有登录态 — 取预登录 cookie 快照用于后续比对
+    let preLoginCookieKeys = new Set();
     if (fs.existsSync(stateFile)) {
-      try { contextOpts.storageState = JSON.parse(fs.readFileSync(stateFile, "utf-8")); } catch {}
+      try {
+        const prev = JSON.parse(fs.readFileSync(stateFile, "utf-8"));
+        (prev.cookies || []).forEach(c => preLoginCookieKeys.add(c.name));
+        contextOpts.storageState = prev;
+        logger.info(`[${info.name}] Loaded existing state (${preLoginCookieKeys.size} cookie names)`);
+      } catch { /* corrupted state, ignore */ }
     }
 
     // 启动浏览器（反崩溃参数）
-    const browser = await chromium.launch({
+    browser = await chromium.launch({
       channel: "msedge",
       headless: headless !== undefined ? headless : false,
       args: [
@@ -776,38 +812,73 @@ app.post("/api/v1/auth-login", auth, async (req, res) => {
     const page = await context.newPage();
     await page.goto(info.url, { waitUntil: "domcontentloaded", timeout: 20000 });
 
-    // 所有平台统一流程：打开浏览器 → 等用户关闭窗口 → 保存 Cookie → 验证数量
-    logger.info(`[${info.name}] Browser opened — login and close window when done`);
-    await new Promise((resolve) => {
+    // ── 核心改进: 打开浏览器 → 等用户登录后关闭窗口 → 比对 Cookie 变化量判定 ──
+    logger.info(`[${info.name}] Browser opened — 请在浏览器中完成登录，然后关闭浏览器窗口`);
+    const waitResult = await new Promise((resolve) => {
       let checks = 0;
       const timer = setInterval(() => {
         checks++;
         try {
-          if (page.isClosed() || !browser.isConnected()) { clearInterval(timer); resolve(); return; }
-          if (checks >= 150) { clearInterval(timer); resolve(); } // 5 分钟超时
-        } catch (e) { clearInterval(timer); resolve(); }
+          if (page.isClosed() || !browser.isConnected()) {
+            clearInterval(timer);
+            resolve({ reason: "browser_closed" });
+            return;
+          }
+          if (checks >= 150) { // 5 分钟超时
+            clearInterval(timer);
+            resolve({ reason: "timeout" });
+          }
+        } catch (e) { clearInterval(timer); resolve({ reason: "error", error: e.message }); }
       }, 2000);
     });
+    logger.info(`[${info.name}] Wait ended: ${waitResult.reason}`);
 
-    let cookieCount = 0;
+    // 保存登录后 Cookie
+    let totalCookieCount = 0;
+    let newCookieCount = 0;
     try {
       const state = await context.storageState();
-      cookieCount = state.cookies?.length || 0;
+      totalCookieCount = state.cookies?.length || 0;
+      // 计算本次新增的 cookie（name 不在预登录快照中）
+      const newCookies = (state.cookies || []).filter(c => !preLoginCookieKeys.has(c.name));
+      newCookieCount = newCookies.length;
+      // 始终保存最新状态（即使没有新增 cookie，也更新现有 cookie 的过期时间）
       fs.writeFileSync(stateFile, JSON.stringify(state));
-      logger.info(`[${info.name}] Saved ${cookieCount} cookies to ${stateFile}`);
+      logger.info(`[${info.name}] Saved: total=${totalCookieCount} cookies, new=${newCookieCount}, reason=${waitResult.reason}`);
     } catch (e) { logger.warn(`[${info.name}] Save failed: ${e.message}`); }
 
-    await browser.close();
+    try { await browser.close(); } catch {}
 
-    if (cookieCount > 2) {
-      // 同步到 Laravel 后端（更新 ClientPlatformAccount + ContentPublisherAccount + Anchor）
+    // 判定：至少 1 个新 cookie → 登录成功
+    if (newCookieCount > 0) {
       reportToCloud(`auth-${platform}-${workspace_id}`, {
         success: true, platform, workspace_id,
-        message: `${info.name} Cookie 已保存 (${cookieCount}个)`,
+        message: `${info.name} 授权成功 (新增${newCookieCount}个Cookie，共${totalCookieCount}个)`,
       });
-      res.json({ success: true, message: `${info.name} Cookie 已保存 (${cookieCount}个)` });
+      res.json({
+        success: true,
+        message: `${info.name} 授权成功！新增 ${newCookieCount} 个认证Cookie`,
+        total_cookies: totalCookieCount,
+        new_cookies: newCookieCount,
+        wait_reason: waitResult.reason,
+      });
+    } else if (totalCookieCount > 0) {
+      // Cookie 未增加（可能已登录或登录未生效），保留旧状态
+      res.json({
+        success: false,
+        retryable: true,
+        message: `${info.name} 未检测到新Cookie（共${totalCookieCount}个）。请确认已在浏览器中完成登录后再关闭窗口。`,
+        total_cookies: totalCookieCount,
+        new_cookies: 0,
+        wait_reason: waitResult.reason,
+      });
     } else {
-      res.json({ success: false, message: `Cookie 数量过少 (${cookieCount}个)，可能未完成登录，请重试` });
+      res.json({
+        success: false,
+        retryable: true,
+        message: `${info.name} 未获取到任何Cookie。请打开浏览器窗口完成登录后关闭。`,
+        wait_reason: waitResult.reason,
+      });
     }
   } catch (err) {
     logger.error(`Auth-login error: ${err.message}`);
@@ -821,8 +892,9 @@ app.post("/api/v1/auth-login", auth, async (req, res) => {
 // ══════════════════════════════════════════════════════════
 
 await loadAutomations();
-app.listen(PORT, "0.0.0.0", () => {
-    logger.info(`Qonhub RPA Engine v2.0 started on port ${PORT} (headless=${HEADLESS})`);
+const BIND_ADDR = process.env.RPA_BIND_ADDR || "127.0.0.1";
+app.listen(PORT, BIND_ADDR, () => {
+    logger.info(`Qonhub RPA Engine v2.0 started on ${BIND_ADDR}:${PORT} (headless=${HEADLESS})`);
     logger.info(`Dashboard: http://127.0.0.1:${PORT}`);
     logger.info(`Cache dir: ${STORAGE_DIR}`);
     logger.info(`Loaded automations: ${Object.keys(automations).join(", ") || "none"}`);

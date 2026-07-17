@@ -38,7 +38,7 @@ class RecordSiteViewLog
                 'route_name' => $request->route()?->getName(),
                 'status_code' => $response->getStatusCode(),
                 'ip_address' => (string) ($request->ip() ?? ''),
-                'user_agent' => $request->userAgent(),
+                'user_agent' => $this->limit($request->userAgent(), 1024),
                 'referer' => $this->limit($request->headers->get('referer'), 2048),
                 'created_at' => now(),
             ]);

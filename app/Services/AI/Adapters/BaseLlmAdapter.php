@@ -36,13 +36,28 @@ abstract class BaseLlmAdapter
 
     /**
      * 将内部统一参数转为厂商特定参数。
+     *
+     * 子类应覆盖此方法以适配各厂商参数差异，基础实现安全透传所有已知扩展参数。
      */
     protected function normalizeOptions(array $options): array
     {
-        return [
-            'max_tokens' => $options['max_tokens'] ?? 4096,
+        $safe = [
+            'max_tokens'  => $options['max_tokens'] ?? 4096,
             'temperature' => $options['temperature'] ?? 0.7,
         ];
+
+        // 透传扩展参数（联网搜索 / Function Calling / 标准 OpenAI 参数）
+        foreach ([
+            'tools', 'tool_choice', 'enable_search', 'web_search',
+            'top_p', 'frequency_penalty', 'presence_penalty',
+            'stream', 'stop', 'response_format',
+        ] as $key) {
+            if (array_key_exists($key, $options)) {
+                $safe[$key] = $options[$key];
+            }
+        }
+
+        return $safe;
     }
 
     /**

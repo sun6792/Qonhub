@@ -432,7 +432,7 @@
                     },
                     body: JSON.stringify({}),
                 });
-                const data = await response.json().catch(() => ({}));
+                const data = await response.json().catch((e) => { console.error('AI model test parse error:', e); return {}; });
                 const message = data.message || (response.ok ? AI_MODELS_I18N.testSuccessPrefix : AI_MODELS_I18N.testFailedPrefix);
                 const duration = data.meta && data.meta.duration_ms ? ` · ${data.meta.duration_ms}ms` : '';
                 setModelTestResult(

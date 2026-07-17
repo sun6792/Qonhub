@@ -69,7 +69,8 @@ class AgentExecution extends Model
         self::STATE_PLANNING => [self::STATE_WRITING, self::STATE_FAILED],
         self::STATE_WRITING => [self::STATE_DEPLOYING, self::STATE_WRITING, self::STATE_FAILED],
         self::STATE_DEPLOYING => [self::STATE_REVIEWING, self::STATE_DEPLOYING, self::STATE_FAILED],
-        self::STATE_REVIEWING => [self::STATE_COMPLETED, self::STATE_FAILED, self::STATE_PLANNING],
+        self::STATE_REVIEWING => [self::STATE_COMPLETED, self::STATE_FAILED, self::STATE_PLANNING, self::STATE_SCOUTING],
+        self::STATE_FAILED => [self::STATE_IDLE, self::STATE_SCOUTING, self::STATE_PLANNING, self::STATE_WRITING, self::STATE_DEPLOYING, self::STATE_REVIEWING],
     ];
 
     public function transitionTo(string $newState): void

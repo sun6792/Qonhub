@@ -101,6 +101,108 @@ class AgentController extends Controller
     }
 
     /**
+     * 根据工作空间自动推荐关键词（含品牌词、知识库蒸馏词、关键词库词）。
+     */
+    public function suggestKeywords(int $workspaceId): \Illuminate\Http\JsonResponse
+    {
+        $this->authorizeWorkspaceAccess($workspaceId);
+        $workspace = Workspace::query()->findOrFail($workspaceId);
+
+        $keywords = [];
+        $sources = [];
+
+        // ① 工作空间 brand_keywords
+        $brandKeywords = $workspace->config['brand_keywords'] ?? [];
+        if (is_string($brandKeywords)) {
+            $brandKeywords = array_filter(array_map('trim', explode(',', $brandKeywords)));
+        }
+        if (! empty($brandKeywords)) {
+            $keywords = array_merge($keywords, $brandKeywords);
+            $sources[] = '品牌关键词';
+        }
+
+        // ② 客户公司名（作为默认品牌词）
+        $companyName = $workspace->client_company_name ?: $workspace->name;
+        if ($companyName && ! in_array($companyName, $keywords)) {
+            array_unshift($keywords, $companyName);
+            $sources[] = '企业名称';
+        }
+
+        // ③ 企业档案中的业务关键词
+        $profile = \App\Models\EnterpriseProfile::query()->where('workspace_id', $workspaceId)->first();
+        if ($profile) {
+            $profileText = implode(' ', array_filter([
+                $profile->industry,
+                is_array($profile->products_services) ? implode(' ', $profile->products_services) : (string) $profile->products_services,
+                $profile->business_scope,
+            ]));
+            if ($profileText !== ' ') {
+                preg_match_all('/[\x{4e00}-\x{9fa5}]{2,6}/u', $profileText, $pm);
+                $profileKeywords = array_slice(array_unique($pm[0] ?? []), 0, 10);
+                if (! empty($profileKeywords)) {
+                    $keywords = array_merge($keywords, $profileKeywords);
+                    $sources[] = '企业档案';
+                }
+            }
+        }
+
+        // ④ 知识库蒸馏关键词
+        $kbIds = \App\Models\WorkspaceAssignment::query()
+            ->where('workspace_id', $workspaceId)
+            ->where('assignable_type', \App\Models\KnowledgeBase::class)
+            ->pluck('assignable_id')
+            ->all();
+
+        if (! empty($kbIds)) {
+            $kb = \App\Models\KnowledgeBase::query()->whereIn('id', $kbIds)->first();
+            if ($kb) {
+                try {
+                    $extractor = app(\App\Services\GeoFlow\KnowledgeKeyExtractor::class);
+                    $extracted = $extractor->extract($kb);
+                    $kbKeywords = [];
+                    foreach ($extracted['facts'] ?? [] as $fact) {
+                        // 从企业事实提取 2-4 字关键词
+                        preg_match_all('/[\x{4e00}-\x{9fa5}]{2,6}/u', $fact, $m);
+                        $kbKeywords = array_merge($kbKeywords, $m[0] ?? []);
+                    }
+                    $kbKeywords = array_slice(array_unique($kbKeywords), 0, 15);
+                    if (! empty($kbKeywords)) {
+                        $keywords = array_merge($keywords, $kbKeywords);
+                        $sources[] = '知识库蒸馏';
+                    }
+                } catch (\Throwable) { /* 提取失败不阻塞 */ }
+            }
+        }
+
+        // ④ 关键词库
+        $kwLibIds = \App\Models\WorkspaceAssignment::query()
+            ->where('workspace_id', $workspaceId)
+            ->where('assignable_type', \App\Models\KeywordLibrary::class)
+            ->pluck('assignable_id')
+            ->all();
+
+        if (! empty($kwLibIds)) {
+            $kwEntries = \App\Models\Keyword::query()
+                ->whereIn('library_id', $kwLibIds)
+                ->pluck('keyword')
+                ->all();
+            if (! empty($kwEntries)) {
+                $keywords = array_merge($keywords, $kwEntries);
+                $sources[] = '关键词库';
+            }
+        }
+
+        $keywords = array_slice(array_unique($keywords), 0, 30);
+
+        return response()->json([
+            'ok' => true,
+            'keywords' => array_values($keywords),
+            'brand_name' => $companyName,
+            'sources' => $sources,
+        ]);
+    }
+
+    /**
      * 查看执行详情。
      */
     public function show(int $executionId): View

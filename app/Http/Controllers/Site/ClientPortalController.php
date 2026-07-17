@@ -137,6 +137,26 @@ class ClientPortalController extends Controller
             ])
             ->all();
 
+        // v2.8.0: 最近的智能体执行记录
+        $recentExecutions = \App\Models\AgentExecution::query()
+            ->where('workspace_id', (int) $workspace->id)
+            ->orderByDesc('id')
+            ->limit(5)
+            ->get()
+            ->map(fn ($e) => [
+                'id' => $e->id,
+                'state' => $e->current_state,
+                'geo_score' => $e->content_output['geo_score'] ?? 0,
+                'geo_grade' => $e->content_output['geo_grade'] ?? '-',
+                'state_label' => [
+                    'idle' => '等待中', 'scouting' => '侦察中', 'planning' => '策略规划',
+                    'writing' => '内容生产', 'deploying' => '分发执行', 'reviewing' => '复盘分析',
+                    'completed' => '已完成', 'failed' => '失败',
+                ][$e->current_state] ?? $e->current_state,
+                'started_at' => $e->started_at?->format('m-d H:i'),
+            ])
+            ->all();
+
         return view('client.dashboard', [
             'workspace' => $workspace,
             'articles' => $articles,
@@ -149,6 +169,7 @@ class ClientPortalController extends Controller
             'anchorData' => $anchorData,
             'publishStats' => $publishStats,
             'platformAssets' => $platformAssets,
+            'recentExecutions' => $recentExecutions,
         ]);
     }
 
@@ -466,5 +487,59 @@ class ClientPortalController extends Controller
         }
 
         return redirect()->route('client.platforms')->with('message', '已解绑，锚点+缓存已同步清除');
+    }
+
+    /**
+     * 客户智能体报告页 — 展示五智能体执行结果和 AI 收录状态。
+     */
+    public function agentReport(int $executionId): View|RedirectResponse
+    {
+        /** @var ClientUser|null $client */
+        $client = Auth::guard('client')->user();
+        if (! $client) {
+            return redirect()->route('client.login');
+        }
+
+        $workspace = Workspace::query()->whereKey((int) $client->workspace_id)->first();
+        if (! $workspace || ! $workspace->isActive()) {
+            Auth::guard('client')->logout();
+            return redirect()->route('client.login')->withErrors('您的账号已被暂停，请联系管理员');
+        }
+
+        $execution = \App\Models\AgentExecution::query()
+            ->where('workspace_id', (int) $workspace->id)
+            ->findOrFail($executionId);
+
+        // 识别 AI 平台收录状态（红/黄/绿）
+        $snapshots = $execution->scout_output['live_snapshots'] ?? [];
+        $platformStatuses = [];
+        foreach ($snapshots as $s) {
+            $name = $s['name'] ?? $s['provider'] ?? '未知';
+            $score = $s['score'] ?? 0;
+            $platformStatuses[] = [
+                'name' => $name,
+                'mentioned' => $s['mentioned'] ?? false,
+                'score' => $score,
+                'status' => $score >= 70 ? 'green' : ($score >= 30 ? 'yellow' : 'red'),
+                'preview' => mb_substr($s['preview'] ?? '', 0, 120),
+            ];
+        }
+
+        // Review 推荐
+        $reviewOutput = $execution->review_output ?? [];
+        $recommendations = $reviewOutput['recommendations'] ?? [];
+        $geoScore = $execution->content_output['geo_score'] ?? 0;
+        $geoGrade = $execution->content_output['geo_grade'] ?? 'N/A';
+
+        return view('client.agent-report', [
+            'workspace' => $workspace,
+            'execution' => $execution,
+            'platformStatuses' => $platformStatuses,
+            'recommendations' => $recommendations,
+            'geoScore' => $geoScore,
+            'geoGrade' => $geoGrade,
+            'summary' => $reviewOutput['summary'] ?? [],
+            'iteration' => (int) ($execution->input_data['iteration'] ?? 0),
+        ]);
     }
 }

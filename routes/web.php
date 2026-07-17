@@ -94,6 +94,7 @@ Route::prefix($adminPrefix)->name('admin.')->middleware(['admin.locale'])->group
         Route::prefix('agents')->name('agents.')->group(function () {
             Route::get('/', [\App\Http\Controllers\Admin\AgentController::class, 'index'])->name('index');
             Route::post('start', [\App\Http\Controllers\Admin\AgentController::class, 'start'])->name('start');
+            Route::get('suggest-keywords/{workspaceId}', [\App\Http\Controllers\Admin\AgentController::class, 'suggestKeywords'])->name('suggest-keywords')->whereNumber('workspaceId');
             Route::get('{executionId}', [\App\Http\Controllers\Admin\AgentController::class, 'show'])->name('show')->whereNumber('executionId');
             Route::post('{executionId}/retry', [\App\Http\Controllers\Admin\AgentController::class, 'retry'])->name('retry')->whereNumber('executionId');
         });

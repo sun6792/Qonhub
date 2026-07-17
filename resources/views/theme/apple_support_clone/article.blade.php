@@ -61,7 +61,7 @@
                         </li>
                     @endforeach
                 </ol>
-            @else
+            @elseif(is_object($stickyAd))
                 <a href="{{ route('site.home') }}" class="as-link-arrow">{{ __('front.nav.all_articles') }}</a>
             @endif
         </section>

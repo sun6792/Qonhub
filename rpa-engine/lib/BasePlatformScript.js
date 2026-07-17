@@ -109,6 +109,72 @@ export class BasePlatformScript {
         return f;
     }
 
+    // ── Cookie 健康检查 ────────────────────────────────────
+
+    /**
+     * v2.9: 检查已保存的 Cookie 是否有效。
+     * 在发布前调用，避免脚本跑到一半发现未登录。
+     * @returns {boolean} true = Cookie 有效，false = 需要重新登录
+     */
+    async checkCookieHealth(checkUrl, loginIndicator) {
+        const stateFile = path.join(__dirname, "..", "storage", "states", String(this.workspaceId), `${this.constructor.platform}.json`);
+        if (!fs.existsSync(stateFile)) {
+            this.log(`Cookie check: no saved state → need login`);
+            return false;
+        }
+        try {
+            const state = JSON.parse(fs.readFileSync(stateFile, "utf-8"));
+            const cookies = state.cookies || [];
+            if (cookies.length < 3) {
+                this.log(`Cookie check: only ${cookies.length} cookies → need login`);
+                return false;
+            }
+            // 检查过期：超过80%的cookie已过期 → 需要重新登录
+            const now = Date.now() / 1000;
+            const expired = cookies.filter(c => c.expires && c.expires > 0 && c.expires < now).length;
+            if (expired > cookies.length * 0.8) {
+                this.log(`Cookie check: ${expired}/${cookies.length} expired → need refresh`);
+                return false;
+            }
+            this.log(`Cookie check: ${cookies.length} cookies, ${expired} expired → OK`);
+            return true;
+        } catch {
+            this.log(`Cookie check: corrupted state file`);
+            return false;
+        }
+    }
+
+    // ── 崩溃恢复 ────────────────────────────────────────────
+
+    /**
+     * v2.9: 带崩溃恢复的浏览器启动。
+     * 浏览器崩溃或页面无响应时自动重试（最多3次，指数退避）。
+     */
+    async launchBrowserWithRetry(maxRetries = 3) {
+        let lastError;
+        for (let i = 0; i < maxRetries; i++) {
+            try {
+                const result = await this.launchBrowser();
+                // 快速健康检查：页面能否正常响应
+                try {
+                    await result.page.evaluate(() => document.title);
+                } catch (pageErr) {
+                    throw new Error(`Page unresponsive after launch: ${pageErr.message}`);
+                }
+                return result;
+            } catch (err) {
+                lastError = err;
+                this.log(`Browser launch attempt ${i+1}/${maxRetries} failed: ${err.message}`);
+                if (i < maxRetries - 1) {
+                    const delay = Math.min(2000 * Math.pow(2, i), 15000);
+                    this.log(`Retrying in ${delay}ms...`);
+                    await new Promise(r => setTimeout(r, delay));
+                }
+            }
+        }
+        throw new Error(`Browser launch failed after ${maxRetries} attempts: ${lastError.message}`);
+    }
+
     // ── 浏览器启动 ────────────────────────────────────────
 
     /**
@@ -261,11 +327,14 @@ export class BasePlatformScript {
         await this.wait(200, 600);
         await el.click({ force: opts.force || false });
         await this.wait(100, 300);
-        // 清空
-        await el.fill("");
-        // 逐字输入
-        for (const ch of text) {
-            await el.type(ch, { delay: this.rand(60, 150) });
+        // 用 fill() 直接设值，避免逐字 type 导致中文乱码
+        try { await el.fill(text); }
+        catch (fillErr) {
+            // fill 失败时回退到逐字输入
+            await el.fill("");
+            for (const ch of text) {
+                await el.type(ch, { delay: this.rand(60, 150) });
+            }
         }
         await this.wait(300, 1000);
     }
@@ -384,10 +453,19 @@ export class BasePlatformScript {
     // ── 标准执行入口 ──────────────────────────────────────
 
     async execute() {
-        const { browser, page } = await this.launchBrowser();
+        // v2.9: 带崩溃恢复的浏览器启动
+        const { browser, page } = await this.launchBrowserWithRetry();
         let result = { success: false, shop_url: "", account_id: "", error: "", status: "error" };
 
         try {
+            // v2.9: Cookie 健康预检（B2B 注册跳过，发布类脚本覆盖此检查）
+            if (typeof this.checkCookieHealth === 'function') {
+                const valid = await this.checkCookieHealth();
+                if (!valid) {
+                    return { success: false, shop_url: "", account_id: "", error: "Cookie expired — need re-login via operator dashboard", status: "login_expired" };
+                }
+            }
+
             // Step 1: 注册 + 登录
             result = await this.registerFlow(page);
             result.account_id = result.account_id || this.genAccount().username;

@@ -41,6 +41,18 @@ abstract class BaseApiController extends Controller
     }
 
     /**
+     * Validate request input against the given rules and return only validated data.
+     * This provides a defense-in-depth layer before data reaches the service layer.
+     *
+     * @param  array<string, mixed>  $rules  Laravel validation rules array
+     * @return array<string, mixed>  Validated data (only keys present in $rules)
+     */
+    protected function validateInput(Request $request, array $rules): array
+    {
+        return $request->validate($rules);
+    }
+
+    /**
      * 返回统一成功响应；若提供 $idempotencyRouteKey，则在响应体确定后写入幂等缓存。
      *
      * @param  array<string, mixed>  $data  置于 JSON 的 data 字段

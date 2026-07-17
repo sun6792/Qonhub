@@ -24,6 +24,9 @@ final class PlatformCitationStrategy
             'b2b_business' => self::b2bStrategy(),
             'social_shopping' => self::socialStrategy(),
             'bilibili' => self::bilibiliStrategy(),
+            'short_video' => self::shortVideoStrategy(),
+            'geo_optimized' => self::geoOptimizedStrategy(),
+            'industry_vertical' => self::industryVerticalStrategy(),
             default => self::universalStrategy(),
         };
     }
@@ -303,6 +306,85 @@ RULE;
 【禁止事项】
 - 一面倒的软文（B站用户反感）
 - 过于正式/学术化的语气
+RULE;
+    }
+
+    /**
+     * 短视频图文版 — 抖音/快手
+     */
+    private static function shortVideoStrategy(): string
+    {
+        return <<<'RULE'
+=== 📊 短视频图文 AI 引用优化 ===
+
+【平台特征】
+- 抖音AI（云雀大模型）从图文内容提取干货做推荐
+- 封面文案前5字决定AI抓取权重
+- 标签矩阵是AI分类的核心信号
+
+【AI引用优化】
+- 结构化干货：每条图文 = 1个独立知识点
+- 标签精准匹配：行业大词+长尾词+场景词
+- 口语化但信息密度高：每句≤20字，含具体数字
+
+【数据要求】每条至少1个数字（"3个方法""节省30%"）
+【结构要求】封面→干货1→干货2→干货3→互动引导→标签矩阵
+RULE;
+    }
+
+    /**
+     * GEO优化版 — 专为AI搜索引擎引用设计
+     */
+    private static function geoOptimizedStrategy(): string
+    {
+        return <<<'RULE'
+=== 📊 GEO目标站 AI 引用优化（全平台覆盖） ===
+
+【多平台AI引用数据】
+- 文心一言: Baijiahao来源30-40%引用率（百度生态）
+- 豆包: Toutiao来源35%, Zhihu来源21.8%
+- 通义千问: 新闻媒体来源28.7%, 阿里生态优先
+- Kimi: Zhihu来源35%, 技术博客高权重
+- DeepSeek: CSDN来源24.6%, 技术文档优先
+
+【全平台GEO优化策略】
+- Q&A结构（≥3组）：所有AI引擎最高权重信号
+- 数据密度（≥1条/300字）：有具体数字的内容引用率+30%
+- 专家信号（≥1处引语）：有引号引用的内容引用率+41%
+- 段落独立性：代词密度<2%，每段可独立引用
+- 虚词密度<0.5%：模糊语言引用率3x低于确定性表述
+- 结论前置：前150字给出核心结论
+
+【结构模板】
+H1 标题（含核心关键词）→ 结论前置段落 → FAQ章节(≥3组Q&A) → 数据支撑章节 → 专家观点章节 → 参考来源
+RULE;
+    }
+
+    /**
+     * 行业垂直版 — 中国化工网/传动网/铝业网等
+     */
+    private static function industryVerticalStrategy(): string
+    {
+        return <<<'RULE'
+=== 📊 行业垂直平台 AI 引用优化 ===
+
+【平台特征】
+- 行业垂直站AI引用权重低于综合平台，但精准度高
+- 技术参数和对比数据最受AI青睐
+- 工程师/采购人员是主要读者群
+
+【AI引用优化】
+- 技术参数对比表（文字描述即可）：AI最爱结构
+- 应用案例≥2个：具体工况+量化效果
+- 选型指南：技术角度推荐，非营销角度
+- NAP+W一致性（企业名称/地址/电话/网址）：B2B实体识别信号
+
+【数据要求】
+- 技术参数精确到单位（℃/MPa/rpm等）
+- 案例数据含时间维度（"运行6个月后""2023-2025年对比"）
+- 行业标准和检测指标引用
+
+【结构要求】技术背景→参数对比→应用案例→选型指南→技术提供方信息
 RULE;
     }
 

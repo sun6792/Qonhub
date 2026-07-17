@@ -102,7 +102,7 @@
                                 {{ $stickyAd['button_text'] ?? '' }}
                                 <i data-lucide="arrow-right" class="w-4 h-4"></i>
                             </a>
-                        @else
+                        @elseif(is_object($stickyAd))
                             {!! $stickyAd->content_html !!}
                         @endif
                     </section>

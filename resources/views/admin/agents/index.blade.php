@@ -41,20 +41,24 @@
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">工作空间 *</label>
-          <select name="workspace_id" required class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm">
+          <select name="workspace_id" id="wsSelect" required class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm">
             <option value="">选择工作空间</option>
             @foreach($workspaces as $ws)
-              <option value="{{ $ws->id }}">{{ $ws->name }}</option>
+              <option value="{{ $ws->id }}" data-name="{{ $ws->name }}">{{ $ws->name }}</option>
             @endforeach
           </select>
         </div>
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">品牌名称</label>
-          <input type="text" name="brand_name" maxlength="100" placeholder="可选" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm">
+          <input type="text" name="brand_name" id="brandName" maxlength="100" placeholder="选择工作空间后自动填充" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm">
         </div>
         <div class="md:col-span-2">
-          <label class="block text-sm font-medium text-gray-700 mb-1">关键词（一行一个或用逗号分隔）</label>
-          <textarea name="keywords" rows="3" placeholder="工业泵阀&#10;化工设备&#10;管道阀门" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"></textarea>
+          <label class="block text-sm font-medium text-gray-700 mb-1">
+            关键词（一行一个或用逗号分隔）
+            <span id="kwSource" class="text-xs text-gray-400 ml-2"></span>
+            <span id="kwLoading" class="text-xs text-indigo-500 ml-2 hidden">⏳ 智能提取中...</span>
+          </label>
+          <textarea name="keywords" id="kwInput" rows="3" placeholder="选择工作空间后，系统将自动从知识库和关键词库提取关键词..." class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"></textarea>
         </div>
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">关联任务ID（可选）</label>
@@ -70,7 +74,7 @@
       </button>
       <p class="text-xs text-gray-400 mt-3">
         ⚠️ 启动前请确保已通过
-        <a href="http://127.0.0.1:9901" target="_blank" class="text-indigo-500 hover:underline font-medium">🖥️ 运营助手 (RPA)</a>
+        <a href="{{ config('geoflow.rpa_engine_url', 'http://127.0.0.1:9901') }}" target="_blank" class="text-indigo-500 hover:underline font-medium">🖥️ 运营助手 (RPA)</a>
         完成平台授权登录，否则分发步骤将超时
       </p>
     </form>
@@ -120,4 +124,62 @@
     </div>
   </div>
 </div>
+<script>
+const wsSelect = document.getElementById('wsSelect');
+const kwInput = document.getElementById('kwInput');
+const brandInput = document.getElementById('brandName');
+const kwSource = document.getElementById('kwSource');
+const kwLoading = document.getElementById('kwLoading');
+
+wsSelect.addEventListener('change', async function() {
+    const wsId = this.value;
+    if (!wsId) {
+        kwInput.value = '';
+        brandInput.value = '';
+        kwSource.textContent = '';
+        return;
+    }
+
+    kwLoading.classList.remove('hidden');
+    kwSource.textContent = '';
+    kwInput.value = '';
+    kwInput.placeholder = '正在从知识库和关键词库智能提取...';
+
+    try {
+        const resp = await fetch(`/geo_admin/agents/suggest-keywords/${wsId}`, {
+            headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            credentials: 'same-origin'
+        });
+        if (!resp.ok) {
+            throw new Error('HTTP ' + resp.status);
+        }
+        const data = await resp.json();
+
+        if (data.ok && data.keywords.length > 0) {
+            kwInput.value = data.keywords.join('\n');
+            kwSource.textContent = `✅ 已从${data.sources.join('、')}提取 ${data.keywords.length} 个关键词`;
+            kwSource.className = 'text-xs text-green-500 ml-2';
+            if (data.brand_name) {
+                brandInput.value = data.brand_name;
+            }
+        } else {
+            kwInput.placeholder = '未找到关联的关键词库或知识库，请手动输入';
+            kwSource.textContent = '⚠️ 暂无自动提取数据，请手动输入';
+            kwSource.className = 'text-xs text-amber-500 ml-2';
+            // 至少用客户名做品牌词
+            const selected = wsSelect.options[wsSelect.selectedIndex];
+            if (selected && selected.dataset.name) {
+                brandInput.value = selected.dataset.name;
+            }
+        }
+    } catch(e) {
+        console.error('关键词提取失败:', e);
+        kwInput.placeholder = '提取失败，请手动输入关键词';
+        kwSource.textContent = '❌ 提取失败: ' + (e.message || '网络错误');
+        kwSource.className = 'text-xs text-red-500 ml-2';
+    } finally {
+        kwLoading.classList.add('hidden');
+    }
+});
+</script>
 @stop

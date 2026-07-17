@@ -516,6 +516,15 @@
                         progressTimer = null;
                     }
                 }, 2500);
+
+                // Pause polling when page is hidden, resume when visible
+                document.addEventListener('visibilitychange', () => {
+                    if (document.hidden) {
+                        if (progressTimer) { clearInterval(progressTimer); progressTimer = null; }
+                    } else if (!progressTimer) {
+                        window.location.reload(); // Refresh on return to get latest status
+                    }
+                });
             }
 
             const textarea = document.getElementById('enterprise-draft-content');

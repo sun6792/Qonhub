@@ -1,0 +1,33 @@
+{
+    "id": "toutiao-news-20260426",
+    "base_theme_id": null,
+    "reference_urls": {
+        "home": "https://www.toutiao.com/",
+        "category": "https://www.toutiao.com/",
+        "article": "https://www.toutiao.com/"
+    },
+    "unchanged_contracts": [
+        "public routes",
+        "SEO title/description/keywords/canonical",
+        "JSON-LD schema output",
+        "GEOFlow category/article variables",
+        "rendered article HTML",
+        "optional article detail ad data"
+    ],
+    "visual_strategy": {
+        "reference_site": "Toutiao",
+        "summary": "A Toutiao-news-inspired theme with clean article layout and promotional flag support.",
+        "css_focus": "Typography, color tokens, spacing density, card rhythm, navigation treatment, and article prose styling."
+    },
+    "edited_files": [
+        "layout.blade.php",
+        "home.blade.php",
+        "category.blade.php",
+        "article.blade.php",
+        "partials/header.blade.php",
+        "partials/footer.blade.php",
+        "assets/theme.css",
+        "manifest.json",
+        "mapping.json"
+    ]
+}

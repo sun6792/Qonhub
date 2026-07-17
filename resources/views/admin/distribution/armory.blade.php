@@ -56,12 +56,36 @@
             <div class="rounded-lg bg-white p-10 text-center shadow">
                 <i data-lucide="file-text" class="mx-auto mb-3 h-10 w-10 text-gray-400"></i>
                 <div class="text-sm font-medium text-gray-900">暂无已发布文章</div>
-                <div class="mt-1 text-sm text-gray-500">先在任务管理中生成并发布文章，再到这里分发。</div>
+                <div class="mt-1 text-sm text-gray-500">先在 🤖智能体 中启动工作流生成文章，再到这里分发。</div>
             </div>
         @else
+            {{-- 批量操作栏 --}}
+            <div id="batchBar" class="hidden sticky top-0 z-10 rounded-lg bg-indigo-50 border border-indigo-200 p-3 flex items-center gap-3 shadow">
+                <label class="flex items-center gap-1 text-sm"><input type="checkbox" id="selectAll" onchange="toggleSelectAll(this)" class="rounded"> 全选</label>
+                <span id="selectedCount" class="text-sm text-indigo-700 font-medium">已选 0 篇</span>
+                <select id="batchPlatform" class="rounded border-gray-300 text-sm">
+                    <option value="">选择发布平台...</option>
+                    <option value="toutiao_publish">今日头条</option>
+                    <option value="baijiahao_publish">百家号</option>
+                    <option value="xiaohongshu_publish">小红书</option>
+                    <option value="sohu_publish">搜狐号</option>
+                </select>
+                <select id="batchTemplate" class="rounded border-gray-300 text-sm">
+                    <option value="">选择改写模板（可选）</option>
+                    @foreach ($templates as $tpl)
+                    <option value="{{ $tpl['key'] }}">{{ $tpl['name'] }}</option>
+                    @endforeach
+                </select>
+                <button onclick="batchPublish()" class="rounded bg-indigo-600 px-3 py-1.5 text-sm text-white font-medium hover:bg-indigo-700">🚀 批量改写并发布</button>
+                <span id="batchStatus" class="text-xs text-gray-500"></span>
+            </div>
+
             <div class="space-y-4">
                 @foreach ($articles as $article)
                     <div class="rounded-lg border border-gray-200 bg-white shadow transition hover:shadow-md" id="article-{{ (int) $article->id }}">
+                        <div class="absolute -mt-1 -ml-1">
+                            <input type="checkbox" class="article-checkbox rounded" value="{{ (int) $article->id }}" onchange="updateBatchBar()" style="width:18px;height:18px;cursor:pointer">
+                        </div>
                         <div class="border-b border-gray-100 bg-gray-50/50 px-5 py-4">
                             <div class="flex items-start justify-between gap-4">
                                 <div class="min-w-0 flex-1">
@@ -279,11 +303,12 @@
                 if (!data.ok) {
                     status.textContent = '失败';
                     label.className = 'inline-flex items-center gap-1 rounded-full bg-red-100 px-2.5 py-1 text-xs font-medium text-red-700';
-                    content.innerHTML = '<div class="text-red-600">' + (data.error || '未知错误') + '</div>';
+                    content.innerHTML = '<div class="text-red-600"></div>';
+                    content.querySelector('.text-red-600').textContent = data.error || '未知错误';
                     return;
                 }
 
-                status.textContent = '改写完成 · ' + data.rewritten.length + ' 字';
+                status.textContent = '改写完成 · ' + (data.rewritten ? data.rewritten.length : 0) + ' 字';
                 label.className = 'inline-flex items-center gap-1 rounded-full bg-green-100 px-2.5 py-1 text-xs font-medium text-green-700';
                 copyBtn.disabled = false;
                 copyBtn.classList.remove('opacity-50', 'cursor-not-allowed');
@@ -303,7 +328,14 @@
                     const suggEl = geoCard.querySelector('[data-geo-suggestions]');
                     if (data.geo_score.suggestions && data.geo_score.suggestions.length > 0) {
                         suggEl.style.display = 'block';
-                        suggEl.innerHTML = '<strong>💡 优化建议：</strong>' + data.geo_score.suggestions.map(s => '• ' + s).join('<br>');
+                        suggEl.innerHTML = '<strong>💡 优化建议：</strong>';
+                        const list = document.createElement('div');
+                        data.geo_score.suggestions.forEach(s => {
+                            const item = document.createElement('div');
+                            item.textContent = '• ' + s;
+                            list.appendChild(item);
+                        });
+                        suggEl.appendChild(list);
                     }
                 }
 
@@ -374,7 +406,8 @@
                 loading.classList.add('hidden');
                 status.textContent = '网络错误';
                 label.className = 'inline-flex items-center gap-1 rounded-full bg-red-100 px-2.5 py-1 text-xs font-medium text-red-700';
-                content.innerHTML = '<div class="text-red-600">请求失败: ' + err.message + '</div>';
+                content.innerHTML = '<div class="text-red-600"></div>';
+                content.querySelector('.text-red-600').textContent = '请求失败: ' + (err.message || '未知错误');
             }
 
             return;
@@ -399,6 +432,74 @@
             return;
         }
     });
+
+    // ── 批量操作 ──
+    window.toggleSelectAll = function(cb) {
+        document.querySelectorAll('.article-checkbox').forEach(c => { c.checked = cb.checked; });
+        updateBatchBar();
+    };
+    window.updateBatchBar = function() {
+        const checked = document.querySelectorAll('.article-checkbox:checked');
+        const bar = document.getElementById('batchBar');
+        const count = document.getElementById('selectedCount');
+        if (checked.length > 0) {
+            bar.classList.remove('hidden');
+            count.textContent = '已选 ' + checked.length + ' 篇';
+        } else {
+            bar.classList.add('hidden');
+        }
+    };
+    window.batchPublish = async function() {
+        const checked = document.querySelectorAll('.article-checkbox:checked');
+        const platform = document.getElementById('batchPlatform').value;
+        const template = document.getElementById('batchTemplate').value;
+        const status = document.getElementById('batchStatus');
+        if (!platform) { alert('请选择发布平台'); return; }
+        if (checked.length === 0) { alert('请勾选文章'); return; }
+        const ids = Array.from(checked).map(c => parseInt(c.value));
+        if (!confirm('将为 ' + ids.length + ' 篇文章改写并发布到 ' + platform + '，确认？')) return;
+
+        status.textContent = '⏳ 处理中 0/' + ids.length + '...';
+        let done = 0, ok = 0;
+        for (const articleId of ids) {
+            try {
+                const wsId = document.querySelector('select[name=\"workspace_id\"]')?.value || {{ $workspaceId }} || 0;
+            if (!wsId || wsId === '0') { alert('请先在上方选择一个客户'); status.textContent = '❌ 未选择客户'; return; }
+            const body = { article_id: articleId, workspace_id: parseInt(wsId), platform: platform };
+                if (template) body.template_key = template;
+
+                // 如果有模板，先改写
+                if (template) {
+                    const rResp = await fetch('{{ route('admin.distribution.armory.rewrite') }}', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': CSRF },
+                        body: JSON.stringify({ article_id: articleId, template_key: template })
+                    });
+                    const rData = await rResp.json();
+                    if (rData.ok) {
+                        body.rewritten_title = rData.title;
+                        body.rewritten_content = rData.rewritten;
+                    }
+                }
+
+                // RPA 发布
+                const pResp = await fetch('{{ route('admin.distribution.armory.publish-rpa') }}', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': CSRF },
+                    body: JSON.stringify(body)
+                });
+                const pData = await pResp.json();
+                if (pData.ok) ok++;
+                done++;
+                status.textContent = '⏳ 处理中 ' + done + '/' + ids.length + ' (成功:' + ok + ')';
+            } catch(e) {
+                done++;
+                status.textContent = '⏳ 处理中 ' + done + '/' + ids.length + ' (失败:' + (done-ok) + ')';
+            }
+        }
+        status.textContent = '✅ 完成！成功 ' + ok + '/' + ids.length;
+        updateBatchBar();
+    };
 })();
 </script>
 @endpush

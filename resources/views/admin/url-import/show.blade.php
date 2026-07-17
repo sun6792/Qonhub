@@ -533,7 +533,7 @@
 
             if (!hasFinished) {
                 polling = window.setInterval(() => {
-                    poll().catch(() => {});
+                    poll().catch((e) => { console.error('URL import poll error:', e); });
                 }, 1200);
             }
 

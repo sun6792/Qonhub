@@ -15,9 +15,13 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 /**
- * 内容 Agent — RAG 检索 → AI 生成 → GEO 评分 → 低分自动重写 → 合规预检。
+ * 内容 Agent — v2.8.0 混合模式。
  *
- * 复用 WorkerExecutionService 的核心流程 + GeoContentScorer + KnowledgeRetrievalService。
+ * RAG 检索 → AI 生成（分平台策略增强）→ GEO 评分 → 低分自动重写 → 合规预检。
+ *
+ * v2.8.0 新增：消费 Strategy 产出的 per_platform_strategy / content_angles / keyword_clusters，
+ *           生成有针对性的平台差异化文章。
+ *           当 Strategy 为 B 型规则模式时，自动回退通用 Prompt。
  */
 class ContentAgentService
 {
@@ -29,7 +33,7 @@ class ContentAgentService
     ) {}
 
     /**
-     * @return array{ article_id: int|null, title: string, geo_score: int, geo_grade: string, content_length: int, retries: int }
+     * @return array{ article_id: int|null, title: string, geo_score: int, geo_grade: string, content_length: int, retries: int, generation_error: ?string, generated_at: string }
      */
     public function execute(AgentExecution $execution): array
     {
@@ -38,65 +42,82 @@ class ContentAgentService
         $taskConfig = $strategyOutput['task_config'] ?? [];
         $inputData = $execution->input_data ?? [];
 
-        // ① 找到关联的 Task（如果有 task_id 传入）
+        // ── v2.8.0: 消费 Strategy 分平台策略 ──
+        $perPlatform = $strategyOutput['per_platform_strategy'] ?? [];
+        $contentAngles = $strategyOutput['content_angles'] ?? [];
+        $keywordClusters = $strategyOutput['keyword_clusters'] ?? [];
+        $strategyMode = $strategyOutput['strategy_mode'] ?? 'rule';
+
+        // ① 关联 Task
         $taskId = $inputData['task_id'] ?? 0;
         $task = $taskId > 0 ? Task::query()->find($taskId) : null;
 
-        // ② RAG 检索知识库
-        $knowledgeContext = '';
-        $keywords = $taskConfig['keywords'] ?? [];
+        // ② 确定主目标平台及其策略
+        $targetPlatforms = $taskConfig['target_platforms'] ?? ['toutiao', 'baijiahao'];
+        $primaryPlatform = reset($targetPlatforms);
+        $primaryStrategy = $perPlatform[$primaryPlatform] ?? null;
+
+        // ③ 构建标题 — 轮转选取 content_angles，每篇不同角度
         $brandName = $taskConfig['brand_name'] ?? '';
-        $title = $inputData['article_title'] ?? ($brandName . '在' . implode('、', array_slice($keywords, 0, 3)) . '方面的专业优势');
+        $keywords = $taskConfig['keywords'] ?? [];
+        // 根据该客户已有文章数轮转角度，确保每篇不同
+        $existingCount = Article::query()
+            ->whereIn('id', function ($sub) use ($wsId) {
+                $sub->select('assignable_id')->from('workspace_assignments')
+                    ->where('assignable_type', Article::class)
+                    ->where('workspace_id', $wsId);
+            })->count();
+        $angleIndex = $existingCount % max(count($contentAngles), 1);
+        $primaryAngle = $contentAngles[$angleIndex] ?? ($contentAngles[0] ?? '');
+        $title = $inputData['article_title']
+            ?? ($primaryAngle ? "{$brandName}：{$primaryAngle}" : null)
+            ?? ($brandName . '在' . implode('、', array_slice($keywords, 0, 3)) . '方面的专业优势');
 
-        if (! empty($keywords)) {
-            try {
-                $kbIds = $task
-                    ? $this->resolveTaskKbIds($task)
-                    : [];
-                if (! empty($kbIds)) {
-                    $knowledgeContext = $this->retrievalService->retrieveContextFromMany(
-                        $kbIds,
-                        implode(' ', $keywords),
-                        limit: 5,
-                        maxChars: 3000
-                    );
-                }
-            } catch (\Throwable $e) {
-                Log::warning('ContentAgent: knowledge retrieval failed', ['error' => $e->getMessage()]);
-            }
-        }
+        // ④ RAG 检索 — 用 keyword_clusters 增强检索覆盖面
+        $knowledgeContext = $this->retrieveKnowledge($task, $keywords, $keywordClusters, $perPlatform);
 
-        // ③ AI 生成文章（复用 WorkerExecutionService 或直调 LlmOrchestrator）
+        // ⑤ AI 生成文章
         $content = '';
         $geoScore = 0;
         $geoGrade = 'F';
         $retries = $execution->retry_count ?? 0;
-
         $generationError = null;
 
         try {
             if ($task && $task->ai_model_id) {
-                // 有 Task → 走完整 Worker 流程
+                // 有 Task → 走 WorkerExecutionService，策略数据注入 knowledge_context
                 $result = $this->workerExecutionService->executeTask((int) $task->id, [
                     'title_override' => $title,
                     'keyword_override' => implode(' ', $keywords),
-                    'knowledge_context' => $knowledgeContext,
+                    'knowledge_context' => $knowledgeContext
+                        . "\n\n[GEO策略指导]\n" . $this->formatStrategyForContext($primaryStrategy, $contentAngles),
                 ]);
-
                 $content = $result['content'] ?? '';
                 $articleId = $result['article_id'] ?? null;
             } else {
-                // 无 Task → 走 LlmOrchestratorService（复用 proxy / logging / token quota 全栈）
-                $prompt = $this->buildContentPrompt($title, implode(' ', $keywords), $brandName, $knowledgeContext);
+                // 无 Task → 直调 LlmOrchestrator，使用分平台策略增强 Prompt
+                $systemPrompt = $this->buildSystemPrompt($primaryStrategy, $strategyMode);
+                $userPrompt = $this->buildContentPrompt(
+                    title: $title,
+                    keywords: implode(' ', $keywords),
+                    brand: $brandName,
+                    kbContext: $knowledgeContext,
+                    primaryStrategy: $primaryStrategy,
+                    contentAngles: $contentAngles,
+                    currentAngleIndex: $angleIndex,
+                    perPlatform: $perPlatform,
+                    primaryPlatform: $primaryPlatform,
+                );
+
                 try {
                     $response = app(LlmOrchestratorService::class)->chat(new \App\Services\AI\ChatRequest(
                         providerCode: 'deepseek',
                         modelId: 'deepseek-v4-flash',
                         messages: [
-                            ['role' => 'system', 'content' => '你是专业的B2B内容营销写手。'],
-                            ['role' => 'user', 'content' => $prompt],
+                            ['role' => 'system', 'content' => $systemPrompt],
+                            ['role' => 'user', 'content' => $userPrompt],
                         ],
-                        options: ['max_tokens' => 4096],
+                        options: ['max_tokens' => $primaryStrategy['length'] ?? 4096],
                         workspaceId: $wsId,
                         agentExecutionId: (int) $execution->id,
                     ));
@@ -117,21 +138,15 @@ class ContentAgentService
             $generationError = $e->getMessage();
         }
 
-        // ③.5 弹药库改写 — GeoPlatformRules 注入 prompt
-        $targetPlatforms = $strategyOutput['task_config']['target_platforms'] ?? ['toutiao', 'baijiahao'];
-        $primaryPlatform = reset($targetPlatforms);
-        $platformRules = \App\Support\GeoFlow\GeoPlatformRules::forTemplate($primaryPlatform);
-        // 把规则追加到生成内容后，让后续 GEO 评分纳入考量
-
-        // ④ GEO 评分
+        // ⑥ GEO 评分
         if (! empty($content)) {
             $scoreResult = $this->scorer->score($title, $content);
             $geoScore = $scoreResult['score'] ?? 0;
             $geoGrade = $scoreResult['grade'] ?? 'F';
         }
 
-        // ⑤ 结果存入 Article（让 DeployAgent 能分发）
-        if (! empty($content) && $geoScore >= 70) {
+        // ⑦ 结果存库（GEO>=70 或 没有生成错误时存，让低分有机会被重写）
+        if (! empty($content)) {
             try {
                 $article = Article::query()->create([
                     'task_id' => $task ? (int) $task->id : null,
@@ -139,8 +154,8 @@ class ContentAgentService
                     'slug' => \Illuminate\Support\Str::slug($title) . '-' . \Illuminate\Support\Str::random(6),
                     'content' => $content,
                     'excerpt' => mb_substr(strip_tags($content), 0, 200),
-                    'keywords' => implode(',', $keywords),
-                    'status' => 'published',
+                    'keywords' => is_array($keywords) ? implode(',', $keywords) : (string) $keywords,
+                    'status' => $geoScore >= 70 ? 'published' : 'draft',
                     'is_ai_generated' => true,
                     'geo_score' => $geoScore,
                     'geo_grade' => $geoGrade,
@@ -155,7 +170,6 @@ class ContentAgentService
                 ]);
                 $articleId = (int) $article->id;
 
-                // 分配到 workspace
                 try {
                     DB::table('workspace_assignments')->insert([
                         'workspace_id' => $wsId,
@@ -179,30 +193,214 @@ class ContentAgentService
             'content_length' => mb_strlen($content),
             'retries' => $retries,
             'generation_error' => $generationError,
+            'primary_platform' => $primaryPlatform,
             'generated_at' => now()->toIso8601String(),
         ];
     }
 
-    private function buildContentPrompt(string $title, string $keywords, string $brand, string $kbContext): string
+    // ═══════════════════════════════════════════════════════════════════
+    //  Prompt 构建 — 分平台策略驱动
+    // ═══════════════════════════════════════════════════════════════════
+
+    /**
+     * 构建分平台 System Prompt。
+     */
+    private function buildSystemPrompt(?array $primaryStrategy, string $strategyMode): string
     {
+        // LLM 策略可用 → 使用平台专属 System Prompt
+        if ($primaryStrategy && $strategyMode === 'llm') {
+            $style = $primaryStrategy['style'] ?? '专业深度';
+            $structure = $primaryStrategy['structure'] ?? '';
+            $angle = $primaryStrategy['angle'] ?? '';
+
+            return <<<PROMPT
+你是专业的GEO内容营销写手，专精于「{$style}」风格的内容创作。
+
+## 文章结构要求
+{$structure}
+
+## 核心切入角度
+{$angle}
+
+## GEO 写作规范（必须遵循）
+1. **开篇定义式陈述** — 每个 H2 首句必须是自包含的完整陈述句，可被 AI 直接引用
+2. **数据锚定** — 每个观点必须有具体数据/来源支撑，禁止"可能/大概/似乎"等虚词
+3. **结构化元素** — 使用对比表格、FAQ 区块、编号步骤、定义框
+4. **内联信源** — 直接在正文中标注"根据XX数据显示""XX行业报告指出"
+5. **禁用 AI 味词汇** — 禁止"在当今""综上所述""值得注意的是""随着……的发展""无疑"
+6. **长短句交替** — 每段 3-5 句，最长句不超过 40 字
+
+## 输出格式
+Markdown，含 H2/H3 标题层级、列表、表格、FAQ 区块。
+PROMPT;
+        }
+
+        // 回退：通用 Prompt（B 型兜底）
+        return <<<'PROMPT'
+你是专业的B2B内容营销写手。请遵循以下规范：
+
+1. 开篇定义式陈述 — 每个H2首句必须是独立完整的断言
+2. 数据锚定 — 所有观点有具体数据支撑
+3. 结构化 — 使用H2/H3标题、列表、对比表格、FAQ区块
+4. 禁用词 — 避免"在当今""综上所述""值得注意的是""可能""大概"
+5. 内联信源 — 正文中标注数据来源
+
+输出完整的Markdown格式文章。
+PROMPT;
+    }
+
+    /**
+     * 构建分平台增强的 User Prompt。
+     */
+    private function buildContentPrompt(
+        string $title,
+        string $keywords,
+        string $brand,
+        string $kbContext,
+        ?array $primaryStrategy,
+        array $contentAngles,
+        int $currentAngleIndex,
+        array $perPlatform,
+        string $primaryPlatform,
+    ): string {
         $prompt = "请撰写一篇关于「{$title}」的专业文章。\n\n";
-        $prompt .= "关键词：{$keywords}\n";
+
+        // 品牌与关键词
         if ($brand) {
-            $prompt .= "品牌：{$brand}\n";
+            $prompt .= "**品牌**：{$brand}\n";
         }
+        $prompt .= "**关键词**：{$keywords}\n";
+
+        // ── v2.8.0: 分平台策略注入 ──
+        if ($primaryStrategy) {
+            $prompt .= "\n## 目标平台策略（主：{$primaryPlatform}）\n";
+            $prompt .= "- 风格要求：{$primaryStrategy['style']}\n";
+            $prompt .= "- 推荐结构：{$primaryStrategy['structure']}\n";
+            $prompt .= "- 目标长度：{$primaryStrategy['length']}字\n";
+            $prompt .= "- 最佳角度：{$primaryStrategy['angle']}\n";
+        }
+
+        // 多平台适配指导
+        if (! empty($perPlatform) && count($perPlatform) > 1) {
+            $prompt .= "\n## 多平台适配要求\n";
+            $prompt .= "本文需同时兼容以下平台的收录偏好，请在内容中兼顾：\n";
+            foreach ($perPlatform as $platform => $strategy) {
+                if ($platform === $primaryPlatform) continue;
+                $prompt .= "- **{$platform}**：{$strategy['style']}，{$strategy['angle']}\n";
+            }
+        }
+
+        // 内容角度注入 — v2.8.1: 每篇只用1个角度，避免重复
+        if (! empty($contentAngles)) {
+            $currentAngle = $contentAngles[$currentAngleIndex % count($contentAngles)] ?? $contentAngles[0];
+            $otherAngles = [];
+            foreach ($contentAngles as $i => $a) {
+                if ($i !== ($currentAngleIndex % count($contentAngles))) {
+                    $otherAngles[] = $a;
+                }
+            }
+
+            $prompt .= "\n## 本文专属切入角度\n";
+            $prompt .= "**请围绕以下这一个角度深度展开，不要偏离：**\n";
+            $prompt .= "→ {$currentAngle}\n";
+            if (! empty($otherAngles)) {
+                $prompt .= "\n⚠️ **以下角度已有其他文章覆盖，本文请勿重复：**\n";
+                foreach ($otherAngles as $a) {
+                    $prompt .= "- {$a}\n";
+                }
+            }
+        }
+
+        // 知识库素材
         if ($kbContext) {
-            $prompt .= "\n参考知识库：\n{$kbContext}\n";
+            $prompt .= "\n## 参考素材（来自客户知识库）\n{$kbContext}\n";
+            $prompt .= "\n**请充分利用以上素材中的数据、案例和专家观点。**\n";
         }
-        $prompt .= "\n要求：Q&A结构、数据密度≥3%、删除虚词（可能/大概/似乎）、使用H2/H3小标题+列表、包含专家引用。\n";
-        $prompt .= "\n" . \App\Support\GeoFlow\GeoPlatformRules::forTemplate('toutiao');
-        $prompt .= "\n输出完整的Markdown格式文章。";
+
+        // GEO 写作要求
+        $prompt .= "\n## GEO 写作要求\n";
+        $prompt .= "- 开篇首段直接回答问题，200字以内给出核心结论\n";
+        $prompt .= "- Q&A结构：每个 H2 回答一个用户可能搜索的问题\n";
+        $prompt .= "- 数据密度不低于 3%（每 100 字至少含 1 个数据点或引用）\n";
+        $prompt .= "- 包含 1-2 个对比表格或数据表格\n";
+        $prompt .= "- 末尾加入 FAQ 区块（3-5 个常见问题+简短回答）\n";
+        $prompt .= '- 全文不允许出现「在当今」「综上所述」「值得注意的是」等套话' . "\n";
+
+        // 平台规则（向后兼容）
+        $prompt .= "\n" . \App\Support\GeoFlow\GeoPlatformRules::forTemplate($primaryPlatform);
+        $prompt .= "\n\n输出完整的Markdown格式文章。";
 
         return $prompt;
     }
 
     /**
+     * 将分平台策略格式化为可注入 WorkerExecutionService 的文本。
+     */
+    private function formatStrategyForContext(?array $primaryStrategy, array $contentAngles): string
+    {
+        $lines = [];
+        if ($primaryStrategy) {
+            $lines[] = "写作风格：{$primaryStrategy['style']}";
+            $lines[] = "文章结构：{$primaryStrategy['structure']}";
+            $lines[] = "目标长度：{$primaryStrategy['length']}字";
+            $lines[] = "核心角度：{$primaryStrategy['angle']}";
+        }
+        if (! empty($contentAngles)) {
+            $lines[] = '内容角度：' . implode('；', array_slice($contentAngles, 0, 3));
+        }
+        return implode("\n", $lines);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    //  RAG 检索 — 关键词聚类增强
+    // ═══════════════════════════════════════════════════════════════════
+
+    /**
+     * RAG 知识检索 — v2.8.0 用 keyword_clusters 增强覆盖面。
+     */
+    private function retrieveKnowledge(?Task $task, array $keywords, array $keywordClusters, array $perPlatform): string
+    {
+        $kbIds = $task ? $this->resolveTaskKbIds($task) : [];
+        if (empty($kbIds)) return '';
+
+        $contexts = [];
+        $seen = [];
+
+        // 主检索：合并关键词
+        $primaryQuery = implode(' ', $keywords);
+        if ($primaryQuery !== '') {
+            try {
+                $result = $this->retrievalService->retrieveContextFromMany($kbIds, $primaryQuery, limit: 4, maxChars: 2500);
+                if ($result) { $contexts[] = $result; $seen[] = md5($result); }
+            } catch (\Throwable $e) {
+                Log::warning('ContentAgent: primary RAG retrieval failed', ['error' => $e->getMessage()]);
+            }
+        }
+
+        // 增强检索：每个主题聚类各检索一次，取不重复的结果
+        foreach (array_slice($keywordClusters, 0, 3) as $cluster) {
+            $clusterKeywords = $cluster['keywords'] ?? [];
+            if (empty($clusterKeywords)) continue;
+            $query = implode(' ', array_slice($clusterKeywords, 0, 4));
+            try {
+                $result = $this->retrievalService->retrieveContextFromMany($kbIds, $query, limit: 2, maxChars: 1000);
+                $h = md5($result);
+                if ($result && ! in_array($h, $seen, true)) {
+                    $contexts[] = "【{$cluster['theme']}】\n{$result}";
+                    $seen[] = $h;
+                }
+            } catch (\Throwable) { /* 检索失败跳过 */ }
+        }
+
+        return implode("\n\n---\n\n", $contexts);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    //  A 型增强 & 辅助方法
+    // ═══════════════════════════════════════════════════════════════════
+
+    /**
      * [A型增强] LLM 自主诊断 GEO 低分原因，制定重写策略。
-     * 仅在 GEO < 70 且 A 型增强开启时调用，不修改 B 型 execute() 流程。
      */
     public function executeATypeDiagnose(int $workspaceId, string $title, string $content, int $geoScore, array $dimensions): array
     {
@@ -240,7 +438,6 @@ class ContentAgentService
         if ((int) ($task->knowledge_base_id ?? 0) > 0) {
             $ids[] = (int) $task->knowledge_base_id;
         }
-        // 也检查 task_knowledge_bases 关联表
         if (DB::getSchemaBuilder()->hasTable('task_knowledge_bases')) {
             $extraIds = DB::table('task_knowledge_bases')
                 ->where('task_id', (int) $task->id)
@@ -249,7 +446,6 @@ class ContentAgentService
                 ->all();
             $ids = array_unique(array_merge($ids, $extraIds));
         }
-
         return $ids;
     }
 }

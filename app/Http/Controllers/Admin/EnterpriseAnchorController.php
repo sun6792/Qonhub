@@ -270,7 +270,8 @@ class EnterpriseAnchorController extends Controller
                 return back()->withErrors('RPA 引擎未启动。请在项目目录执行: cd rpa-engine && node server.js');
             }
 
-            $result = $rpaClient->executeTask([
+            // 异步提交RPA任务（避免PHP 30秒超时）
+            $taskId = $rpaClient->createTaskAsync([
                 'platform' => $platformKey,
                 'platform_name' => $platformInfo['name'],
                 'action' => 'register_and_certify',
@@ -280,36 +281,29 @@ class EnterpriseAnchorController extends Controller
                 ],
                 'enterprise' => $enterpriseData,
                 'options' => [
+                    'workspace_id' => (int) $workspace->id,
                     'timeout_seconds' => 180,
                 ],
             ]);
 
-            if ($result['success'] ?? false) {
-                $shopUrl = $result['shop_url'] ?? '';
-                $cert = EnterpriseAnchorCertification::query()->firstOrCreate(
-                    ['enterprise_profile_id' => (int) $profile->id, 'anchor_platform_key' => $platformKey],
-                    [
-                        'certification_status' => 'certified',
-                        'certified_at' => now(),
-                        'platform_page_url' => $shopUrl,
-                    ]
-                );
-                if (! $cert->wasRecentlyCreated) {
-                    $cert->forceFill([
-                        'certification_status' => 'certified',
-                        'certified_at' => now(),
-                        'platform_page_url' => $shopUrl ?: $cert->platform_page_url,
-                    ])->save();
-                }
-
-                return redirect()
-                    ->route('admin.enterprise-anchor.manage', $slug)
-                    ->with('success', "🤖 {$platformInfo['name']} RPA自动注册成功！店铺URL: " . ($shopUrl ?: '已同步'));
+            // 标记认证为 pending（RPA 完成后通过 reportToCloud 自动回调更新为 certified）
+            $cert = EnterpriseAnchorCertification::query()->firstOrCreate(
+                ['enterprise_profile_id' => (int) $profile->id, 'anchor_platform_key' => $platformKey],
+                [
+                    'certification_status' => 'pending',
+                    'certified_at' => null,
+                    'platform_page_url' => '',
+                ]
+            );
+            if ($cert->certification_status !== 'certified') {
+                $cert->forceFill(['certification_status' => 'pending'])->save();
             }
 
-            Log::error('RPA认证失败', ['result' => $result]);
+            Log::info('RPA register task submitted', ['task_id' => $taskId, 'platform' => $platformKey, 'workspace_id' => (int) $workspace->id]);
 
-            return back()->withErrors('RPA 认证失败: ' . ($result['error'] ?? '未知错误'));
+            return redirect()
+                ->route('admin.enterprise-anchor.manage', $slug)
+                ->with('success', "🤖 {$platformInfo['name']} RPA注册任务已提交（任务ID: {$taskId}）。浏览器正在后台自动注册，预计2-5分钟完成。届时刷新本页查看结果。");
         } catch (\Throwable $e) {
             Log::error('RPA注册异常', ['message' => $e->getMessage()]);
 

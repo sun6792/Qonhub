@@ -21,6 +21,7 @@
     $menu = [
         'dashboard'   => ['route' => 'admin.dashboard',           'name' => '📊 总览'],
         'agents'      => ['route' => 'admin.agents.index',        'name' => '🤖 智能体'],
+        'armory'      => ['route' => 'admin.distribution.armory', 'name' => '📦 弹药库'],
         'workspaces'  => ['route' => 'admin.workspaces.index',    'name' => '👥 客户'],
         'content_publish' => ['route' => 'admin.content-publish.index', 'name' => '📡 分发'],
         'articles'    => ['route' => 'admin.articles.index',      'name' => '📝 文章'],
@@ -35,6 +36,10 @@
         'admin.system-updates.plan' => 'dashboard', 'admin.system-updates.backup' => 'dashboard',
         // 智能体
         'admin.agents.index' => 'agents', 'admin.agents.show' => 'agents',
+        // 弹药库
+        'admin.distribution.armory' => 'armory', 'admin.distribution.armory.rewrite' => 'armory',
+        'admin.distribution.armory.channels' => 'armory', 'admin.distribution.armory.publish' => 'armory',
+        'admin.distribution.armory.publish-rpa' => 'armory',
         // 客户（含B2B锚点、AI可见度、企业知识库、运营监控等子功能）
         'admin.workspaces.index' => 'workspaces', 'admin.workspaces.create' => 'workspaces',
         'admin.workspaces.show' => 'workspaces', 'admin.workspaces.edit' => 'workspaces',
@@ -53,11 +58,11 @@
         'admin.tasks.create' => 'articles', 'admin.tasks.edit' => 'articles',
         // AI模型
         'admin.ai-models.index' => 'ai_models',
-        // 其余子功能不突出显示（页面保留可直访）
-    ];
+        // API令牌 & 活动日志
         'admin.api-tokens.store' => 'admin_users',
         'admin.api-tokens.revoke' => 'admin_users',
         'admin.admin-activity-logs' => 'admin_users',
+        // 其余子功能不突出显示（页面保留可直访）
     ];
     $routeName = request()->route()?->getName();
     $resolvedActive = $activeMenu;

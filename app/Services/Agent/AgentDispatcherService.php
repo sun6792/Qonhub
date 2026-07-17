@@ -65,6 +65,7 @@ class AgentDispatcherService
 
     /**
      * 从指定状态恢复执行（断点续跑 / 人工干预）。
+     * 失败状态自动回退到最近的成功阶段重试。
      */
     public function resume(int $executionId): AgentExecution
     {
@@ -74,6 +75,25 @@ class AgentDispatcherService
             'execution_id' => $executionId,
             'current_state' => $execution->current_state,
         ]);
+
+        // 失败状态：回退到最近的成功阶段
+        if ($execution->isFailed()) {
+            $execution->retry_count = 0;
+            $execution->error_data = null;
+            if (! empty($execution->review_output)) {
+                $execution->transitionTo(AgentExecution::STATE_REVIEWING);
+            } elseif (! empty($execution->deploy_output)) {
+                $execution->transitionTo(AgentExecution::STATE_DEPLOYING);
+            } elseif (! empty($execution->content_output)) {
+                $execution->transitionTo(AgentExecution::STATE_WRITING);
+            } elseif (! empty($execution->strategy_output)) {
+                $execution->transitionTo(AgentExecution::STATE_PLANNING);
+            } elseif (! empty($execution->scout_output)) {
+                $execution->transitionTo(AgentExecution::STATE_SCOUTING);
+            } else {
+                $execution->transitionTo(AgentExecution::STATE_IDLE);
+            }
+        }
 
         $this->advanceFrom($execution);
 
@@ -206,7 +226,7 @@ class AgentDispatcherService
             // v2.6.0: 复盘完成后判断是否需要迭代优化
             $needsIteration = (bool) ($output['needs_iteration'] ?? false);
             $workspace = \App\Models\Workspace::query()->find((int) $execution->workspace_id);
-            $autoIterationEnabled = $workspace && ($workspace->config['auto_optimize_iteration'] ?? false);
+            $autoIterationEnabled = $workspace && ($workspace->config['auto_optimize_iteration'] ?? true);
             $iterationCount = (int) ($execution->input_data['iteration'] ?? 0);
 
             if ($needsIteration && $autoIterationEnabled && $iterationCount < 3) {
@@ -231,6 +251,13 @@ class AgentDispatcherService
             // 正常完成
             $execution->saveAgentOutput(AgentExecution::AGENT_REVIEW, $output, AgentExecution::STATE_COMPLETED);
             $execution->markCompleted();
+
+            // v2.8.0: 记录到双层记忆库
+            try {
+                app(\App\Services\Agent\MemoryService::class)->recordExecution($execution);
+            } catch (\Throwable $e) {
+                Log::warning('MemoryService: record failed (non-blocking)', ['error' => $e->getMessage()]);
+            }
 
             Log::info('Agent workflow completed', [
                 'execution_id' => $execution->id,

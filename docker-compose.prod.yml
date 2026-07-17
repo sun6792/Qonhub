@@ -129,7 +129,7 @@ services:
       args: *prod_app_build_args
     container_name: geoflow-queue-prod
     working_dir: /var/www/html
-    command: ["php", "artisan", "queue:work", "redis", "--queue=geoflow,distribution,theme-replication,default", "--sleep=1", "--tries=1", "--timeout=300"]
+    command: ["php", "artisan", "queue:work", "redis", "--queue=geoflow,distribution,content-publish,agent_scout,theme-replication,default", "--sleep=1", "--tries=3", "--timeout=600"]
     volumes:
       - ./.env.prod:/var/www/html/.env
       - ./storage:/var/www/html/storage
@@ -157,6 +157,30 @@ services:
       init:
         condition: service_completed_successfully
     restart: unless-stopped
+
+  # ── RPA 浏览器自动化引擎（Node.js Playwright） ──
+  rpa-engine:
+    image: geoflow-rpa-engine-prod:latest
+    build:
+      context: ./rpa-engine
+      dockerfile: Dockerfile
+    container_name: geoflow-rpa-engine-prod
+    environment:
+      - RPA_PORT=9901
+      - RPA_API_KEY=${RPA_ENGINE_API_KEY}
+      - RPA_HEADLESS=${RPA_HEADLESS:-true}
+      - RPA_BACKEND=${RPA_BACKEND:-local}
+      - BROWSERLESS_WS_URL=${BROWSERLESS_WS_URL:-ws://browserless:3000}
+    ports:
+      - "127.0.0.1:${RPA_EXPOSE_PORT:-9901}:9901"
+    volumes:
+      - ${RPA_STORAGE_DIR:-./rpa-engine/storage}:/app/storage
+      - ${RPA_LOG_DIR:-./rpa-engine/logs}:/app/logs
+      - ${RPA_SCREENSHOTS_DIR:-./rpa-engine/screenshots}:/app/screenshots
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_started
 
   reverb:
     image: geoflow-app-prod:latest

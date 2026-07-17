@@ -47,13 +47,35 @@ class OpenAiCompatibleAdapter extends BaseLlmAdapter
         }
     }
 
+    /**
+     * 标准化请求参数 — 基础字段取默认值，其余字段安全透传。
+     *
+     * 透传字段包括但不限于：
+     *   tools / tool_choice（联网搜索、Function Calling）
+     *   enable_search（通义千问 DashScope 联网搜索开关）
+     *   web_search（讯飞星火 web_search 配置块）
+     *   top_p / frequency_penalty / presence_penalty / stop / response_format 等标准 OpenAI 参数
+     */
     protected function normalizeOptions(array $options): array
     {
-        return [
-            'max_tokens' => $options['max_tokens'] ?? 4096,
+        $safe = [
+            'max_tokens'  => $options['max_tokens'] ?? 4096,
             'temperature' => $options['temperature'] ?? 0.7,
-            'stream' => $options['stream'] ?? false,
+            'stream'      => $options['stream'] ?? false,
         ];
+
+        // 透传 Scout 联网搜索参数及标准 OpenAI 扩展参数
+        foreach ([
+            'tools', 'tool_choice', 'enable_search', 'web_search',
+            'top_p', 'frequency_penalty', 'presence_penalty',
+            'stop', 'response_format',
+        ] as $key) {
+            if (array_key_exists($key, $options)) {
+                $safe[$key] = $options[$key];
+            }
+        }
+
+        return $safe;
     }
 
     protected function sendRequestWithAuth(string $url, array $body): array

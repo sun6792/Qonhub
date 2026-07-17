@@ -52,7 +52,19 @@ for (const el of links) {
 
 await page.screenshot({ path: "./screenshots/scout_page.png", fullPage: true });
 console.log("\nScreenshot saved: ./screenshots/scout_page.png");
-console.log("\nDone. Close the browser window or press Ctrl+C.");
+console.log("\nDone. Browser will close after 60 seconds, or press Ctrl+C to keep it open.");
 
-// Keep browser open for manual inspection
-await new Promise(() => {});
+// Keep browser open for manual inspection, auto-close after 60s
+try {
+  await new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      console.log("\nAuto-closing browser after 60s...");
+      resolve();
+    }, 60000);
+    // Allow Ctrl+C to trigger resolve via SIGINT
+    process.once('SIGINT', () => { clearTimeout(timer); resolve(); });
+  });
+} finally {
+  await browser.close();
+  console.log("Browser closed.");
+}

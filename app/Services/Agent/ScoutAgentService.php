@@ -225,13 +225,19 @@ class ScoutAgentService
                     continue;
                 }
 
-                // 联网搜索参数
+                // 联网搜索参数（按平台分发，格式各不相同）
                 $extraOptions = ['max_tokens' => 1024, 'temperature' => 0.3];
                 if ($ws === true || $ws === 'search') {
+                    // 豆包 火山方舟：tools: [{"type":"search"}]
                     $extraOptions['tools'] = [['type' => 'search']];
                 } elseif ($ws === 'enable_search') {
+                    // 通义千问 DashScope：enable_search: true
                     $extraOptions['enable_search'] = true;
+                } elseif ($ws === 'web_search') {
+                    // OpenAI 兼容通用格式（文心一言 v2 / Kimi Moonshot）
+                    $extraOptions['tools'] = [['type' => 'web_search']];
                 } elseif ($ws === 'tools') {
+                    // 讯飞星火：tools: [{"type":"web_search","web_search":{"enable":true}}]
                     $extraOptions['tools'] = [['type' => 'web_search', 'web_search' => ['enable' => true]]];
                 }
 
@@ -391,10 +397,12 @@ class ScoutAgentService
     private function resolveAvailableScoutPlatforms(): array
     {
         $candidates = [
-            ['provider' => 'deepseek',    'model' => 'deepseek-v4-flash',               'name' => 'DeepSeek', 'web_search' => 'deepseek_anthropic'],
-            ['provider' => 'doubao',      'model' => 'doubao-seed-2-1-turbo-260628',    'name' => '豆包', 'web_search' => true],
-            ['provider' => 'qwen',        'model' => 'qwen-plus',                       'name' => '通义千问', 'web_search' => 'enable_search'],
-            ['provider' => 'xf_xinghuo',  'model' => 'spark-x',                         'name' => '讯飞星火', 'web_search' => 'tools'],
+            ['provider' => 'deepseek',    'model' => 'deepseek-v4-flash',               'name' => 'DeepSeek',   'web_search' => 'deepseek_anthropic'],
+            ['provider' => 'doubao',      'model' => 'doubao-seed-2-1-turbo-260628',    'name' => '豆包',       'web_search' => true],
+            ['provider' => 'qwen',        'model' => 'qwen-plus',                       'name' => '通义千问',    'web_search' => 'enable_search'],
+            ['provider' => 'xf_xinghuo',  'model' => 'spark-x',                         'name' => '讯飞星火',    'web_search' => 'tools'],
+            ['provider' => 'ernie',       'model' => 'ernie-4.0-turbo-8k',              'name' => '文心一言',    'web_search' => 'web_search'],
+            ['provider' => 'moonshot',    'model' => 'moonshot-v1-8k',                  'name' => 'Kimi',        'web_search' => 'web_search'],
             ['provider' => 'siliconflow', 'model' => 'Qwen/Qwen2.5-7B-Instruct',        'name' => '硅基千问(免费)'],
         ];
 

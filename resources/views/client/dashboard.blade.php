@@ -287,9 +287,34 @@
                style="background:linear-gradient(135deg,#6366f1,#8b5cf6); color:white;">前往平台登录 →</a>
         </div>
     </div>
+
+    {{-- 🤖 智能体报告 — v2.8.0 --}}
+    @if(!empty($recentExecutions))
+    <div class="bento-card p-5" style="background:rgba(22,24,40,0.9); border-color:rgba(129,140,248,0.25)">
+        <div class="flex items-center justify-between mb-3">
+            <h3 class="text-sm font-semibold text-ai-primary">🤖 智能体工作流</h3>
+        </div>
+        @foreach($recentExecutions as $r)
+        <a href="{{ route('client.agent-report', $r['id']) }}" class="flex items-center justify-between py-2 border-b border-gray-800/50 last:border-0 hover:bg-white/5 rounded px-2 -mx-2 transition">
+            <div class="flex items-center gap-3">
+                <span class="text-xs px-2 py-0.5 rounded-full font-medium
+                    {{ $r['state'] === 'completed' ? 'bg-green-900/50 text-green-300' : '' }}
+                    {{ $r['state'] === 'failed' ? 'bg-red-900/50 text-red-300' : '' }}
+                    {{ !in_array($r['state'], ['completed','failed']) ? 'bg-indigo-900/50 text-indigo-300' : '' }}">
+                    {{ $r['state_label'] }}
+                </span>
+                <span class="text-sm text-gray-300">#{{ $r['id'] }}</span>
+            </div>
+            <div class="flex items-center gap-3 text-xs">
+                <span class="text-gray-500">{{ $r['started_at'] }}</span>
+                <span class="font-semibold {{ $r['geo_score'] >= 70 ? 'text-green-400' : 'text-yellow-400' }}">GEO {{ $r['geo_score'] }}/{{ $r['geo_grade'] }}</span>
+                <span class="text-indigo-400">→</span>
+            </div>
+        </a>
+        @endforeach
+    </div>
+    @endif
 </div>
-<script>
-function showAuthGuide(name, url) {
     document.getElementById('auth-modal-title').textContent = '连接 ' + name;
     document.getElementById('auth-platform-name').textContent = name;
     document.getElementById('auth-platform-name2').textContent = name;

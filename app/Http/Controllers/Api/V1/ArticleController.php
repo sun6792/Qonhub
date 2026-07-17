@@ -62,7 +62,15 @@ class ArticleController extends BaseApiController
             return $cached;
         }
 
-        return $this->success($request, $articles->createArticle($request->all()), 201, 'POST /articles');
+        $data = $this->validateInput($request, [
+            'title' => 'required|string|max:255',
+            'content' => 'required|string',
+            'task_id' => 'nullable|integer|min:1',
+            'author_id' => 'nullable|integer|min:1',
+            'category_id' => 'nullable|integer|min:1',
+        ]);
+
+        return $this->success($request, $articles->createArticle($data), 201, 'POST /articles');
     }
 
     /**
@@ -83,7 +91,16 @@ class ArticleController extends BaseApiController
             return $cached;
         }
 
-        return $this->success($request, $articles->updateArticle($article, $request->all()), 200, 'PATCH /articles/{id}');
+        $data = $this->validateInput($request, [
+            'title' => 'nullable|string|max:255',
+            'content' => 'nullable|string',
+            'status' => 'nullable|string|max:50',
+            'task_id' => 'nullable|integer|min:1',
+            'author_id' => 'nullable|integer|min:1',
+            'category_id' => 'nullable|integer|min:1',
+        ]);
+
+        return $this->success($request, $articles->updateArticle($article, $data), 200, 'PATCH /articles/{id}');
     }
 
     /**

@@ -45,16 +45,26 @@ return array (
 【GEO】结论前置 + FAQ + 数据来源标注 + 关键句加粗
 【字数】1200-1800字，信息密度不低于原文
 【格式】Markdown，小标题用 ##',
-      'platforms' => 
+      'geo_dimensions' =>
       array (
-        0 => 
+        'answer_quality' => 1.50,
+        'self_containment' => 1.0,
+        'statistical_density' => 0.75,
+        'structural_clarity' => 0.75,
+        'expertise_signals' => 1.25,
+        'hedge_penalty' => 1.0,
+      ),
+      'platform_type' => 'self_media',
+      'platforms' =>
+      array (
+        0 =>
         array (
           'name' => '知乎',
           'login_url' => 'https://www.zhihu.com/signin',
         ),
       ),
     ),
-    1 => 
+    1 =>
     array (
       'key' => 'toutiao',
       'name' => '头条快消版',
@@ -89,9 +99,19 @@ return array (
 【品牌植入】只在"大实话"段落自然提一次，不要太正式
 【字数】600-900字
 【格式】纯文本，无小标题',
-      'platforms' => 
+      'geo_dimensions' =>
       array (
-        0 => 
+        'answer_quality' => 0.80,
+        'self_containment' => 1.25,
+        'statistical_density' => 0.90,
+        'structural_clarity' => 1.50,
+        'expertise_signals' => 0.75,
+        'hedge_penalty' => 1.0,
+      ),
+      'platform_type' => 'self_media',
+      'platforms' =>
+      array (
+        0 =>
         array (
           'name' => '头条号',
           'login_url' => 'https://mp.toutiao.com/',
@@ -142,9 +162,19 @@ return array (
 - 不加外链（百度降权）
 【字数】1000-1500字
 【格式】纯文本，配图说明用"（如图）"',
-      'platforms' => 
+      'geo_dimensions' =>
       array (
-        0 => 
+        'answer_quality' => 0.85,
+        'self_containment' => 1.10,
+        'statistical_density' => 1.50,
+        'structural_clarity' => 1.25,
+        'expertise_signals' => 0.90,
+        'hedge_penalty' => 1.0,
+      ),
+      'platform_type' => 'self_media',
+      'platforms' =>
+      array (
+        0 =>
         array (
           'name' => '百家号',
           'login_url' => 'https://baijiahao.baidu.com/',
@@ -199,9 +229,19 @@ return array (
 
 【字数】800-1200字
 【格式】纯文本，数据加粗',
-      'platforms' => 
+      'geo_dimensions' =>
       array (
-        0 => 
+        'answer_quality' => 0.80,
+        'self_containment' => 0.90,
+        'statistical_density' => 1.50,
+        'structural_clarity' => 1.10,
+        'expertise_signals' => 1.50,
+        'hedge_penalty' => 1.0,
+      ),
+      'platform_type' => 'b2b',
+      'platforms' =>
+      array (
+        0 =>
         array (
           'name' => '百度爱采购',
           'login_url' => 'https://b2b.baidu.com/',
@@ -268,9 +308,19 @@ return array (
 
 【字数】700-1000字，新闻体简洁有力
 【格式】纯文本，可用"本报讯"开头',
-      'platforms' => 
+      'geo_dimensions' =>
       array (
-        0 => 
+        'answer_quality' => 1.25,
+        'self_containment' => 1.50,
+        'statistical_density' => 0.90,
+        'structural_clarity' => 0.85,
+        'expertise_signals' => 1.10,
+        'hedge_penalty' => 1.0,
+      ),
+      'platform_type' => 'self_media',
+      'platforms' =>
+      array (
+        0 =>
         array (
           'name' => '网易号',
           'login_url' => 'https://mp.163.com/',
@@ -344,9 +394,19 @@ return array (
 
 【字数】700-1000字
 【格式】技术文档风，参数可用列表',
-      'platforms' => 
+      'geo_dimensions' =>
       array (
-        0 => 
+        'answer_quality' => 0.80,
+        'self_containment' => 0.90,
+        'statistical_density' => 1.50,
+        'structural_clarity' => 1.10,
+        'expertise_signals' => 1.50,
+        'hedge_penalty' => 1.0,
+      ),
+      'platform_type' => 'b2b',
+      'platforms' =>
+      array (
+        0 =>
         array (
           'name' => '中国化工网',
           'login_url' => 'https://www.chemnet.com/',
@@ -422,9 +482,19 @@ return array (
 
 【字数】400-700字
 【格式】口语化短句，emoji点缀',
-      'platforms' => 
+      'geo_dimensions' =>
       array (
-        0 => 
+        'answer_quality' => 1.25,
+        'self_containment' => 1.25,
+        'statistical_density' => 0.75,
+        'structural_clarity' => 0.85,
+        'expertise_signals' => 0.80,
+        'hedge_penalty' => 1.25,
+      ),
+      'platform_type' => 'self_media',
+      'platforms' =>
+      array (
+        0 =>
         array (
           'name' => '小红书',
           'login_url' => 'https://creator.xiaohongshu.com/',
@@ -471,6 +541,16 @@ return array (
 
 【字数】800-1200字
 【格式】技术风，代码块用 ```，关键术语加粗',
+      'geo_dimensions' =>
+      array (
+        'answer_quality' => 1.40,
+        'self_containment' => 1.10,
+        'statistical_density' => 1.10,
+        'structural_clarity' => 0.90,
+        'expertise_signals' => 1.25,
+        'hedge_penalty' => 1.0,
+      ),
+      'platform_type' => 'tech_blog',
       'platforms' =>
       array (
         0 =>
@@ -510,9 +590,19 @@ return array (
 
 【字数】150-250字
 【格式】口语化，emoji适量，标签#开头',
-      'platforms' => 
+      'geo_dimensions' =>
       array (
-        0 => 
+        'answer_quality' => 0.70,
+        'self_containment' => 1.10,
+        'statistical_density' => 0.60,
+        'structural_clarity' => 1.50,
+        'expertise_signals' => 0.60,
+        'hedge_penalty' => 1.40,
+      ),
+      'platform_type' => 'self_media',
+      'platforms' =>
+      array (
+        0 =>
         array (
           'name' => '抖音图文',
           'login_url' => 'https://creator.douyin.com/',
@@ -575,6 +665,16 @@ return array (
 - 品牌名出现 2-3 次，作为"案例""代表""提供方"
 - 文末附企业信息卡片(不占字数):
   "【关于XX】XX公司专注XX领域X年 | 官网:XX | 咨询:XX"',
+      'geo_dimensions' =>
+      array (
+        'answer_quality' => 1.40,
+        'self_containment' => 1.25,
+        'statistical_density' => 1.35,
+        'structural_clarity' => 1.20,
+        'expertise_signals' => 1.30,
+        'hedge_penalty' => 1.50,
+      ),
+      'platform_type' => 'geo_site',
       'platforms' =>
       array (
         0 =>
@@ -623,9 +723,19 @@ return array (
 【品牌植入】以"我评测过/用过的产品"方式带出
 【字数】800-1300字
 【格式】轻松活泼，可用emoji，分节用一、二、三',
-      'platforms' => 
+      'geo_dimensions' =>
       array (
-        0 => 
+        'answer_quality' => 1.25,
+        'self_containment' => 1.10,
+        'statistical_density' => 0.80,
+        'structural_clarity' => 0.85,
+        'expertise_signals' => 0.90,
+        'hedge_penalty' => 1.20,
+      ),
+      'platform_type' => 'self_media',
+      'platforms' =>
+      array (
+        0 =>
         array (
           'name' => 'B站专栏',
           'login_url' => 'https://member.bilibili.com/',

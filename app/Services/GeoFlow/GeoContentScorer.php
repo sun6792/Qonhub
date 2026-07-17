@@ -49,9 +49,14 @@ class GeoContentScorer
     /**
      * 对文章内容做全面 GEO 评分。
      *
-     * @return array{score:int, grade:string, dimensions:array, suggestions:array, hedge_count:int, data_count:int}
+     * @param  array<string,float>|null  $geoDimensions  Optional platform-specific dimension
+     *                                                    multipliers (1.0 = base weight).
+     *                                                    Keys: answer_quality, self_containment,
+     *                                                    statistical_density, structural_clarity,
+     *                                                    expertise_signals, hedge_penalty.
+     * @return array{score:int, grade:string, dimensions:array, suggestions:array, hedge_count:int, data_count:int, weights_used:array}
      */
-    public function score(string $title, string $content): array
+    public function score(string $title, string $content, ?array $geoDimensions = null): array
     {
         $title = trim($title);
         $content = trim(strip_tags($content));
@@ -70,14 +75,17 @@ class GeoContentScorer
         // 虚词扣分
         $hedgeScore = $this->hedgePenaltyToScore($hedgeAnalysis['density']);
 
+        // 计算平台自适应权重
+        $weights = $this->resolveWeights($geoDimensions);
+
         // 加权合成
         $rawScore = round(
-            $answerQuality * self::WEIGHTS['answer_quality']
-            + $selfContainment * self::WEIGHTS['self_containment']
-            + $statisticalDensity * self::WEIGHTS['statistical_density']
-            + $structuralClarity * self::WEIGHTS['structural_clarity']
-            + $expertiseSignals * self::WEIGHTS['expertise_signals']
-            + $hedgeScore * self::WEIGHTS['hedge_penalty']
+            $answerQuality * $weights['answer_quality']
+            + $selfContainment * $weights['self_containment']
+            + $statisticalDensity * $weights['statistical_density']
+            + $structuralClarity * $weights['structural_clarity']
+            + $expertiseSignals * $weights['expertise_signals']
+            + $hedgeScore * $weights['hedge_penalty']
         );
 
         $score = max(0, min(100, $rawScore));
@@ -97,7 +105,39 @@ class GeoContentScorer
             'hedge_count' => $hedgeAnalysis['total'],
             'hedge_density' => round($hedgeAnalysis['density'], 2),
             'data_count' => $this->countDataPoints($fullText),
+            'weights_used' => $weights,
         ];
+    }
+
+    /**
+     * Apply platform-specific GEO dimension multipliers and normalize to 1.0.
+     *
+     * @param  array<string,float>|null  $multipliers  e.g. ['answer_quality' => 1.5, ...]
+     * @return array<string,float>  Normalized weights summing to 1.0
+     */
+    public function resolveWeights(?array $multipliers): array
+    {
+        $weights = self::WEIGHTS;
+        if ($multipliers === null || $multipliers === []) {
+            return $weights;
+        }
+
+        // Apply multipliers to base weights
+        $adjusted = [];
+        foreach ($weights as $dim => $base) {
+            $mult = $multipliers[$dim] ?? 1.0;
+            $adjusted[$dim] = $base * max(0.1, min(3.0, $mult)); // clamp to [0.1, 3.0]
+        }
+
+        // Normalize to sum = 1.0
+        $sum = array_sum($adjusted);
+        if ($sum > 0) {
+            foreach ($adjusted as $dim => $val) {
+                $adjusted[$dim] = round($val / $sum, 4);
+            }
+        }
+
+        return $adjusted;
     }
 
     /**
@@ -111,10 +151,10 @@ class GeoContentScorer
     /**
      * 两篇文章对比，返回提升幅度。
      */
-    public function compare(string $oldContent, string $newContent): array
+    public function compare(string $oldContent, string $newContent, string $title = ''): array
     {
-        $oldScore = $this->quickScore('', $oldContent);
-        $newScore = $this->quickScore('', $newContent);
+        $oldScore = $this->quickScore($title, $oldContent);
+        $newScore = $this->quickScore($title, $newContent);
 
         return [
             'old_score' => $oldScore,
@@ -433,8 +473,8 @@ class GeoContentScorer
                 if (mb_strlen($h) > 3) $topics[] = $h;
             }
         }
-        // 从标题拆分关键短语
-        $parts = preg_split('/[、，,与及在的]/u', $title);
+        // 从标题按标点/连词拆分关键短语
+        $parts = preg_split('/[、，,;；\s]+/u', $title);
         foreach ($parts as $p) {
             $p = trim($p);
             if (mb_strlen($p) > 3 && mb_strlen($p) < 20) {
@@ -447,6 +487,149 @@ class GeoContentScorer
         }
 
         return array_slice($topics, 0, 6);
+    }
+
+    /**
+     * 段落级 GEO 诊断（对齐 geoskills geo-fix-content）。
+     *
+     * 对每个段落做 6 类问题检测，返回具体修复目标，
+     * 作为 AI 改写的精准输入——告诉 AI "改哪里"而不是笼统的"优化 GEO"。
+     *
+     * @return array{paragraphs:array, summary:array, fix_targets:array}
+     */
+    public function diagnoseParagraphs(string $content): array
+    {
+        $paragraphs = $this->splitParagraphs($content);
+        $diagnosed = [];
+        $summary = [
+            'total_paragraphs' => count($paragraphs),
+            'issues_found' => 0,
+            'hedge_paragraphs' => 0,
+            'weak_data_paragraphs' => 0,
+            'pronoun_heavy_paragraphs' => 0,
+            'long_paragraphs' => 0,
+            'missing_context_paragraphs' => 0,
+        ];
+        $fixTargets = [];
+
+        foreach ($paragraphs as $i => $para) {
+            $len = mb_strlen($para);
+            $issues = [];
+            $fixSuggestions = [];
+
+            // 1. 虚词检测 (Hedge Language)
+            $hedgeAnalysis = $this->analyzeHedgeWords($para);
+            if ($hedgeAnalysis['total'] > 0) {
+                $issues[] = 'hedge_language';
+                $summary['hedge_paragraphs']++;
+                $words = [];
+                foreach ($hedgeAnalysis['details'] as $cat => $cnt) {
+                    $words[] = "{$cat}({$cnt}个)";
+                }
+                $fixSuggestions[] = "删除或替换虚词: " . implode(', ', $words);
+            }
+
+            // 2. 数据密度不足 (Missing Data Support)
+            $dataCount = $this->countDataPoints($para);
+            if ($len > 100 && $dataCount === 0 && !preg_match('/^[#>*-]/', $para)) {
+                $issues[] = 'weak_data';
+                $summary['weak_data_paragraphs']++;
+                $fixSuggestions[] = "补充至少1个具体数据（百分比、年份、数值、对比数据）";
+            }
+
+            // 3. 代词过密 (Poor Self-Containment)
+            $pronounCount = preg_match_all('/\b(它|他们|她们|它们|这个|那个|这些|那些|他|她)\b/u', $para, $m);
+            $paraWordCount = $this->wordCount($para);
+            if ($paraWordCount > 0 && ($pronounCount / $paraWordCount) > 0.04) {
+                $issues[] = 'pronoun_heavy';
+                $summary['pronoun_heavy_paragraphs']++;
+                $fixSuggestions[] = '减少代词，用具体名词替代"它/这个/那个"——每段应独立可读';
+            }
+
+            // 4. 段落过长 (Structural Issues)
+            if ($len > 300) {
+                $issues[] = 'too_long';
+                $summary['long_paragraphs']++;
+                $fixSuggestions[] = "拆分为2-3个短段落（每段100-200字最利于AI引用）";
+            }
+
+            // 5. 缺少上下文 (Missing Definitions / Context)
+            if ($len > 80 && !preg_match('/[是为即指].{3,}|所谓|就是/us', $para) && preg_match('/[\x{4e00}-\x{9fff}]{10,}/u', $para)) {
+                // 段落有实质内容但缺少解释性语言
+                if ($i > 0 && !preg_match('/[是为即指].{3,}|所谓|就是/u', $paragraphs[$i - 1] ?? '')) {
+                    $issues[] = 'missing_context';
+                    $summary['missing_context_paragraphs']++;
+                    $fixSuggestions[] = "添加术语解释或背景说明，确保首次出现的专业术语有定义";
+                }
+            }
+
+            // 6. 弱答案块检测 (Weak Answer Blocks)
+            $firstSentence = mb_substr($para, 0, min(60, $len));
+            if (preg_match('/^[#\d\s]*.{0,20}[？?]/u', $firstSentence) && $len < 150) {
+                $issues[] = 'weak_answer';
+                $fixSuggestions[] = "问句后应紧跟150字以上的详细回答，不要太短";
+            }
+
+            if (!empty($issues)) {
+                $summary['issues_found']++;
+                $diagnosed[] = [
+                    'paragraph_index' => $i,
+                    'length' => $len,
+                    'issues' => $issues,
+                    'fix_suggestions' => $fixSuggestions,
+                    'preview' => mb_substr($para, 0, 80) . '...',
+                ];
+                $fixTargets[] = [
+                    'target' => "第" . ($i + 1) . "段",
+                    'preview' => mb_substr($para, 0, 60) . '...',
+                    'actions' => $fixSuggestions,
+                ];
+            }
+        }
+
+        return [
+            'paragraphs' => $diagnosed,
+            'summary' => $summary,
+            'fix_targets' => $fixTargets,
+        ];
+    }
+
+    /**
+     * 将段落诊断结果转换为 AI 改写可用的具体指令。
+     *
+     * @return string 可直接注入改写 prompt 的修复指令文本
+     */
+    public function buildFixPrompt(array $diagnosisResult): string
+    {
+        $targets = $diagnosisResult['fix_targets'] ?? [];
+        $summary = $diagnosisResult['summary'] ?? [];
+
+        if (empty($targets)) {
+            return '';
+        }
+
+        $lines = ["\n## 段落级 GEO 优化目标（geoskills 诊断）\n"];
+        $lines[] = "以下段落存在具体问题，请在改写时针对性修复：\n";
+
+        foreach ($targets as $t) {
+            $lines[] = "### {$t['target']}（原文：{$t['preview']}）";
+            foreach ($t['actions'] as $action) {
+                $lines[] = "- [ ] {$action}";
+            }
+            $lines[] = '';
+        }
+
+        if (!empty($summary)) {
+            $lines[] = "**诊断汇总：** "
+                . ($summary['total_paragraphs'] ?? 0) . " 段中 "
+                . ($summary['issues_found'] ?? 0) . " 段有问题"
+                . "（虚词:" . ($summary['hedge_paragraphs'] ?? 0)
+                . "，数据不足:" . ($summary['weak_data_paragraphs'] ?? 0)
+                . "，代词过密:" . ($summary['pronoun_heavy_paragraphs'] ?? 0)
+                . "，过长:" . ($summary['long_paragraphs'] ?? 0) . "）";
+        }
+
+        return implode("\n", $lines);
     }
 
     public function grade(int $score): string

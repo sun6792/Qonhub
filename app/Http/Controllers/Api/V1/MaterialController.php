@@ -47,7 +47,13 @@ class MaterialController extends BaseApiController
             return $cached;
         }
 
-        return $this->success($request, $materials->create($type, $request->all()), 201, 'POST /materials/{type}');
+        $data = $this->validateInput($request, [
+            'name' => 'required|string|max:255',
+            'description' => 'nullable|string',
+            'workspace_id' => 'nullable|integer|min:1',
+        ]);
+
+        return $this->success($request, $materials->create($type, $data), 201, 'POST /materials/{type}');
     }
 
     /**
@@ -68,7 +74,12 @@ class MaterialController extends BaseApiController
             return $cached;
         }
 
-        return $this->success($request, $materials->update($type, $id, $request->all()), 200, 'PATCH /materials/{type}/{id}');
+        $data = $this->validateInput($request, [
+            'name' => 'nullable|string|max:255',
+            'description' => 'nullable|string',
+        ]);
+
+        return $this->success($request, $materials->update($type, $id, $data), 200, 'PATCH /materials/{type}/{id}');
     }
 
     /**
@@ -107,7 +118,13 @@ class MaterialController extends BaseApiController
             return $cached;
         }
 
-        return $this->success($request, $materials->createItem($type, $id, $request->all()), 201, 'POST /materials/{type}/{id}/items');
+        $data = $this->validateInput($request, [
+            'value' => 'required|string|max:65535',
+            'label' => 'nullable|string|max:255',
+            'meta' => 'nullable|array',
+        ]);
+
+        return $this->success($request, $materials->createItem($type, $id, $data), 201, 'POST /materials/{type}/{id}/items');
     }
 
     /**

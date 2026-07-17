@@ -263,38 +263,68 @@
       });
     });
     </script>
+    {{-- v2.6.0 快照凭证弹窗 --}}
+    <div id="snapshot-modal" style="display:none; position:fixed; inset:0; z-index:9999; background:rgba(0,0,0,0.7); backdrop-filter:blur(4px);" onclick="document.getElementById('snapshot-modal').style.display='none'">
+        <div style="position:relative; max-width:600px; margin:8% auto; background:rgba(22,24,40,0.96); border:1px solid rgba(165,180,252,0.2); border-radius:16px; padding:24px;" onclick="event.stopPropagation()">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-bold text-white" id="snap-title"></h3>
+                <button onclick="document.getElementById('snapshot-modal').style.display='none'" class="text-ai-dim hover:text-white text-xl">&times;</button>
+            </div>
+            <div id="snap-body" class="text-sm space-y-3"></div>
+            <div class="mt-4 pt-3 border-t flex justify-end gap-2" style="border-color:rgba(165,180,252,0.1)">
+                <a id="snap-verify-link" href="#" target="_blank" class="text-xs text-indigo-400 hover:underline">在平台验证</a>
+                <button onclick="document.getElementById('snapshot-modal').style.display='none'" class="text-xs px-3 py-1 rounded-lg border text-ai-dim hover:text-white" style="border-color:rgba(165,180,252,0.2)">关闭</button>
+            </div>
+        </div>
+    </div>
     @stack('scripts')
 </body>
 </html>
-
-
-{{-- v2.6.0 快照凭证弹窗 --}}
-<div id="snapshot-modal" style="display:none; position:fixed; inset:0; z-index:9999; background:rgba(0,0,0,0.7); backdrop-filter:blur(4px);" onclick="document.getElementById('snapshot-modal').style.display='none'">
-    <div style="position:relative; max-width:600px; margin:8% auto; background:rgba(22,24,40,0.96); border:1px solid rgba(165,180,252,0.2); border-radius:16px; padding:24px;" onclick="event.stopPropagation()">
-        <div class="flex justify-between items-center mb-4">
-            <h3 class="text-lg font-bold text-white" id="snap-title"></h3>
-            <button onclick="document.getElementById('snapshot-modal').style.display='none'" class="text-ai-dim hover:text-white text-xl">&times;</button>
-        </div>
-        <div id="snap-body" class="text-sm space-y-3"></div>
-        <div class="mt-4 pt-3 border-t flex justify-end gap-2" style="border-color:rgba(165,180,252,0.1)">
-            <a id="snap-verify-link" href="#" target="_blank" class="text-xs text-indigo-400 hover:underline">在平台验证</a>
-            <button onclick="document.getElementById('snapshot-modal').style.display='none'" class="text-xs px-3 py-1 rounded-lg border text-ai-dim hover:text-white" style="border-color:rgba(165,180,252,0.2)">关闭</button>
-        </div>
-    </div>
-</div>
 <script>
 function showSnapshot(platform, icon, color, query, time, mentioned, snippet, verifyUrl) {
-    document.getElementById('snap-title').innerHTML = icon + ' ' + platform + ' - 检测快照';
-    document.getElementById('snap-body').innerHTML =
-        '<div style="color:#9ca3af;font-size:12px">搜索词</div>' +
-        '<div style="color:#e0e0e0;background:rgba(255,255,255,0.04);padding:8px 12px;border-radius:8px">' + (query||'') + '</div>' +
-        '<div class="flex gap-4"><div><div style="color:#9ca3af;font-size:12px">时间</div><div style="color:#e0e0e0">' + (time||'') + '</div></div><div><div style="color:#9ca3af;font-size:12px">结果</div><div style="color:' + (mentioned ? '#86efac' : '#9ca3af') + '">' + (mentioned ? '已收录' : '未提及') + '</div></div></div>' +
-        '<div style="color:#9ca3af;font-size:12px">AI回复快照</div>' +
-        '<div style="color:#d0d0d0;background:rgba(255,255,255,0.04);padding:10px 12px;border-radius:8px;max-height:200px;overflow-y:auto;font-size:13px;line-height:1.6">' + (snippet || '暂无') + '</div>';
+    document.getElementById('snap-title').textContent = icon + ' ' + platform + ' - 检测快照';
+    const body = document.getElementById('snap-body');
+    body.innerHTML = ''; // clear
+
+    // Search query
+    body.appendChild(createSnapRow('搜索词', query||''));
+    // Time & Result
+    const flexRow = document.createElement('div');
+    flexRow.className = 'flex gap-4';
+    flexRow.appendChild(createSnapCol('时间', time||''));
+    flexRow.appendChild(createSnapCol('结果', mentioned ? '已收录' : '未提及', mentioned ? '#86efac' : '#9ca3af'));
+    body.appendChild(flexRow);
+    // Snippet
+    body.appendChild(createSnapRow('AI回复快照', snippet || '暂无'));
+
     var vlink = document.getElementById('snap-verify-link');
     if(verifyUrl) { vlink.href = verifyUrl; vlink.style.display = ''; }
     else { vlink.style.display = 'none'; }
     document.getElementById('snapshot-modal').style.display = 'block';
+}
+function createSnapRow(label, value, valueColor) {
+    var wrap = document.createElement('div');
+    var lbl = document.createElement('div');
+    lbl.style.cssText = 'color:#9ca3af;font-size:12px';
+    lbl.textContent = label;
+    var val = document.createElement('div');
+    val.style.cssText = 'color:' + (valueColor || '#e0e0e0') + ';background:rgba(255,255,255,0.04);padding:8px 12px;border-radius:8px;max-height:200px;overflow-y:auto;font-size:13px;line-height:1.6';
+    val.textContent = value;
+    wrap.appendChild(lbl);
+    wrap.appendChild(val);
+    return wrap;
+}
+function createSnapCol(label, value, valueColor) {
+    var wrap = document.createElement('div');
+    var lbl = document.createElement('div');
+    lbl.style.cssText = 'color:#9ca3af;font-size:12px';
+    lbl.textContent = label;
+    var val = document.createElement('div');
+    val.style.cssText = 'color:' + (valueColor || '#e0e0e0') + '';
+    val.textContent = value;
+    wrap.appendChild(lbl);
+    wrap.appendChild(val);
+    return wrap;
 }
 </script>
 </body>

@@ -88,6 +88,26 @@ class ReviewAgentService
             || count($allOutputs['deploy']['failed_channels'] ?? []) > 0
             || ($allOutputs['deploy']['timed_out'] ?? false);
 
+        // ③.5 A 型 LLM 归因分析（增强建议质量）
+        $attributionInsights = [];
+        $reviewMode = 'rule';
+        try {
+            $attrResult = $this->executeATypeAttribution($wsId, $summary);
+            if ($attrResult['success'] && ! empty($attrResult['attribution_report'])) {
+                $parsed = json_decode($attrResult['attribution_report'], true);
+                if (is_array($parsed)) {
+                    $attributionInsights = $parsed['insights'] ?? [];
+                    // LLM 归因的建议优先级更高，插入到规则建议前面
+                    foreach (array_reverse($attributionInsights) as $insight) {
+                        array_unshift($recommendations, '📊 ' . $insight);
+                    }
+                    $reviewMode = 'llm';
+                }
+            }
+        } catch (\Throwable $e) {
+            // A 型失败不影响 B 型输出
+        }
+
         // ④ 情报分析：从 Scout 快照提取可操作洞察，指导下轮探测策略
         $iteration = (int) ($execution->input_data['iteration'] ?? 0);
         $scoutBrief = $this->generateScoutBrief($allOutputs, $visibilityData, $recommendations, $iteration);
@@ -98,6 +118,8 @@ class ReviewAgentService
             'recommendations' => $recommendations,
             'scout_brief' => $scoutBrief,
             'needs_iteration' => $needsIteration,
+            'attribution_insights' => $attributionInsights,
+            'review_mode' => $reviewMode,
             'reviewed_at' => now()->toIso8601String(),
         ];
     }

@@ -62,21 +62,23 @@ class ContentArmoryController extends Controller
         }
 
         // 按工作空间过滤：非超管默认只看自己绑定的 workspace
+        // v2.8.1 修复：Agent 管道生成的文章 task_id 可能为 NULL，改用 workspace_assignments 过滤
         if ($workspaceId > 0) {
-            $taskIds = $workspaceService->assignedIds($workspaceId, \App\Models\Task::class);
-            $articlesQuery->whereIn('task_id', $taskIds ?: [0]);
+            $articleIds = $workspaceService->assignedIds($workspaceId, Article::class);
+            if ($articleIds === []) {
+                $articlesQuery->whereRaw('1=0');
+            } else {
+                $articlesQuery->whereIn('id', $articleIds);
+            }
         } elseif (! Auth::guard('admin')->user()?->isSuperAdmin()) {
             $adminWsIds = Auth::guard('admin')->user()?->scopedWorkspaceIds() ?? [];
             if ($adminWsIds === []) {
-                $articlesQuery->whereRaw('1=0'); // 无绑定 → 看不到任何文章
+                $articlesQuery->whereRaw('1=0');
             } elseif ($adminWsIds !== null) {
-                $articlesQuery->whereIn('task_id', function ($sub) use ($adminWsIds) {
-                    $sub->select('id')->from('tasks')
-                        ->whereIn('id', function ($s2) use ($adminWsIds) {
-                            $s2->select('assignable_id')->from('workspace_assignments')
-                                ->where('assignable_type', \App\Models\Task::class)
-                                ->whereIn('workspace_id', $adminWsIds);
-                        });
+                $articlesQuery->whereIn('id', function ($sub) use ($adminWsIds) {
+                    $sub->select('assignable_id')->from('workspace_assignments')
+                        ->where('assignable_type', Article::class)
+                        ->whereIn('workspace_id', $adminWsIds);
                 });
             }
         }
@@ -135,17 +137,24 @@ class ContentArmoryController extends Controller
 
         // GEO 评分：改写前打分
         $scorer = app(\App\Services\GeoFlow\GeoContentScorer::class);
-        $beforeScore = $scorer->score((string) $article->title, (string) $article->content);
 
-        /** @var list<array{key:string, name:string, prompt:string, style:string}> $templates */
+        /** @var list<array{key:string, name:string, prompt:string, style:string, geo_dimensions?:array, platform_type?:string}> $templates */
         $templates = config('media-templates.templates', []);
         $template = collect($templates)->firstWhere('key', $templateKey);
         if (! $template) {
             return response()->json(['ok' => false, 'error' => '模板不存在'], 404);
         }
 
+        // 使用平台自适应 GEO 维度权重评分
+        $geoDimensions = $template['geo_dimensions'] ?? null;
+        $beforeScore = $scorer->score((string) $article->title, (string) $article->content, $geoDimensions);
+
+        // 段落级诊断（对齐 geoskills geo-fix-content）
+        $diagnosis = $scorer->diagnoseParagraphs(strip_tags((string) $article->content));
+        $fixPrompt = $scorer->buildFixPrompt($diagnosis);
+
         try {
-            $rewritten = $this->rewriteWithAi($article, $template);
+            $rewritten = $this->rewriteWithAi($article, $template, $fixPrompt);
         } catch (Throwable $e) {
             return response()->json([
                 'ok' => false,
@@ -153,8 +162,8 @@ class ContentArmoryController extends Controller
             ], 500);
         }
 
-        // GEO 评分：改写后打分 + 对比
-        $afterScore = $scorer->score($article->title, $rewritten);
+        // GEO 评分：改写后打分（使用相同平台权重）+ 对比
+        $afterScore = $scorer->score($article->title, $rewritten, $geoDimensions);
 
         return response()->json([
             'ok' => true,
@@ -165,9 +174,18 @@ class ContentArmoryController extends Controller
                 'improvement' => $afterScore['score'] - $beforeScore['score'],
                 'grade' => $beforeScore['grade'] . ' → ' . $afterScore['grade'],
                 'suggestions' => $afterScore['suggestions'],
+                'weights_used' => $afterScore['weights_used'] ?? [],
+            ],
+            'diagnosis' => [
+                'total_paragraphs' => $diagnosis['summary']['total_paragraphs'] ?? 0,
+                'issues_found' => $diagnosis['summary']['issues_found'] ?? 0,
+                'hedge_paragraphs' => $diagnosis['summary']['hedge_paragraphs'] ?? 0,
+                'weak_data_paragraphs' => $diagnosis['summary']['weak_data_paragraphs'] ?? 0,
+                'fix_count' => count($diagnosis['fix_targets'] ?? []),
             ],
             'rewritten' => $rewritten,
             'template_name' => $template['name'],
+            'platform_type' => $template['platform_type'] ?? 'self_media',
         ]);
     }
 
@@ -309,7 +327,7 @@ class ContentArmoryController extends Controller
         $payload = $request->validate([
             'article_id' => ['required', 'integer', 'min:1'],
             'workspace_id' => ['required', 'integer', 'min:1'],
-            'platform' => ['required', 'string', 'in:toutiao_publish,baijiahao_publish,xiaohongshu_publish'],
+            'platform' => ['required', 'string', 'in:toutiao_publish,baijiahao_publish,xiaohongshu_publish,sohu_publish'],
             'rewritten_title' => ['nullable', 'string', 'max:500'],
             'rewritten_content' => ['nullable', 'string'],
         ]);
@@ -333,6 +351,7 @@ class ContentArmoryController extends Controller
             'toutiao_publish' => '头条号',
             'baijiahao_publish' => '百家号',
             'xiaohongshu_publish' => '小红书',
+            'sohu_publish' => '搜狐号',
         ];
 
         try {
@@ -351,6 +370,7 @@ class ContentArmoryController extends Controller
                 'options' => [
                     'workspace_id' => $workspaceId,
                     'timeout_seconds' => 300,
+                    'cover_image' => base_path('豆流2033.png'),
                 ],
             ]);
 
@@ -400,7 +420,7 @@ class ContentArmoryController extends Controller
     /**
      * @param  array{key:string, name:string, prompt:string, style:string}  $template
      */
-    private function rewriteWithAi(Article $article, array $template): string
+    private function rewriteWithAi(Article $article, array $template, string $diagnosisFixPrompt = ''): string
     {
         // 取第一个可用的 chat 模型
         /** @var AiModel|null $aiModel */
@@ -445,7 +465,8 @@ class ContentArmoryController extends Controller
         }
 
         // 构建公司/品牌推广上下文
-        $companyProfile = $this->buildCompanyProfile($article);
+        $platformType = $template['platform_type'] ?? 'self_media';
+        $companyProfile = $this->buildCompanyProfile($article, $platformType);
 
         // 知识库关键数据提取（注入改写 Prompt）
         $kbContext = '';
@@ -473,6 +494,7 @@ class ContentArmoryController extends Controller
             .$originalContent."\n\n"
             ."=== 改写要求 ===\n"
             .$template['prompt']."\n\n"
+            .$diagnosisFixPrompt
             ."=== GEO 优化要求（提高 AI 搜索引擎引用率） ===\n"
             ."1. 优先使用上文「知识库关键数据」中的统计数据、百分比、具体数值\n"
             ."2. 使用 Q&A 结构（问答形式）提高 AI 引用概率\n"
@@ -515,7 +537,16 @@ class ContentArmoryController extends Controller
     /**
      * 构建公司/品牌推广上下文，供 AI 改写时自然植入。
      */
-    private function buildCompanyProfile(Article $article): string
+    /**
+     * Build company profile context with platform-type-aware brand exposure rules.
+     *
+     * Platform types (aligned with geoskills Entity & Brand Signals dimension):
+     *   - self_media: strict (brand 0-1x) — platforms have aggressive AI marketing detection
+     *   - b2b:        moderate (brand 2-3x) — brand consistency IS a GEO signal
+     *   - tech_blog:  balanced (brand 1-2x) — brand as solution case study
+     *   - geo_site:   balanced (brand 2-3x) — needs entity signals for AI recognition
+     */
+    private function buildCompanyProfile(Article $article, string $platformType = 'self_media'): string
     {
         $siteName = config('geoflow.site_name', 'Qonhub AI');
         $siteFullName = config('geoflow.site_full_name', 'Qonhub AI内容生成系统');
@@ -537,25 +568,82 @@ class ContentArmoryController extends Controller
             }
         }
 
-        // 站点联系方式
         $siteUrl = rtrim((string) config('app.url', 'http://localhost:18080'), '/');
         $contactInfo = config('geoflow.contact_info', '');
 
-        // v2.6.0: 品牌信息仅作为"行业背景数据"注入，不写推广指令
-        $profile = "=== 行业背景信息（仅用于增加文章专业度，不要推销） ===\n"
+        // 根据平台类型选择品牌露出规则
+        $brandRules = $this->getBrandRulesForPlatformType($platformType);
+
+        $profile = "=== 行业背景信息（{$brandRules['label']}） ===\n"
             ."行业参考：{$siteFullName}\n";
 
         if ($companyIntro !== '') {
             $profile .= "领域知识：{$companyIntro}\n";
         }
 
-        $profile .= "\n【重要：品牌植入规则——不遵守会触发平台营销检测导致限流】\n"
-            ."- 品牌最多出现1次，且必须是文章的\"案例之一\"，和其他品牌并列提及\n"
-            ."- 严禁文末加导流语句（\"如需了解更多\"\"访问官网\"\"联系我们\"等全部禁止）\n"
-            ."- 严禁写\"XX公司成立于XX年，致力于...\"这种企业介绍式段落\n"
-            ."- 正确的品牌出现方式：\"市面上的方案有几类，比如A公司（XX）做的XX方向...\"\n"
-            ."- 文章应该是行业视角的客观分析，品牌只是众多案例中的一个名字\n";
+        $profile .= $brandRules['instructions'];
 
         return $profile;
+    }
+
+    /**
+     * @return array{label:string, instructions:string}
+     */
+    private function getBrandRulesForPlatformType(string $platformType): array
+    {
+        return match ($platformType) {
+            'self_media' => [
+                'label' => '自媒体平台——品牌最小化',
+                'instructions' =>
+                    "\n【品牌植入规则——自媒体平台（头条/百家号/知乎/小红书/B站/短视频）】\n"
+                    ."这些平台有AI营销检测（朱雀大模型等），品牌露出需极克制：\n"
+                    ."- 品牌最多出现 0-1 次，且必须是文章的\"案例之一\"，和其他品牌并列提及\n"
+                    ."- 严禁文末加导流语句（\"如需了解更多\"\"访问官网\"\"联系我们\"等全部禁止）\n"
+                    ."- 严禁写\"XX公司成立于XX年，致力于...\"这种企业介绍式段落\n"
+                    ."- 正确方式：\"市面上的方案有几类，比如A公司（XX）做的XX方向...\"\n"
+                    ."- 文章应该是行业视角的客观分析，品牌只是众多案例中的一个名字\n",
+            ],
+            'b2b' => [
+                'label' => 'B2B平台——品牌一致性=GEO信号',
+                'instructions' =>
+                    "\n【品牌植入规则——B2B平台（爱采购/黄页88/1688/行业垂直站）】\n"
+                    ."B2B平台上品牌一致性是GEO的Entity & Brand Signals维度（权重25%），\n"
+                    ."适度露出品牌有助于AI引擎识别企业实体：\n"
+                    ."- 品牌可出现 2-3 次，以\"技术提供方\"\"行业代表企业\"\"案例参考\"等角色出现\n"
+                    ."- 文末可附企业信息卡片：\"【关于XX】XX公司专注XX领域X年 | 已服务XX+企业客户\"\n"
+                    ."- 品牌露出要伴随数据支撑：\"XX公司服务了200+客户，平均帮客户提升效率34%\"\n"
+                    ."- 严禁浮夸用语（\"最好\"\"第一\"\"国家级\"），用具体数据说话\n"
+                    ."- 品牌一致性原则：名称、描述、联系方式在整篇文章中保持一致，供AI识别\n",
+            ],
+            'tech_blog' => [
+                'label' => '技术博客——案例驱动品牌露出',
+                'instructions' =>
+                    "\n【品牌植入规则——技术博客（CSDN/博客园）】\n"
+                    ."技术博客读者对硬广敏感，但可以以\"解决方案提供方\"身份适度提及品牌：\n"
+                    ."- 品牌可出现 1-2 次，作为\"踩坑经验的总结者\"\"问题解决方案的来源\"\n"
+                    ."- 正确方式：\"我们团队最终采用了XX（品牌名）方案，主要看中其...\"\n"
+                    ."- 文末可附作者信息：\"作者：XX团队技术负责人，专注XX领域。博客：XX\"\n"
+                    ."- 严禁直接推销或CTA，保持技术分享的调性\n",
+            ],
+            'geo_site' => [
+                'label' => 'GEO站点——品牌实体信号增强',
+                'instructions' =>
+                    "\n【品牌植入规则——GEO目标站（Agent部署站点）】\n"
+                    ."GEO站点的核心目标是让AI搜索引擎识别并引用品牌实体，\n"
+                    ."需要平衡品牌信号强度与内容可信度：\n"
+                    ."- 品牌可出现 2-3 次，以\"第三方客观视角\"提及\n"
+                    ."- 文末附企业信息卡片：\"【关于XX】XX公司专注XX领域X年 | 官网:XX | 咨询:XX\"\n"
+                    ."- 品牌名一致性（同一篇文章中不要混用简称/全称/英文名）→ 增强Entity Recognition\n"
+                    ."- 引用至少1处行业数据标注品牌作为数据来源\n"
+                    ."- 专家引言中可包含品牌技术负责人的真实身份\n",
+            ],
+            default => [
+                'label' => '通用——品牌最小化',
+                'instructions' =>
+                    "\n【品牌植入规则——通用】\n"
+                    ."- 品牌最多出现1次，以行业案例形式提及\n"
+                    ."- 严禁硬广和CTA\n",
+            ],
+        };
     }
 }

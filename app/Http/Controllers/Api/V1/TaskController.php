@@ -48,7 +48,15 @@ class TaskController extends BaseApiController
             return $cached;
         }
 
-        return $this->success($request, $tasks->createTask($request->all()), 201, 'POST /tasks');
+        $data = $this->validateInput($request, [
+            'name' => 'required|string|max:255',
+            'keywords' => 'nullable|string',
+            'schedule_enabled' => 'nullable|boolean',
+            'publish_scope' => 'nullable|string',
+            'workspace_id' => 'nullable|integer|min:1',
+        ]);
+
+        return $this->success($request, $tasks->createTask($data), 201, 'POST /tasks');
     }
 
     /**
@@ -71,7 +79,14 @@ class TaskController extends BaseApiController
             return $cached;
         }
 
-        return $this->success($request, $tasks->updateTask($task, $request->all()), 200, 'PATCH /tasks/{id}');
+        $data = $this->validateInput($request, [
+            'name' => 'nullable|string|max:255',
+            'keywords' => 'nullable|string',
+            'schedule_enabled' => 'nullable|boolean',
+            'publish_scope' => 'nullable|string',
+        ]);
+
+        return $this->success($request, $tasks->updateTask($task, $data), 200, 'PATCH /tasks/{id}');
     }
 
     /**

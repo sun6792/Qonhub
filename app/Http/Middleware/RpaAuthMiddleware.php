@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -22,7 +23,7 @@ class RpaAuthMiddleware
         if ($expected === '' || $expected === 'qonhub-rpa-secret-change-me') {
             // 允许本地开发环境使用默认 key，但记录警告
             if (app()->environment('local') && $expected === 'qonhub-rpa-secret-change-me') {
-                // 本地开发：继续处理但记录警告
+                Log::warning('RPA Engine: using default API key. Set RPA_ENGINE_API_KEY in .env for production.');
             } else {
                 return response()->json([
                     'ok' => false,

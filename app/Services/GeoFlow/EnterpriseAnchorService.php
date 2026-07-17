@@ -186,7 +186,8 @@ class EnterpriseAnchorService
         $updateData = [];
         foreach ($fillable as $field) {
             if (array_key_exists($field, $data)) {
-                $updateData[$field] = $data[$field];
+                // null → '' 避免 NOT NULL 约束报错
+                $updateData[$field] = $data[$field] ?? '';
             }
         }
 

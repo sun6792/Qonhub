@@ -9,6 +9,11 @@ return new class extends Migration
 {
     public function up(): void
     {
+        // PostgreSQL only — skip silently on SQLite / MySQL / etc.
+        if (DB::getDriverName() !== 'pgsql') {
+            return;
+        }
+
         // 添加 tsvector 列（自动从 content 生成）
         DB::statement('ALTER TABLE knowledge_chunks ADD COLUMN IF NOT EXISTS ts_vector tsvector');
         DB::statement("ALTER TABLE knowledge_chunks ALTER COLUMN ts_vector SET DEFAULT ''::tsvector");
@@ -34,6 +39,10 @@ return new class extends Migration
 
     public function down(): void
     {
+        if (DB::getDriverName() !== 'pgsql') {
+            return;
+        }
+
         DB::statement('DROP TRIGGER IF EXISTS trg_chunk_tsvector ON knowledge_chunks');
         DB::statement('DROP FUNCTION IF EXISTS update_chunk_tsvector()');
         DB::statement('DROP INDEX IF EXISTS idx_chunks_tsvector');

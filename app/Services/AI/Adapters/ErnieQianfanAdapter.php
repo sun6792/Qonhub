@@ -41,13 +41,25 @@ class ErnieQianfanAdapter extends BaseLlmAdapter
 
     protected function normalizeOptions(array $options): array
     {
-        return [
+        $safe = [
             'max_output_tokens' => $options['max_tokens'] ?? 2048,
             'temperature' => $options['temperature'] ?? 0.7,
             'top_p' => $options['top_p'] ?? 0.8,
             // 文心一言使用 penalty_score，不是 frequency_penalty
             'penalty_score' => 1.0,
         ];
+
+        // 透传联网搜索及扩展参数（千帆 v2 OpenAI 兼容接口用 tools，v1 用 enable_search 等自定义字段）
+        foreach ([
+            'tools', 'tool_choice', 'enable_search', 'web_search',
+            'stream', 'stop', 'response_format', 'frequency_penalty', 'presence_penalty',
+        ] as $key) {
+            if (array_key_exists($key, $options)) {
+                $safe[$key] = $options[$key];
+            }
+        }
+
+        return $safe;
     }
 
     protected function normalizeResponse(array $raw): array

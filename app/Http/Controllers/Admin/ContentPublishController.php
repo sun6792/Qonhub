@@ -147,6 +147,27 @@ class ContentPublishController extends Controller
             ->with('success', '任务已取消');
     }
 
+    // ── 删除任务 ────────────────────────────────────────
+
+    public function destroy(int $taskId): RedirectResponse
+    {
+        $task = ContentPublishTask::query()->findOrFail($taskId);
+        $this->authorizeWorkspaceAccess((int) $task->workspace_id);
+
+        // 先取消进行中的作业，再删除
+        if (!in_array($task->status, ['completed', 'cancelled', 'failed'])) {
+            $this->publishService->cancelTask($task);
+        }
+
+        $workspaceId = (int) $task->workspace_id;
+        $task->results()->delete();
+        $task->delete();
+
+        return redirect()
+            ->route('admin.content-publish.index', ['workspace_id' => $workspaceId])
+            ->with('success', '任务已删除');
+    }
+
     // ── API: 任务进度（供前端轮询） ─────────────────────
 
     public function taskProgress(int $taskId): \Illuminate\Http\JsonResponse
