@@ -65,28 +65,42 @@ class ToutiaoPublishScript extends BasePlatformScript {
             .replace(/<[^>]+>/g, '')
             .replace(/\n{3,}/g, '\n\n')
             .trim();
-        const bodyHtml = bodyContent ? bodyContent.split('\n\n').map(p => `<p>${p}</p>`).join('') : '<p></p>';
-        // MultiPost 方式：只发 ClipboardEvent paste，不碰 innerHTML
-        // innerHTML 会让 React 富文本编辑器产生乱码
-        const bodyOk = await page.evaluate((html) => {
-            const editor = document.querySelector('div[contenteditable="true"]');
-            if (!editor) return false;
-            editor.focus();
-            const dt = new DataTransfer();
-            dt.setData('text/html', html);
-            editor.dispatchEvent(new ClipboardEvent('paste', {
-                bubbles: true, cancelable: true, clipboardData: dt,
-            }));
-            editor.dispatchEvent(new Event('input', { bubbles: true }));
-            return true;
-        }, bodyHtml);
-        this.log(`Body: ${bodyOk ? 'OK' : 'fallback'} (${bodyContent.length} chars)`);
+        // v2.9 最终方案：系统剪贴板 + Ctrl+V（唯一产生isTrusted=true的paste事件）
+        // page.evaluate中dispatchEvent(ClipboardEvent)的isTrusted=false被React拒绝
+        // execCommand('insertText')同样被Toutiao的ProseMirror编辑器忽略
+        await page.evaluate((text) => {
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            ta.style.position = 'fixed';
+            ta.style.left = '-9999px';
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+        }, bodyContent);
+        await this.wait(200, 400);
+        let bodyOk = false;
+        const bodyEl = page.locator('div[contenteditable="true"]').first();
+        if (await bodyEl.isVisible({timeout: 3000}).catch(() => false)) {
+            await bodyEl.click({ force: true });
+            await this.wait(200, 400);
+            await page.keyboard.press('Control+a');
+            await page.keyboard.press('Backspace');
+            await this.wait(100, 200);
+            await page.keyboard.press('Control+v');
+            await this.wait(500, 1000);
+            // 验证：检查编辑器文字长度
+            const charCount = await page.evaluate(() => {
+                const ed = document.querySelector('div[contenteditable="true"]');
+                return ed ? (ed.textContent || '').length : 0;
+            });
+            bodyOk = charCount > 10;
+            this.log(`Body: ${bodyOk ? 'OK' : 'FAIL'} (${charCount} chars in editor, expected ${bodyContent.length})`);
+        }
         if (!bodyOk) {
-            const bodyEl = page.locator('[contenteditable="true"]').first();
-            if (await bodyEl.isVisible({timeout: 3000}).catch(() => false)) {
-                await bodyEl.click({ force: true });
-                await page.keyboard.press('Control+v');
-            }
+            this.log('⚠️ Body paste failed, trying keyboard.insertText fallback...');
+            await page.keyboard.insertText(bodyContent.substring(0, 500));
+            await this.wait(500, 1000);
         }
         await this.ss(page, "04_body_done");
         await this.wait(1000, 2000);
