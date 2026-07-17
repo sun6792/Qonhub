@@ -365,7 +365,15 @@ class ContentArmoryController extends Controller
 
         try {
             $rpaClient = app(RpaEngineClient::class);
-            $result = $rpaClient->executeTask([
+
+            // 健康检查
+            $health = $rpaClient->healthCheck();
+            if (! ($health['healthy'] ?? false)) {
+                return response()->json(['ok' => false, 'error' => 'RPA 引擎未启动。请在 rpa-engine 目录执行 node server.js'], 503);
+            }
+
+            // v2.9: 使用异步模式，避免 PHP 30秒超时
+            $taskId = $rpaClient->createTaskAsync([
                 'platform' => $platform,
                 'platform_name' => $platformNames[$platform],
                 'action' => 'publish_article',
@@ -383,19 +391,12 @@ class ContentArmoryController extends Controller
                 ],
             ]);
 
-            if ($result['success'] ?? false) {
-                Log::info('RPA publish success', ['platform' => $platform, 'article_id' => $articleId]);
-                return response()->json([
-                    'ok' => true,
-                    'task_id' => $result['task_id'] ?? '',
-                    'shop_url' => $result['shop_url'] ?? '',
-                    'message' => "已发布到{$platformNames[$platform]}",
-                ]);
-            }
+            Log::info('RPA publish task submitted', ['task_id' => $taskId, 'platform' => $platform, 'article_id' => $articleId]);
 
             return response()->json([
-                'ok' => false,
-                'error' => $result['error'] ?? 'RPA执行失败',
+                'ok' => true,
+                'task_id' => $taskId,
+                'message' => "发布任务已提交（{$taskId}），正在后台自动发布到{$platformNames[$platform]}...",
             ]);
         } catch (Throwable $e) {
             Log::error('RPA publish error', ['message' => $e->getMessage()]);

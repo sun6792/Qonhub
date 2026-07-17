@@ -288,10 +288,16 @@ export async function publish({ taskId, account, enterprise, content, options, l
         };
 
         try { await script._saveState(); } catch {}
-        try { await browser.close(); } catch {}
+        if (process.env.USE_PERSISTENT_PROFILE !== 'true') {
+            try { await browser.close(); } catch {}
+        } else {
+            try { await page.close(); } catch {} // 只关页面，不关浏览器
+        }
         return result;
     } catch (err) {
-        try { await browser.close(); } catch {}
+        if (process.env.USE_PERSISTENT_PROFILE !== 'true') {
+            try { await browser.close(); } catch {}
+        }
         return { success: false, article_url: "", error: err.message, status: "error" };
     }
 }

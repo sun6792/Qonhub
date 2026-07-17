@@ -53,12 +53,12 @@
 
         {{-- 定时发布计划 --}}
         @php $scheduledItems = $scheduledItems ?? collect(); @endphp
-        @if ($scheduledItems->isNotEmpty())
         <div class="rounded-xl border border-amber-200 bg-amber-50 shadow-sm overflow-hidden">
             <div class="border-b border-amber-200 px-5 py-3 flex items-center justify-between">
                 <h2 class="text-sm font-semibold text-amber-800">⏰ 定时发布计划</h2>
                 <span class="text-xs text-amber-600">{{ $scheduledItems->count() }} 条</span>
             </div>
+            @if ($scheduledItems->isNotEmpty())
             <div class="divide-y divide-amber-100 text-sm">
                 @foreach ($scheduledItems as $item)
                 <div class="flex items-center justify-between px-5 py-2">
@@ -81,8 +81,12 @@
                 </div>
                 @endforeach
             </div>
+            @else
+            <div class="px-5 py-4 text-center text-sm text-amber-600">
+                暂无定时计划。勾选上方文章 → 选平台 → 选时间 → 点 ⏰定时发布 即可创建。
+            </div>
+            @endif
         </div>
-        @endif
 
         {{-- 文章列表 --}}
         @if ($articles->isEmpty())
@@ -93,7 +97,7 @@
             </div>
         @else
             {{-- 批量操作栏 --}}
-            <div id="batchBar" class="hidden sticky top-0 z-10 rounded-lg bg-indigo-50 border border-indigo-200 p-3 flex items-center gap-3 shadow">
+            <div id="batchBar" class="sticky top-0 z-10 rounded-lg bg-indigo-50 border border-indigo-200 p-3 flex items-center gap-3 shadow">
                 <label class="flex items-center gap-1 text-sm"><input type="checkbox" id="selectAll" onchange="toggleSelectAll(this)" class="rounded"> 全选</label>
                 <span id="selectedCount" class="text-sm text-indigo-700 font-medium">已选 0 篇</span>
                 <select id="batchPlatform" class="rounded border-gray-300 text-sm">
@@ -478,10 +482,9 @@
         const bar = document.getElementById('batchBar');
         const count = document.getElementById('selectedCount');
         if (checked.length > 0) {
-            bar.classList.remove('hidden');
             count.textContent = '已选 ' + checked.length + ' 篇';
         } else {
-            bar.classList.add('hidden');
+            count.textContent = '勾选文章后批量操作';
         }
     };
     window.cancelSchedule = async function(id) {
@@ -496,14 +499,15 @@
     };
 
     window.batchSchedulePublish = async function() {
-        const checked = document.querySelectorAll('.article-checkbox:checked');
         const platform = document.getElementById('batchPlatform').value;
-        const scheduledAt = document.getElementById('batchScheduleTime').value;
-        const status = document.getElementById('batchStatus');
-        const wsId = document.querySelector('select[name=\"workspace_id\"]')?.value || {{ $workspaceId }} || 0;
         if (!platform) { alert('请选择发布平台'); return; }
+        const scheduledAt = document.getElementById('batchScheduleTime').value;
         if (!scheduledAt) { alert('请选择定时发布时间'); return; }
-        if (checked.length === 0) { alert('请勾选文章'); return; }
+        const checked = document.querySelectorAll('.article-checkbox:checked');
+        if (checked.length === 0) { alert('请先勾选文章'); return; }
+        const wsId = document.querySelector('select[name="workspace_id"]')?.value || '0';
+        if (wsId === '0') { alert('请先在上方选择一个客户'); return; }
+
         const ids = Array.from(checked).map(c => parseInt(c.value));
         if (!confirm('将 ' + ids.length + ' 篇文章定时发布于 ' + scheduledAt + ' 到 ' + platform + '，确认？')) return;
 
@@ -514,61 +518,64 @@
                 body: JSON.stringify({ article_ids: ids, workspace_id: parseInt(wsId), platform: platform, scheduled_at: scheduledAt })
             });
             const data = await resp.json();
-            if (data.ok) { alert(data.message); status.textContent = '⏰ ' + data.message; }
+            if (data.ok) { alert(data.message); location.reload(); }
             else { alert('失败: ' + (data.error || '未知错误')); }
         } catch(e) { alert('请求失败: ' + e.message); }
     };
 
     window.batchPublish = async function() {
-        const checked = document.querySelectorAll('.article-checkbox:checked');
-        const platform = document.getElementById('batchPlatform').value;
-        const template = document.getElementById('batchTemplate').value;
         const status = document.getElementById('batchStatus');
+        const platform = document.getElementById('batchPlatform').value;
         if (!platform) { alert('请选择发布平台'); return; }
-        if (checked.length === 0) { alert('请勾选文章'); return; }
-        const ids = Array.from(checked).map(c => parseInt(c.value));
-        if (!confirm('将为 ' + ids.length + ' 篇文章改写并发布到 ' + platform + '，确认？')) return;
+        const checked = document.querySelectorAll('.article-checkbox:checked');
+        if (checked.length === 0) { alert('请先勾选文章'); return; }
+        const wsId = document.querySelector('select[name="workspace_id"]')?.value || '0';
+        if (wsId === '0') { alert('请先在上方选择一个客户'); return; }
 
-        status.textContent = '⏳ 处理中 0/' + ids.length + '...';
-        let done = 0, ok = 0;
+        const ids = Array.from(checked).map(c => parseInt(c.value));
+        if (!confirm('将为 ' + ids.length + ' 篇文章发布到 ' + platform + '，确认？')) return;
+
+        let ok = 0;
         for (const articleId of ids) {
             try {
-                const wsId = document.querySelector('select[name=\"workspace_id\"]')?.value || {{ $workspaceId }} || 0;
-            if (!wsId || wsId === '0') { alert('请先在上方选择一个客户'); status.textContent = '❌ 未选择客户'; return; }
-            const body = { article_id: articleId, workspace_id: parseInt(wsId), platform: platform };
-                if (template) body.template_key = template;
-
-                // 如果有模板，先改写
-                if (template) {
-                    const rResp = await fetch('{{ route('admin.distribution.armory.rewrite') }}', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': CSRF },
-                        body: JSON.stringify({ article_id: articleId, template_key: template })
-                    });
-                    const rData = await rResp.json();
-                    if (rData.ok) {
-                        body.rewritten_title = rData.title;
-                        body.rewritten_content = rData.rewritten;
-                    }
-                }
-
-                // RPA 发布
+                status.textContent = '⏳ 提交任务...';
+                const body = { article_id: articleId, workspace_id: parseInt(wsId), platform: platform };
                 const pResp = await fetch('{{ route('admin.distribution.armory.publish-rpa') }}', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': CSRF },
                     body: JSON.stringify(body)
                 });
                 const pData = await pResp.json();
-                if (pData.ok) ok++;
-                done++;
-                status.textContent = '⏳ 处理中 ' + done + '/' + ids.length + ' (成功:' + ok + ')';
+                if (!pData.ok) { status.textContent = '❌ ' + (pData.error || '提交失败'); continue; }
+
+                // 轮询 RPA 任务状态
+                const taskId = pData.task_id;
+                status.textContent = '⏳ 发布中...';
+                for (let poll = 0; poll < 30; poll++) {
+                    await new Promise(r => setTimeout(r, 2000));
+                    try {
+                        const tResp = await fetch('http://127.0.0.1:9901/api/v1/tasks/' + taskId, {
+                            headers: { 'X-API-Key': 'qonhub-rpa-secret-change-me' }
+                        });
+                        const tData = await tResp.json();
+                        if (tData.status === 'completed') {
+                            if (tData.result?.success) ok++;
+                            status.textContent = '✅ ' + ok + '/' + ids.length + (tData.result?.article_url ? ' ' + tData.result.article_url : '');
+                            break;
+                        }
+                        if (tData.status === 'failed') {
+                            status.textContent = '❌ 第' + (ok+1) + '篇失败: ' + (tData.error || '');
+                            break;
+                        }
+                        status.textContent = '⏳ 发布中...(' + (poll+1) + '/' + ids.length + ' 篇)';
+                    } catch {}
+                }
             } catch(e) {
-                done++;
-                status.textContent = '⏳ 处理中 ' + done + '/' + ids.length + ' (失败:' + (done-ok) + ')';
+                status.textContent = '❌ 网络错误: ' + e.message;
             }
         }
-        status.textContent = '✅ 完成！成功 ' + ok + '/' + ids.length;
-        updateBatchBar();
+        if (ok === ids.length) status.textContent = '✅ 全部成功！' + ok + '/' + ids.length;
+        else status.textContent = '⚠️ 完成 ' + ok + '/' + ids.length;
     };
 })();
 </script>

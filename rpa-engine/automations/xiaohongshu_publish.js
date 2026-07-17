@@ -106,10 +106,18 @@ export async function publish({ taskId, account, enterprise, content, options, l
         const article = { title: content?.title || "", body: content?.content || "" };
         const pubResult = await script.publishFlow(page, article);
         try { await script._saveState(); } catch {}
-        try { await browser.close(); } catch {}
+        if (process.env.USE_PERSISTENT_PROFILE !== 'true') {
+            try { await browser.close(); } catch {}
+        } else {
+            try { await page.close(); } catch {}
+        }
         return { success: pubResult.status === PUBLISH_STATUS.SUCCESS || pubResult.status === "success", article_url: pubResult.article_url || "", error: "", status: pubResult.status };
     } catch (err) {
-        try { await browser.close(); } catch {}
+        if (process.env.USE_PERSISTENT_PROFILE !== 'true') {
+            try { await browser.close(); } catch {}
+        } else {
+            try { await page.close(); } catch {}
+        }
         return { success: false, article_url: "", error: err.message, status: "error" };
     }
 }
