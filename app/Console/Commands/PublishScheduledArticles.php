@@ -50,7 +50,21 @@ class PublishScheduledArticles extends Command
                 continue;
             }
 
+            // 文章封面图：优先用文章的 cover_image，否则不传（让 RPA 脚本用自己的默认图）
+            $coverImage = null;
+            if (! empty($article->cover_image)) {
+                $coverImage = $article->cover_image;
+            }
+
             try {
+                $options = [
+                    'workspace_id' => (int) $schedule->workspace_id,
+                    'timeout_seconds' => 300,
+                ];
+                if ($coverImage !== null) {
+                    $options['cover_image'] = $coverImage;
+                }
+
                 $result = $rpaClient->executeTask([
                     'platform' => $schedule->platform,
                     'action' => 'publish_article',
@@ -61,11 +75,7 @@ class PublishScheduledArticles extends Command
                         'content' => (string) $article->content,
                         'article_id' => (int) $article->id,
                     ],
-                    'options' => [
-                        'workspace_id' => (int) $schedule->workspace_id,
-                        'timeout_seconds' => 300,
-                        'cover_image' => base_path('豆流2033.png'),
-                    ],
+                    'options' => $options,
                 ]);
 
                 if ($result['success'] ?? false) {

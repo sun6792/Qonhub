@@ -51,6 +51,39 @@
             @endif
         </form>
 
+        {{-- 定时发布计划 --}}
+        @php $scheduledItems = $scheduledItems ?? collect(); @endphp
+        @if ($scheduledItems->isNotEmpty())
+        <div class="rounded-xl border border-amber-200 bg-amber-50 shadow-sm overflow-hidden">
+            <div class="border-b border-amber-200 px-5 py-3 flex items-center justify-between">
+                <h2 class="text-sm font-semibold text-amber-800">⏰ 定时发布计划</h2>
+                <span class="text-xs text-amber-600">{{ $scheduledItems->count() }} 条</span>
+            </div>
+            <div class="divide-y divide-amber-100 text-sm">
+                @foreach ($scheduledItems as $item)
+                <div class="flex items-center justify-between px-5 py-2">
+                    <div>
+                        <span class="font-medium text-gray-700">{{ $item->article?->title ? mb_substr($item->article->title, 0, 40) : '文章#'.$item->article_id }}</span>
+                        <span class="text-xs text-gray-400 ml-2">→ {{ $item->platform }}</span>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <span class="text-xs text-gray-500">{{ $item->scheduled_at->format('m-d H:i') }}</span>
+                        <span class="px-2 py-0.5 rounded-full text-xs font-medium
+                            {{ $item->status === 'pending' ? 'bg-blue-100 text-blue-700' : '' }}
+                            {{ $item->status === 'completed' ? 'bg-green-100 text-green-700' : '' }}
+                            {{ $item->status === 'failed' ? 'bg-red-100 text-red-700' : '' }}">
+                            {{ ['pending'=>'等待中','processing'=>'发布中','completed'=>'已完成','failed'=>'失败','cancelled'=>'已取消'][$item->status] ?? $item->status }}
+                        </span>
+                        @if($item->status === 'pending')
+                        <button onclick="cancelSchedule({{ $item->id }})" class="text-xs text-red-400 hover:text-red-600">取消</button>
+                        @endif
+                    </div>
+                </div>
+                @endforeach
+            </div>
+        </div>
+        @endif
+
         {{-- 文章列表 --}}
         @if ($articles->isEmpty())
             <div class="rounded-lg bg-white p-10 text-center shadow">
@@ -451,6 +484,17 @@
             bar.classList.add('hidden');
         }
     };
+    window.cancelSchedule = async function(id) {
+        if (!confirm('确认取消此定时发布？')) return;
+        try {
+            const resp = await fetch(`/geo_admin/distribution/armory/schedule-cancel/${id}`, {
+                method: 'POST', headers: { 'X-CSRF-TOKEN': CSRF }
+            });
+            const data = await resp.json();
+            if (data.ok) location.reload();
+        } catch(e) { alert('取消失败: ' + e.message); }
+    };
+
     window.batchSchedulePublish = async function() {
         const checked = document.querySelectorAll('.article-checkbox:checked');
         const platform = document.getElementById('batchPlatform').value;

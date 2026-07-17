@@ -90,5 +90,36 @@
       <pre class="text-sm text-red-600 whitespace-pre-wrap">{{ json_encode($execution->error_data, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) }}</pre>
     </div>
   @endif
+
+  {{-- v2.9: 发布状态 --}}
+  @php
+    $schedules = \App\Models\PublishingSchedule::query()
+        ->where('workspace_id', (int)$execution->workspace_id)
+        ->whereIn('article_id', function($q) use ($execution) {
+            $q->select('assignable_id')->from('workspace_assignments')
+              ->where('assignable_type', 'App\\Models\\Article')
+              ->where('workspace_id', (int)$execution->workspace_id)
+              ->orderByDesc('id')->limit(5);
+        })
+        ->orderByDesc('id')->limit(10)->get();
+  @endphp
+  @if($schedules->isNotEmpty())
+  <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-6">
+    <h4 class="font-semibold text-gray-800 mb-3">📡 发布状态</h4>
+    <div class="space-y-2 text-sm">
+    @foreach($schedules as $s)
+      <div class="flex items-center justify-between py-1 border-b border-gray-100 last:border-0">
+        <span class="text-gray-600">{{ $s->platform }} · {{ $s->scheduled_at->format('H:i') }}</span>
+        <span class="px-2 py-0.5 rounded-full text-xs font-medium
+          {{ $s->status === 'completed' ? 'bg-green-100 text-green-700' : '' }}
+          {{ $s->status === 'pending' ? 'bg-blue-100 text-blue-700' : '' }}
+          {{ $s->status === 'failed' ? 'bg-red-100 text-red-700' : '' }}">
+          {{ ['pending'=>'⏳待发布','processing'=>'🔄发布中','completed'=>'✅已发布','failed'=>'❌失败'][$s->status] ?? $s->status }}
+        </span>
+      </div>
+    @endforeach
+    </div>
+  </div>
+  @endif
 </div>
 @stop

@@ -169,3 +169,23 @@ export async function execute({ taskId, account, enterprise, options, logger }) 
     }
     return result;
 }
+
+/**
+ * publish() — server.js /api/v1/publish 端点调用的入口。
+ * v2.9: 百家号发布入口，复用 MultiPost 模式填表。
+ */
+export async function publish({ taskId, account, enterprise, content, options, logger }) {
+    const logFn = (msg) => logger?.info ? logger.info(msg) : console.log(msg);
+    const script = new BaijiahaoPublishScript(taskId, account, enterprise, options, logFn);
+    const { browser, page } = await script.launchBrowserWithRetry();
+    try {
+        const article = { title: content?.title || "", body: content?.content || "", cover_image: options?.cover_image || null };
+        const pubResult = await script.publishFlow(page, article);
+        try { await script._saveState(); } catch {}
+        try { await browser.close(); } catch {}
+        return { success: pubResult.status === PUBLISH_STATUS.SUCCESS || pubResult.status === "success", article_url: pubResult.article_url || "", error: "", status: pubResult.status };
+    } catch (err) {
+        try { await browser.close(); } catch {}
+        return { success: false, article_url: "", error: err.message, status: "error" };
+    }
+}

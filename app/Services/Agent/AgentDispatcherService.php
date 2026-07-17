@@ -267,16 +267,29 @@ class AgentDispatcherService
                 $platforms = $strategyOutput['task_config']['target_platforms'] ?? [];
                 if ($articleId && $platforms !== []) {
                     // 策略输出用短名(toutiao), 发布引擎用全名(toutiao_publish)
+                    // 白名单：只有确认支持的平台才创建调度记录
                     $platformMap = ['toutiao' => 'toutiao_publish', 'baijiahao' => 'baijiahao_publish',
                         'xiaohongshu' => 'xiaohongshu_publish', 'sohu' => 'sohu_publish'];
+                    $scheduled = 0;
+                    $skipped = [];
                     foreach ($platforms as $p) {
-                        $fullPlatform = $platformMap[$p] ?? ($p . '_publish');
+                        if (! isset($platformMap[$p])) {
+                            $skipped[] = $p;
+                            continue;
+                        }
                         \App\Models\PublishingSchedule::create([
                             'workspace_id' => (int) $execution->workspace_id,
                             'article_id' => (int) $articleId,
-                            'platform' => $fullPlatform,
+                            'platform' => $platformMap[$p],
                             'scheduled_at' => now(),
                             'status' => 'pending',
+                        ]);
+                        $scheduled++;
+                    }
+                    if ($skipped !== []) {
+                        Log::warning('Agent: skipped unsupported platforms', [
+                            'platforms' => $skipped,
+                            'execution_id' => $execution->id,
                         ]);
                     }
                     Log::info('Agent: auto-scheduled publishing', [

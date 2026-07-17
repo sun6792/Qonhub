@@ -102,6 +102,14 @@ class ContentArmoryController extends Controller
             $templateStats[$tpl['key']] = count($tpl['platforms']);
         }
 
+        // v2.9: 定时发布计划
+        $scheduledItems = \App\Models\PublishingSchedule::query()
+            ->when($workspaceId > 0, fn ($q) => $q->where('workspace_id', $workspaceId))
+            ->with(['article'])
+            ->orderByDesc('scheduled_at')
+            ->limit(20)
+            ->get();
+
         return view('admin.distribution.armory', [
             'pageTitle' => '内容弹药库',
             'activeMenu' => 'distribution',
@@ -112,6 +120,7 @@ class ContentArmoryController extends Controller
             'search' => $search,
             'workspaceId' => $workspaceId,
             'workspaces' => $workspaces,
+            'scheduledItems' => $scheduledItems,
         ]);
     }
 
@@ -431,21 +440,50 @@ class ContentArmoryController extends Controller
         ]);
 
         $count = 0;
-        foreach ($payload['article_ids'] as $articleId) {
-            \App\Models\PublishingSchedule::create([
-                'workspace_id' => (int) $payload['workspace_id'],
-                'article_id' => (int) $articleId,
-                'platform' => $payload['platform'],
-                'scheduled_at' => $payload['scheduled_at'],
-                'status' => 'pending',
-            ]);
-            $count++;
-        }
+        $skipped = 0;
+
+        \Illuminate\Support\Facades\DB::transaction(function () use ($payload, &$count, &$skipped) {
+            foreach ($payload['article_ids'] as $articleId) {
+                // 去重：同一篇文章+同一个平台已有 pending/processing 任务则跳过
+                $exists = \App\Models\PublishingSchedule::query()
+                    ->where('article_id', (int) $articleId)
+                    ->where('platform', $payload['platform'])
+                    ->whereIn('status', ['pending', 'processing'])
+                    ->exists();
+
+                if ($exists) {
+                    $skipped++;
+                    continue;
+                }
+
+                \App\Models\PublishingSchedule::create([
+                    'workspace_id' => (int) $payload['workspace_id'],
+                    'article_id' => (int) $articleId,
+                    'platform' => $payload['platform'],
+                    'scheduled_at' => $payload['scheduled_at'],
+                    'status' => 'pending',
+                ]);
+                $count++;
+            }
+        });
 
         return response()->json([
             'ok' => true,
-            'message' => "{$count} 篇文章已加入定时发布队列，将于 {$payload['scheduled_at']} 自动发布到 {$payload['platform']}",
+            'message' => "{$count} 篇文章已加入定时发布队列" . ($skipped > 0 ? "（{$skipped} 篇已存在，跳过）" : '') . "，将于 {$payload['scheduled_at']} 自动发布到 {$payload['platform']}",
         ]);
+    }
+
+    /**
+     * 取消定时发布。
+     */
+    public function cancelSchedule(int $id): \Illuminate\Http\JsonResponse
+    {
+        $schedule = \App\Models\PublishingSchedule::findOrFail($id);
+        if ($schedule->status === 'pending') {
+            $schedule->status = 'cancelled';
+            $schedule->save();
+        }
+        return response()->json(['ok' => true]);
     }
 
     /**

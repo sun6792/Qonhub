@@ -30,4 +30,4 @@ Schedule::command('geoflow:check-visibility')->dailyAt('02:00');
 /**
  * 定时分发：每分钟扫描 publishing_schedules，到时间的文章自动发布。
  */
-Schedule::command('publish:scheduled')->everyMinute();
+Schedule::command('publish:scheduled')->everyMinute()->withoutOverlapping()->runInBackground();

@@ -179,6 +179,7 @@ Route::prefix($adminPrefix)->name('admin.')->middleware(['admin.locale'])->group
             Route::post('armory/publish', [\App\Http\Controllers\Admin\ContentArmoryController::class, 'publishToChannels'])->name('armory.publish');
             Route::post('armory/publish-to-rpa', [\App\Http\Controllers\Admin\ContentArmoryController::class, 'publishToRpa'])->name('armory.publish-rpa');
             Route::post('armory/schedule-publish', [\App\Http\Controllers\Admin\ContentArmoryController::class, 'schedulePublish'])->name('armory.schedule-publish');
+            Route::post('armory/schedule-cancel/{id}', [\App\Http\Controllers\Admin\ContentArmoryController::class, 'cancelSchedule'])->name('armory.schedule-cancel')->whereNumber('id');
             Route::get('armory/channels', [\App\Http\Controllers\Admin\ContentArmoryController::class, 'availableChannels'])->name('armory.channels');
         });
 

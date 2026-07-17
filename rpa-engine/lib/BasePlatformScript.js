@@ -226,6 +226,7 @@ export class BasePlatformScript {
             if (usePersistent) {
                 // ── Persistent Context 模式 ──
                 this.log(`Persistent profile: ${profileDir}`);
+                this._isPersistent = true;
                 context = await chromium.launchPersistentContext(profileDir, {
                     headless: this.headless,
                     channel: BROWSER_CHANNEL,
@@ -525,7 +526,12 @@ export class BasePlatformScript {
                     this.log(`Saved login state to ${this._stateFile}`);
                 } catch {}
             }
-            try { await browser.close(); } catch {}
+            // v2.9: persistent context → context.close(); normal → browser.close()
+            if (this._isPersistent && this._context) {
+                try { await this._context.close(); } catch {}
+            } else {
+                try { await browser.close(); } catch {}
+            }
             this.log("Browser closed");
         }
 
@@ -539,6 +545,8 @@ export class BasePlatformScript {
      * execute() 已在 finally 块自动保存，但单独 launchBrowser() 需手动调用本方法。
      */
     async _saveState() {
+        // Persistent Context 模式下 Chrome 自动管理 Cookie，无需手动保存
+        if (this._isPersistent) return;
         if (this._stateFile && this._context) {
             try {
                 const state = await this._context.storageState();
