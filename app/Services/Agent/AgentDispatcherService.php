@@ -259,6 +259,36 @@ class AgentDispatcherService
                 Log::warning('MemoryService: record failed (non-blocking)', ['error' => $e->getMessage()]);
             }
 
+            // v2.9: Agent 完成后自动创建分发计划
+            try {
+                $contentOutput = $execution->content_output ?? [];
+                $articleId = $contentOutput['article_id'] ?? null;
+                $strategyOutput = $execution->strategy_output ?? [];
+                $platforms = $strategyOutput['task_config']['target_platforms'] ?? [];
+                if ($articleId && $platforms !== []) {
+                    // 策略输出用短名(toutiao), 发布引擎用全名(toutiao_publish)
+                    $platformMap = ['toutiao' => 'toutiao_publish', 'baijiahao' => 'baijiahao_publish',
+                        'xiaohongshu' => 'xiaohongshu_publish', 'sohu' => 'sohu_publish'];
+                    foreach ($platforms as $p) {
+                        $fullPlatform = $platformMap[$p] ?? ($p . '_publish');
+                        \App\Models\PublishingSchedule::create([
+                            'workspace_id' => (int) $execution->workspace_id,
+                            'article_id' => (int) $articleId,
+                            'platform' => $fullPlatform,
+                            'scheduled_at' => now(),
+                            'status' => 'pending',
+                        ]);
+                    }
+                    Log::info('Agent: auto-scheduled publishing', [
+                        'execution_id' => $execution->id,
+                        'article_id' => $articleId,
+                        'platforms' => $platforms,
+                    ]);
+                }
+            } catch (\Throwable $e) {
+                Log::warning('Agent: auto-schedule failed (non-blocking)', ['error' => $e->getMessage()]);
+            }
+
             Log::info('Agent workflow completed', [
                 'execution_id' => $execution->id,
                 'workspace_id' => $execution->workspace_id,

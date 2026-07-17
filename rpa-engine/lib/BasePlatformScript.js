@@ -218,40 +218,69 @@ export class BasePlatformScript {
             page = await context.newPage();
         } else {
             // ── 本地模式：启动本地 Edge 浏览器 ──
-            const launchOpts = {
-                headless: this.headless,
-                args: [
-                    "--no-sandbox",
-                    "--disable-blink-features=AutomationControlled",
-                    "--disable-features=IsolateOrigins,site-per-process",
-                ],
-            };
+            // v2.9: 支持 Persistent Profile（长期登录态，Cookie永不过期）
+            const usePersistent = process.env.USE_PERSISTENT_PROFILE === 'true';
+            const profileDir = path.join(__dirname, "..", "storage", "profiles", String(this.workspaceId));
+            if (!fs.existsSync(profileDir)) fs.mkdirSync(profileDir, { recursive: true });
 
-            if (this.proxy) {
-                launchOpts.proxy = { server: this.proxy };
-            }
+            if (usePersistent) {
+                // ── Persistent Context 模式 ──
+                this.log(`Persistent profile: ${profileDir}`);
+                context = await chromium.launchPersistentContext(profileDir, {
+                    headless: this.headless,
+                    channel: BROWSER_CHANNEL,
+                    userAgent: this.randomUA(),
+                    viewport: { width: 1366 + this.rand(-100, 100), height: 768 + this.rand(-50, 50) },
+                    locale: "zh-CN",
+                    timezoneId: "Asia/Shanghai",
+                    permissions: [],
+                    args: [
+                        "--no-sandbox",
+                        "--disable-blink-features=AutomationControlled",
+                        "--disable-features=IsolateOrigins,site-per-process",
+                    ],
+                });
+                browser = context.browser();
+                page = context.pages()[0] || await context.newPage();
+                this.log(`Persistent profile loaded (cookies auto-managed by Chrome)`);
+            } else {
+                // ── 传统 storageState 模式（默认）──
+                const launchOpts = {
+                    headless: this.headless,
+                    args: [
+                        "--no-sandbox",
+                        "--disable-blink-features=AutomationControlled",
+                        "--disable-features=IsolateOrigins,site-per-process",
+                    ],
+                };
 
-            launchOpts.channel = BROWSER_CHANNEL;
-            browser = await chromium.launch(launchOpts);
+                if (this.proxy) {
+                    launchOpts.proxy = { server: this.proxy };
+                }
 
-            const contextOpts = {
-                userAgent: this.randomUA(),
-                viewport: { width: 1366 + this.rand(-100, 100), height: 768 + this.rand(-50, 50) },
-                locale: "zh-CN",
-                timezoneId: "Asia/Shanghai",
-                permissions: [],
-                geolocation: undefined,
-            };
-            if (fs.existsSync(stateFile)) {
-                try {
-                    contextOpts.storageState = JSON.parse(fs.readFileSync(stateFile, "utf-8"));
-                    this.log(`Loaded saved login state from ${stateFile}`);
-                } catch { /* corrupted, ignore */ }
-            }
+                launchOpts.channel = BROWSER_CHANNEL;
+                browser = await chromium.launch(launchOpts);
 
-            context = await browser.newContext(contextOpts);
-            page = await context.newPage();
-        }
+                const contextOpts = {
+                    userAgent: this.randomUA(),
+                    viewport: { width: 1366 + this.rand(-100, 100), height: 768 + this.rand(-50, 50) },
+                    locale: "zh-CN",
+                    timezoneId: "Asia/Shanghai",
+                    permissions: [],
+                    geolocation: undefined,
+                };
+                if (fs.existsSync(stateFile)) {
+                    try {
+                        contextOpts.storageState = JSON.parse(fs.readFileSync(stateFile, "utf-8"));
+                        this.log(`Loaded saved login state from ${stateFile}`);
+                    } catch { /* corrupted, ignore */ }
+                }
+
+                context = await browser.newContext(contextOpts);
+                page = await context.newPage();
+            } // end if usePersistent
+
+        } // end local mode
 
         // 双层指纹伪装：stealth 插件（全局）+ 国产平台补丁（页面层）
         await page.addInitScript(CN_STEALTH_PATCH);
