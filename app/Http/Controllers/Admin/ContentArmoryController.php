@@ -55,9 +55,11 @@ class ContentArmoryController extends Controller
             ->orderByDesc('id');
 
         if ($search !== '') {
-            $articlesQuery->where(function ($q) use ($search): void {
-                $q->where('title', 'ilike', '%'.$search.'%')
-                    ->orWhere('keywords', 'ilike', '%'.$search.'%');
+            // 转义 ILIKE 通配符 % 和 _，防止用户输入的通配符导致全表扫描 DoS
+            $safeSearch = str_replace(['%', '_'], ['\\%', '\\_'], $search);
+            $articlesQuery->where(function ($q) use ($safeSearch): void {
+                $q->where('title', 'ilike', '%'.$safeSearch.'%')
+                    ->orWhere('keywords', 'ilike', '%'.$safeSearch.'%');
             });
         }
 
@@ -264,7 +266,7 @@ class ContentArmoryController extends Controller
                     'template_key' => $templateKey,
                     'channel_id' => $channelId,
                     'rewritten_title' => $rewrittenTitle,
-                    'rewritten_content' => mb_substr($rewrittenContent, 0, 500),
+                    'rewritten_content' => mb_substr($rewrittenContent, 0, 500, 'UTF-8'),
                     'status' => 'queued',
                     'message' => '已入队，等待分发',
                     'published_by_admin_id' => $adminId,
@@ -387,7 +389,6 @@ class ContentArmoryController extends Controller
                 'options' => [
                     'workspace_id' => $workspaceId,
                     'timeout_seconds' => 300,
-                    'cover_image' => base_path('豆流2033.png'),
                 ],
             ]);
 

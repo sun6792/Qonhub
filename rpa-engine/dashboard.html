@@ -240,7 +240,7 @@ async function loadWorkspaces() {
     const resp = await fetch(CLOUD + "/api/v1/rpa/my-workspaces", {headers: {"X-Api-Key": API_KEY}});
     const data = await resp.json();
     wsList = data.workspaces || [];
-    if (wsList.length === 0) wsList = JSON.parse(localStorage.getItem("rpa_workspaces") || "[]");
+    if (wsList.length === 0) { try { wsList = JSON.parse(localStorage.getItem("rpa_workspaces") || "[]"); } catch { wsList = []; } }
     else localStorage.setItem("rpa_workspaces", JSON.stringify(wsList));
   } catch(e) {
     try { wsList = JSON.parse(localStorage.getItem("rpa_workspaces") || "[]"); } catch { wsList = []; }

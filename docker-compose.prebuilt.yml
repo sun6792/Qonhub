@@ -100,7 +100,7 @@ services:
     image: ${GEOFLOW_APP_IMAGE:?GEOFLOW_APP_IMAGE is required for prebuilt deployment}
     container_name: geoflow-queue-prod
     working_dir: /var/www/html
-    command: ["php", "artisan", "queue:work", "redis", "--queue=geoflow,distribution,content-publish,agent_scout,theme-replication,default", "--sleep=1", "--tries=3", "--timeout=600"]
+    command: ["php", "artisan", "queue:work", "redis", "--queue=geoflow,distribution,content-publish,agent_scout,theme-replication,system-updates,default", "--sleep=1", "--tries=3", "--timeout=600"]
     volumes:
       - ./.env.prod:/var/www/html/.env
       - ./storage:/var/www/html/storage

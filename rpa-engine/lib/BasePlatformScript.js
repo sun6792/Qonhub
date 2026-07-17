@@ -95,6 +95,8 @@ export class BasePlatformScript {
         this.screenshotDir = options.screenshotDir || "./screenshots";
         // [新增] workspaceId 用于缓存隔离
         this.workspaceId = options.workspace_id || "default";
+        // v2.9: 持久 Profile 模式标记（在 launchBrowser 中设置）
+        this._isPersistent = false;
     }
 
     // ── 工具方法 ──────────────────────────────────────────

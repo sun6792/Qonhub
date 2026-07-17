@@ -1,0 +1,61 @@
+{
+   "checksum": "ff947b2e7c0dcbb5378140568b6fe7dd",
+   "roots": {
+      "bookmark_bar": {
+         "children": [ {
+            "date_added": "13428764335924654",
+            "date_last_used": "0",
+            "guid": "3cac25e0-bca7-41a8-b73f-51d644e09cb2",
+            "id": "7",
+            "name": "Lenovo Support",
+            "show_icon": false,
+            "source": "oem_preload",
+            "type": "url",
+            "url": "https://support.lenovo.com/",
+            "visit_count": 0
+         }, {
+            "date_added": "13428764335924116",
+            "date_last_used": "0",
+            "guid": "a9e65515-ccd2-49fc-9c1c-f97fb20e6351",
+            "id": "6",
+            "name": "Lenovo",
+            "show_icon": false,
+            "source": "oem_preload",
+            "type": "url",
+            "url": "https://www.lenovo.com/",
+            "visit_count": 0
+         } ],
+         "date_added": "13428764335676204",
+         "date_last_used": "0",
+         "date_modified": "13428764335924654",
+         "guid": "0bc5d13f-2cba-5d74-951f-3f233fe6c908",
+         "id": "1",
+         "name": "收藏夹栏",
+         "source": "unknown",
+         "type": "folder"
+      },
+      "other": {
+         "children": [  ],
+         "date_added": "13428764335676207",
+         "date_last_used": "0",
+         "date_modified": "0",
+         "guid": "82b081ec-3dd3-529c-8475-ab6c344590dd",
+         "id": "2",
+         "name": "其他收藏夹",
+         "source": "unknown",
+         "type": "folder"
+      },
+      "synced": {
+         "children": [  ],
+         "date_added": "13428764335676208",
+         "date_last_used": "0",
+         "date_modified": "0",
+         "guid": "4cf2e351-0e85-532b-bb37-df045d8f8d0f",
+         "id": "3",
+         "name": "移动收藏夹",
+         "source": "unknown",
+         "type": "folder"
+      }
+   },
+   "version": 1
+}

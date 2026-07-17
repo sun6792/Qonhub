@@ -59,7 +59,7 @@ class PublishScheduledArticles extends Command
             try {
                 $options = [
                     'workspace_id' => (int) $schedule->workspace_id,
-                    'timeout_seconds' => 300,
+                    'timeout_seconds' => 120,
                 ];
                 if ($coverImage !== null) {
                     $options['cover_image'] = $coverImage;
@@ -100,6 +100,6 @@ class PublishScheduledArticles extends Command
         }
 
         $this->info("Done: {$completed} succeeded, {$failed} failed");
-        return 0;
+        return $completed > 0 ? 0 : ($failed > 0 ? 1 : 0);
     }
 }

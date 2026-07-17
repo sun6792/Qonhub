@@ -193,6 +193,7 @@ export async function publish({ taskId, account, enterprise, content, options, l
             try { await browser.close(); } catch {}
         } else {
             try { await page.close(); } catch {}
+            try { await page.context().close(); } catch {}
         }
         return { success: false, article_url: "", error: err.message, status: "error" };
     }

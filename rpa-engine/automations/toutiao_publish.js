@@ -66,27 +66,18 @@ class ToutiaoPublishScript extends BasePlatformScript {
             .replace(/\n{3,}/g, '\n\n')
             .trim();
         const bodyHtml = bodyContent ? bodyContent.split('\n\n').map(p => `<p>${p}</p>`).join('') : '<p></p>';
+        // MultiPost 方式：只发 ClipboardEvent paste，不碰 innerHTML
+        // innerHTML 会让 React 富文本编辑器产生乱码
         const bodyOk = await page.evaluate((html) => {
             const editor = document.querySelector('div[contenteditable="true"]');
             if (!editor) return false;
             editor.focus();
-            // 先用原生innerHTML设置内容
-            const nativeSetter = Object.getOwnPropertyDescriptor(
-                window.HTMLElement.prototype, 'innerHTML'
-            )?.set;
-            if (nativeSetter) {
-                nativeSetter.call(editor, html);
-            } else {
-                editor.innerHTML = html;
-            }
-            // 再触发paste事件（React富文本编辑器监听此事件同步状态）
             const dt = new DataTransfer();
             dt.setData('text/html', html);
             editor.dispatchEvent(new ClipboardEvent('paste', {
                 bubbles: true, cancelable: true, clipboardData: dt,
             }));
             editor.dispatchEvent(new Event('input', { bubbles: true }));
-            editor.dispatchEvent(new Event('change', { bubbles: true }));
             return true;
         }, bodyHtml);
         this.log(`Body: ${bodyOk ? 'OK' : 'fallback'} (${bodyContent.length} chars)`);
@@ -186,7 +177,7 @@ class ToutiaoPublishScript extends BasePlatformScript {
             return { status: PUBLISH_STATUS.RATE_LIMITED, article_url: "" };
         }
         if (resultBody.includes("封面") && (resultBody.includes("必填") || resultBody.includes("请上传"))) {
-            return { status: PUBLISH_STATUS.ERROR, article_url: "", error: "缺少封面图片" };
+            return { status: PUBLISH_STATUS.CONTENT_REJECTED, article_url: "", error: "缺少封面图片" };
         }
 
         // Step 8: 获取文章 URL
@@ -291,12 +282,16 @@ export async function publish({ taskId, account, enterprise, content, options, l
         if (process.env.USE_PERSISTENT_PROFILE !== 'true') {
             try { await browser.close(); } catch {}
         } else {
-            try { await page.close(); } catch {} // 只关页面，不关浏览器
+            // 持久模式：关闭页面释放内存，浏览器进程保持运行以维持登录态
+            try { await page.close(); } catch {}
         }
         return result;
     } catch (err) {
         if (process.env.USE_PERSISTENT_PROFILE !== 'true') {
             try { await browser.close(); } catch {}
+        } else if (script._context) {
+            // 持久模式出错：关闭 context 释放资源，下次启动会自动恢复 Profile
+            try { await script._context.close(); } catch {}
         }
         return { success: false, article_url: "", error: err.message, status: "error" };
     }
