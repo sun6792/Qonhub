@@ -36,6 +36,7 @@ return [
     |
     */
 
+    // ⚠️ 单位：分钟（与 geoflow.session_timeout_seconds 的秒不同，注意换算）
     'lifetime' => (int) env('SESSION_LIFETIME', 43200),
 
     'expire_on_close' => env('SESSION_EXPIRE_ON_CLOSE', false),

@@ -555,7 +555,7 @@
                     await new Promise(r => setTimeout(r, 2000));
                     try {
                         const tResp = await fetch('http://127.0.0.1:9901/api/v1/tasks/' + taskId, {
-                            headers: { 'X-API-Key': 'qonhub-rpa-secret-change-me' }
+                            headers: { 'X-API-Key': '{{ config('geoflow.rpa_engine_api_key') }}' }
                         });
                         const tData = await tResp.json();
                         if (tData.status === 'completed') {

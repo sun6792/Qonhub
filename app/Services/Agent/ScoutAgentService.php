@@ -202,7 +202,9 @@ class ScoutAgentService
                 'brand_mentioned' => $mentioned, 'brand_name' => $brandName,
                 'geo_score' => $score, 'snapshot_at' => now(),
             ]);
-        } catch (\Throwable) {}
+        } catch (\Throwable $e) {
+            \Log::warning('ScoutAgent: saveRpaSnapshot failed', ['error' => $e->getMessage()]);
+        }
     }
 
     /** API 对话搜索 — 支持情报驱动的自适应问题策略 */
@@ -335,7 +337,8 @@ class ScoutAgentService
         if (! $response->successful()) {
             return ['provider' => 'deepseek', 'name' => 'DeepSeek', 'model' => 'deepseek-v4-flash',
                 'mentioned' => false, 'score' => 0, 'preview' => '',
-                'error' => "HTTP {$response->status()}: " . mb_substr($response->body(), 0, 100)];
+                'error' => "HTTP {$response->status()}: request failed (详见日志)",
+                'error_detail' => mb_substr($response->body(), 0, 200)];
         }
 
         $data = $response->json();
@@ -360,7 +363,9 @@ class ScoutAgentService
                 'brand_mentioned' => $mentioned, 'brand_name' => $brandName, 'geo_score' => $score,
                 'snapshot_at' => now(),
             ]);
-        } catch (\Throwable) {}
+        } catch (\Throwable $e) {
+            \Log::warning('ScoutAgent: deepseekAnthropicSearch snapshot save failed', ['error' => $e->getMessage()]);
+        }
 
         return ['provider' => 'deepseek', 'name' => 'DeepSeek', 'model' => 'deepseek-v4-flash',
             'mentioned' => $mentioned, 'score' => $score, 'preview' => mb_substr($text, 0, 200)];
@@ -391,7 +396,9 @@ class ScoutAgentService
                 ->latest('snapshot_at')->limit(1);
             if ($response->workspaceId !== null) $query->where('workspace_id', $response->workspaceId);
             $query->update(['brand_mentioned' => $mentioned, 'brand_name' => $brandName, 'geo_score' => $score]);
-        } catch (\Throwable) {}
+        } catch (\Throwable $e) {
+            \Log::warning('ScoutAgent: backfillSnapshotAnalysis failed', ['error' => $e->getMessage()]);
+        }
     }
 
     private function resolveAvailableScoutPlatforms(): array
@@ -417,7 +424,7 @@ class ScoutAgentService
             $available[] = $p;
         }
         if ($available === []) {
-            $available[] = ['provider' => 'deepseek', 'model' => 'deepseek-v4-flash', 'name' => 'DeepSeek'];
+            $available[] = ['provider' => 'deepseek', 'model' => 'deepseek-v4-flash', 'name' => 'DeepSeek', 'web_search' => 'deepseek_anthropic'];
         }
         return $available;
     }

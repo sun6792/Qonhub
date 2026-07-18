@@ -33,6 +33,7 @@ import { randomUUID } from "crypto";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { publishViaApi as baijiahaoApiPublish, verifyAuth as baijiahaoVerifyAuth } from "./lib/BaijiahaoApiPublisher.js";
 
 // ── Config ──────────────────────────────────────────────
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -237,12 +238,13 @@ app.post("/api/v1/publish", auth, async (req, res) => {
         const result = await handler({
             taskId, account,
             enterprise: { workspace_id: wsId },
+            content,  // ← v2.10 修复: content 作为顶级参数传入（修复 v2.9 数据流断层）
             options: {
                 headless: HEADLESS,
                 screenshotDir: SCREENSHOT_DIR,
                 workspace_id: wsId,
                 timeout: options?.timeout_seconds || 300,
-                article: content, // 发布脚本从 options.article 读内容
+                article: content, // 保留 options.article 向后兼容
                 ...options,
             },
             logger,
@@ -691,6 +693,50 @@ app.post("/api/captcha/await", auth, (req, res) => {
 });
 
 // ══════════════════════════════════════════════════════════
+//  [v2.10] 百家号 API 直发模块 — 完全绕开 DOM 编辑器
+// ══════════════════════════════════════════════════════════
+
+/**
+ * POST /api/v1/publish-api/baijiahao
+ * 通过百家号内部 API 直发文章（不走浏览器 DOM，无 isTrusted 问题）。
+ * Body: { workspace_id, title, content, digest?, cover_image? }
+ * Response: { success, article_id, article_url, is_draft }
+ */
+app.post("/api/v1/publish-api/baijiahao", auth, async (req, res) => {
+    const { workspace_id, title, content, digest, cover_image } = req.body;
+    if (!workspace_id || !title || !content) {
+        return res.status(400).json({ error: "missing required fields: workspace_id, title, content" });
+    }
+    logger.info(`[BaijiahaoAPI] Publish request: ws=${workspace_id} title="${title.substring(0, 20)}..."`);
+    try {
+        const result = await baijiahaoApiPublish({
+            workspaceId: sanitizeWsId(workspace_id),
+            title, content, digest, coverImage: cover_image,
+        });
+        if (result.success) {
+            logger.info(`[BaijiahaoAPI] ✅ Published: article_id=${result.article_id}`);
+        } else {
+            logger.warn(`[BaijiahaoAPI] ❌ Failed: ${result.error}`);
+        }
+        res.json(result);
+    } catch (err) {
+        logger.error(`[BaijiahaoAPI] Exception: ${err.message}`);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+/**
+ * GET /api/v1/publish-api/baijiahao/verify/:wsId
+ * 快速验证百家号 cookie 是否有效、能否提取 edit-token（不发文章）。
+ */
+app.get("/api/v1/publish-api/baijiahao/verify/:wsId", auth, (req, res) => {
+    const wsId = sanitizeWsId(req.params.wsId);
+    baijiahaoVerifyAuth(wsId)
+        .then(result => res.json(result))
+        .catch(err => res.status(500).json({ valid: false, error: err.message }));
+});
+
+// ══════════════════════════════════════════════════════════
 //  [新增模块] 运营助手 Web 控制台
 // ══════════════════════════════════════════════════════════
 
@@ -712,11 +758,15 @@ app.get("/", (req, res) => {
 
 async function reportToCloud(taskId, payload) {
     try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 15000); // 15s 超时
         const resp = await fetch(`${GEOFLOW_API_URL}/api/v1/rpa/report`, {
             method: "POST",
             headers: { "X-Api-Key": API_KEY, "Content-Type": "application/json" },
             body: JSON.stringify({ task_id: taskId, ...payload }),
+            signal: controller.signal,
         });
+        clearTimeout(timeout);
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         logger.info(`Reported to cloud: taskId=${taskId}`);
     } catch (err) {

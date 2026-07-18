@@ -7,9 +7,8 @@
  */
 $adminBasePath = trim((string) env('ADMIN_BASE_PATH', 'geo_admin'), '/');
 $adminBasePath = $adminBasePath !== '' ? $adminBasePath : 'geo_admin';
-$defaultUpdateMetadataUrl = 'https://raw.githubusercontent.com/yaojingang/GEOFlow/main/version.json';
-$updateMetadataUrl = trim((string) env('GEOFLOW_UPDATE_METADATA_URL', $defaultUpdateMetadataUrl));
-$updateMetadataUrl = $updateMetadataUrl !== '' ? $updateMetadataUrl : $defaultUpdateMetadataUrl;
+$defaultUpdateMetadataUrl = trim((string) env('GEOFLOW_UPDATE_METADATA_URL', ''));
+$updateMetadataUrl = $defaultUpdateMetadataUrl !== '' ? $defaultUpdateMetadataUrl : '';
 $versionManifestPath = __DIR__.'/../version.json';
 $versionManifest = is_file($versionManifestPath)
     ? json_decode((string) file_get_contents($versionManifestPath), true)
@@ -63,7 +62,7 @@ return [
     'update_rollback_enabled' => filter_var(env('GEOFLOW_UPDATE_ROLLBACK_ENABLED', false), FILTER_VALIDATE_BOOLEAN),
     'update_backup_keep' => max(1, (int) env('GEOFLOW_UPDATE_BACKUP_KEEP', 10)),
     'update_backup_path' => trim((string) env('GEOFLOW_UPDATE_BACKUP_PATH', 'geoflow-updates'), '/'),
-    'update_allowed_repository' => trim((string) env('GEOFLOW_UPDATE_ALLOWED_REPOSITORY', 'https://github.com/yaojingang/GEOFlow'), '/'),
+    'update_allowed_repository' => trim((string) env('GEOFLOW_UPDATE_ALLOWED_REPOSITORY', '')),
     'update_archive_max_bytes' => max(1, (int) env('GEOFLOW_UPDATE_ARCHIVE_MAX_BYTES', 50 * 1024 * 1024)),
     'update_archive_max_files' => max(1, (int) env('GEOFLOW_UPDATE_ARCHIVE_MAX_FILES', 2000)),
     'update_archive_max_file_bytes' => max(1, (int) env('GEOFLOW_UPDATE_ARCHIVE_MAX_FILE_BYTES', 50 * 1024 * 1024)),
@@ -134,12 +133,12 @@ return [
     'api_login_rate_limit_decay_seconds' => (int) env('GEOFLOW_API_LOGIN_RATE_LIMIT_DECAY', 60),
     // API Token 默认有效期（天）
     'api_token_default_ttl_days' => (int) env('GEOFLOW_API_TOKEN_DEFAULT_TTL_DAYS', 30),
-    // 会话空闲超时（秒）
+    // 会话空闲超时（秒）⚠️ 单位秒，与 session.lifetime 的分钟不同
     'session_timeout_seconds' => (int) env('GEOFLOW_SESSION_TIMEOUT', 2592000),
 
     // ── RPA 浏览器自动化引擎（Node.js Playwright 微服务） ──
     'rpa_engine_url' => env('RPA_ENGINE_URL', 'http://127.0.0.1:9901'),
-    'rpa_engine_api_key' => env('RPA_ENGINE_API_KEY', 'qonhub-rpa-secret-change-me'),
+    'rpa_engine_api_key' => env('RPA_ENGINE_API_KEY', ''),
     'rpa_engine_timeout' => (int) env('RPA_ENGINE_TIMEOUT', 300),
     'rpa_localhost_only' => env('GEOFLOW_RPA_LOCALHOST_ONLY', true),
 

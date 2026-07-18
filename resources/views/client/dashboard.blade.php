@@ -191,7 +191,7 @@
                 </div>
                 <div class="bg-white/5 rounded-full h-2 mb-3">
                     <div class="h-2 rounded-full {{ $anchorData['certified_count'] >= $anchorData['total_count'] / 2 ? 'bg-indigo-500' : 'bg-amber-500' }}"
-                         style="width:{{ round($anchorData['certified_count'] / $anchorData['total_count'] * 100) }}%"></div>
+                         style="width:{{ ($anchorData['total_count'] ?? 0) > 0 ? round($anchorData['certified_count'] / $anchorData['total_count'] * 100) : 0 }}%"></div>
                 </div>
                 <div class="flex flex-wrap gap-1.5 mb-3">
                     @foreach ($anchorData['certified_platforms'] as $name)

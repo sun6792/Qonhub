@@ -212,6 +212,7 @@ return [
             'maxJobs' => 0,
             'memory' => 128,
             'tries' => 3,
+            // Job $timeout(600s) < supervisor timeout(650s) < retry_after(900s)
             'timeout' => 650,
             'nice' => 0,
         ],

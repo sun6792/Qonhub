@@ -438,7 +438,11 @@ PROMPT;
         if ((int) ($task->knowledge_base_id ?? 0) > 0) {
             $ids[] = (int) $task->knowledge_base_id;
         }
-        if (DB::getSchemaBuilder()->hasTable('task_knowledge_bases')) {
+        static $hasTaskKbTable = null;
+        if ($hasTaskKbTable === null) {
+            $hasTaskKbTable = DB::getSchemaBuilder()->hasTable('task_knowledge_bases');
+        }
+        if ($hasTaskKbTable) {
             $extraIds = DB::table('task_knowledge_bases')
                 ->where('task_id', (int) $task->id)
                 ->pluck('knowledge_base_id')

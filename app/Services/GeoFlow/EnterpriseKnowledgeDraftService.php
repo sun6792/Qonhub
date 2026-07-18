@@ -1166,7 +1166,7 @@ MARKDOWN;
             throw new \RuntimeException(__('admin.url_import.error.ai_model_required'));
         }
 
-        $apiKey = $this->apiKeyCrypto->decrypt((string) $model->api_key);
+        $apiKey = $this->apiKeyCrypto->decrypt((string) $model->getRawOriginal('api_key'));
         if ($apiKey === '') {
             throw new \RuntimeException(__('admin.url_import.error.ai_model_required'));
         }

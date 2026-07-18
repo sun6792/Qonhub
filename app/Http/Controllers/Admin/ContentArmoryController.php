@@ -251,28 +251,31 @@ class ContentArmoryController extends Controller
                     'original_article_id' => $articleId,
                 ];
 
-                // 创建分发记录
-                $distribution = ArticleDistribution::query()->create([
-                    'article_id' => $articleId,
-                    'distribution_channel_id' => $channelId,
-                    'action' => 'publish',
-                    'status' => 'queued',
-                    'next_retry_at' => now(),
-                ]);
+                // 创建分发记录 + 发布日志（原子写入）
+                [$distribution, $publishLog] = DB::transaction(function () use ($articleId, $channelId, $templateKey, $rewrittenTitle, $rewrittenContent, $adminId) {
+                    $distribution = ArticleDistribution::query()->create([
+                        'article_id' => $articleId,
+                        'distribution_channel_id' => $channelId,
+                        'action' => 'publish',
+                        'status' => 'queued',
+                        'next_retry_at' => now(),
+                    ]);
 
-                // 发布日志
-                ArmoryPublishLog::query()->create([
-                    'article_id' => $articleId,
-                    'template_key' => $templateKey,
-                    'channel_id' => $channelId,
-                    'rewritten_title' => $rewrittenTitle,
-                    'rewritten_content' => mb_substr($rewrittenContent, 0, 500, 'UTF-8'),
-                    'status' => 'queued',
-                    'message' => '已入队，等待分发',
-                    'published_by_admin_id' => $adminId,
-                ]);
+                    $publishLog = ArmoryPublishLog::query()->create([
+                        'article_id' => $articleId,
+                        'template_key' => $templateKey,
+                        'channel_id' => $channelId,
+                        'rewritten_title' => $rewrittenTitle,
+                        'rewritten_content' => mb_substr($rewrittenContent, 0, 500, 'UTF-8'),
+                        'status' => 'queued',
+                        'message' => '已入队，等待分发',
+                        'published_by_admin_id' => $adminId,
+                    ]);
 
-                // 直接推送（同步尝试）
+                    return [$distribution, $publishLog];
+                });
+
+                // 直接推送（同步尝试）— API 调用在事务外执行，避免长事务
                 try {
                     $publisher = $this->publisherManager->forChannel($channel);
                     $publishResult = $publisher->publish($distribution, $basePayload);

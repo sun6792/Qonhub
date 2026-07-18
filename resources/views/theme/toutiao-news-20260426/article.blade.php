@@ -69,7 +69,7 @@
             @endif
 
             <div class="tt-prose">
-                {!! $contentHtml !!}
+                {{-- Trusted HTML（已净化）--}} {!! $contentHtml !!}
             </div>
 
             @if(!empty($tags))

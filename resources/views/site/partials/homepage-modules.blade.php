@@ -257,7 +257,7 @@
                         </div>
                     @endif
                     <div class="geo-home-module__custom">
-                        {!! (string) ($module['custom_html'] ?? '') !!}
+                        {!! strip_tags((string) ($module['custom_html'] ?? ''), '<div><p><a><img><h1><h2><h3><h4><h5><h6><ul><ol><li><span><strong><em><br><table><thead><tbody><tr><th><td><blockquote><pre><code><hr>') !!}
                     </div>
                 @endif
             </div>

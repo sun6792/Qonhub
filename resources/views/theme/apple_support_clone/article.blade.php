@@ -36,7 +36,7 @@
             </header>
 
             <div class="as-article-body">
-                {!! $contentHtml !!}
+                {{-- Trusted HTML（已净化）--}} {!! $contentHtml !!}
             </div>
 
             @if(count($tags) > 0)

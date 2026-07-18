@@ -29,16 +29,15 @@ Homestead.yaml
 Thumbs.db
 .env.docker
 
-# v2.6.0: 浏览器持久化数据（Cookie/缓存）
-rpa-engine/storage/browser-profile/
-rpa-engine/storage/states/
+# v2.6.0: 浏览器持久化数据（Cookie/缓存）+ node_modules
+rpa-engine/storage/
 rpa-engine/logs/
 rpa-engine/screenshots/
+rpa-engine/node_modules/
 redis/data/
 storage/browser-profile/
 docs/interview-*
 docs/豆流AI-*.docx
-social-auto-upload/
 MultiPost-Extension/node_modules
 MultiPost-Extension/.plasmo
 MultiPost-Extension/build/chrome-mv3-prod/.plasmo

@@ -49,6 +49,7 @@
                 </header>
 
                 <div class="article-prose article-rail max-w-none">
+                    {{-- 内容由 AI 生成管道净化后存储，Trusted HTML --}}
                     {!! $contentHtml !!}
                 </div>
 

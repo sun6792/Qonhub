@@ -114,12 +114,22 @@ class DeployAgentService
 
         if ($taskId) {
             $deadline = now()->addSeconds(120);
-            while (now()->lt($deadline)) {
+            $maxPolls = 60; // 安全上限：120s / 2s
+            $pollCount = 0;
+            while (now()->lt($deadline) && $pollCount < $maxPolls) {
                 $task->refresh();
                 if (in_array($task->status, ['completed', 'partial_failed'], true)) break;
                 sleep(2);
+                $pollCount++;
             }
             $timedOut = ! in_array($task->status, ['completed', 'partial_failed'], true);
+            if ($timedOut) {
+                \Log::warning('DeployAgent polling timed out', [
+                    'task_id' => $taskId,
+                    'final_status' => $task->status,
+                    'polls' => $pollCount,
+                ]);
+            }
             // 从实际执行结果汇总通道状态
             $publishedChannels = $task->results()
                 ->where('status', 'success')

@@ -133,7 +133,7 @@ class AgentDispatcherService
     {
         $execution->current_agent = AgentExecution::AGENT_SCOUT;
         $execution->transitionTo(AgentExecution::STATE_SCOUTING);
-        $execution->save();
+        // transitionTo() 内部已 save()，无需重复
 
         try {
             $output = $this->scoutAgent->execute($execution);
@@ -148,7 +148,7 @@ class AgentDispatcherService
     private function executeStrategy(AgentExecution $execution): void
     {
         $execution->current_agent = AgentExecution::AGENT_STRATEGY;
-        $execution->save();
+        $execution->transitionTo(AgentExecution::STATE_PLANNING);
 
         try {
             $output = $this->strategyAgent->execute($execution);

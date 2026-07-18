@@ -9,6 +9,7 @@
     <link rel="stylesheet" href="{{ asset('assets/css/style.css') }}">
     <link rel="stylesheet" href="{{ asset('assets/css/custom.css') }}">
     <script src="{{ asset('js/lucide.min.js') }}"></script>
+    {{-- ⚠️ 仅超级管理员可配置；生产环境建议配合 CSP nonce 机制使用 --}}
     @if(!empty($headAnalyticsCode))
         {!! $headAnalyticsCode !!}
     @endif

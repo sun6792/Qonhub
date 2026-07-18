@@ -70,7 +70,7 @@
                 @endif
 
                 <div class="ne-prose">
-                    {!! $contentHtml !!}
+                    {{-- Trusted HTML（已净化）--}} {!! $contentHtml !!}
                 </div>
 
                 @if(!empty($tags))

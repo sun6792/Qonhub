@@ -14,7 +14,9 @@ echo.
 echo [2/2] 启动新引擎...
 cd /d E:\Qonhubgeo\douliu-main\rpa-engine
 set RPA_PORT=9901
-set RPA_API_KEY=qonhub-rpa-secret-change-me
+REM 从 .env 读取 RPA_API_KEY；若未设置则使用下方默认值（生产环境务必修改）
+if exist "..\.env" for /f "tokens=2 delims==" %%a in ('findstr /b "RPA_ENGINE_API_KEY=" "..\.env"') do set RPA_API_KEY=%%a
+if not defined RPA_API_KEY set RPA_API_KEY=qonhub-rpa-secret-change-me
 set RPA_HEADLESS=true
 set RPA_BACKEND=local
 set RPA_BIND_ADDR=127.0.0.1
