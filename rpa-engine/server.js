@@ -33,7 +33,7 @@ import { randomUUID } from "crypto";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import { publishViaApi as baijiahaoApiPublish, verifyAuth as baijiahaoVerifyAuth } from "./lib/BaijiahaoApiPublisher.js";
+import { publishViaApi as baijiahaoApiPublish, publishViaBrowser as baijiahaoBrowserPublish, verifyAuth as baijiahaoVerifyAuth } from "./lib/BaijiahaoApiPublisher.js";
 
 // ── Config ──────────────────────────────────────────────
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -73,6 +73,8 @@ const logger = winston.createLogger({
 const tasks = new Map();
 // [新增] 验证码等待队列: {taskId, resolve}
 const captchaQueue = new Map();
+// [v2.10] 速率限制存储
+const rateLimitMap = new Map();
 
 // ── Automation Loader ───────────────────────────────────
 const automations = {};
@@ -125,10 +127,13 @@ function sanitizeWsId(raw) {
     return id;
 }
 
-// Auth middleware
+// Auth middleware (case-insensitive header check)
 function auth(req, res, next) {
-    const key = req.headers["x-api-key"] || req.query.api_key || "";
-    if (key !== API_KEY) return res.status(401).json({ error: "unauthorized" });
+    const key = req.headers["x-api-key"] || req.headers["X-Api-Key"] || req.headers["X-API-Key"] || req.query.api_key || "";
+    if (key !== API_KEY) {
+        logger.warn(`Auth failed: got key "${key.substring(0, 10)}...", expected "${API_KEY.substring(0, 10)}..."`);
+        return res.status(401).json({ error: "unauthorized" });
+    }
     next();
 }
 
@@ -214,6 +219,20 @@ app.post("/api/v1/register", auth, async (req, res) => {
     }
 });
 
+/**
+ * POST /api/v1/publish — 统一发布入口（v2.10 智能路由 + 速率限制）。
+ *
+ * 根据平台自动选择最优策略：
+ *   baijiahao_publish → API直发+浏览器自动发布 (含速率限制)
+ *   toutiao_publish    → 浏览器 RPA (insertHTML + 封面, 含速率限制)
+ *   其他              → 浏览器 RPA (原有流程)
+ *
+ * 速率限制:
+ *   百家号: 300秒/篇 (5分钟), 15篇/天
+ *   头条:   120秒/篇 (2分钟), 10篇/天
+ *
+ * 响应统一格式: { success, article_id?, article_url?, error?, strategy? }
+ */
 app.post("/api/v1/publish", auth, async (req, res) => {
     const taskId = randomUUID();
     const { platform, account, content, options } = req.body;
@@ -223,38 +242,122 @@ app.post("/api/v1/publish", auth, async (req, res) => {
         return res.status(400).json({ error: "missing required fields: platform, content" });
     }
 
-    tasks.set(taskId, { status: "running", started_at: new Date().toISOString() });
-    logger.info(`Task ${taskId}: publish on ${platform}`);
+    // ═══ 速率限制 ═══
+    const RATE_LIMITS = {
+        baijiahao_publish:  { interval: 300, daily: 15 },
+        toutiao_publish:     { interval: 120, daily: 10 },
+        sohu_publish:        { interval: 180, daily: 10 },
+        xiaohongshu_publish: { interval: 300, daily: 10 },
+        weixin_publish:      { interval: 300, daily: 10 },
+        netease_publish:     { interval: 180, daily: 10 },
+        qiehao_publish:      { interval: 180, daily: 10 },
+        smzdm_publish:       { interval: 180, daily: 10 },
+        douyin_publish:      { interval: 300, daily: 10 },
+        kuaishou_publish:    { interval: 300, daily: 10 },
+    };
+    const limit = RATE_LIMITS[platform];
+    if (limit) {
+        const rlKey = `rl:${platform}:${wsId}`;
+        const now = Date.now();
+        const lastPublish = rateLimitMap.get(rlKey + ":ts") || 0;
+        const dailyCount = rateLimitMap.get(rlKey + ":day") || 0;
+        const dayKey = new Date().toDateString();
+
+        if (rateLimitMap.get(rlKey + ":date") !== dayKey) {
+            rateLimitMap.set(rlKey + ":date", dayKey);
+            rateLimitMap.set(rlKey + ":day", 0);
+        }
+
+        const elapsed = (now - lastPublish) / 1000;
+        if (lastPublish > 0 && elapsed < limit.interval) {
+            const waitSec = Math.ceil(limit.interval - elapsed);
+            logger.warn(`Rate limit: ${platform} ws=${wsId} needs ${waitSec}s wait`);
+            return res.status(429).json({
+                error: "rate_limited",
+                message: `${platform} 需要间隔 ${limit.interval} 秒，当前已过 ${Math.floor(elapsed)} 秒，还需等待 ${waitSec} 秒`,
+                retry_after_seconds: waitSec,
+            });
+        }
+        if (dailyCount >= limit.daily) {
+            return res.status(429).json({
+                error: "daily_limit",
+                message: `${platform} 今日发布已达上限 (${limit.daily}篇)`,
+            });
+        }
+
+        rateLimitMap.set(rlKey + ":ts", now);
+        rateLimitMap.set(rlKey + ":day", (rateLimitMap.get(rlKey + ":day") || 0) + 1);
+    }
+
+    const publishStart = Date.now();
+    tasks.set(taskId, {
+        status: "running", platform,
+        started_at: new Date().toISOString(),
+        request_id: content?.request_id || '',
+        article_id: content?.article_id || '',
+        title: (content?.title || '').substring(0, 40),
+    });
+    logger.info(`[publish] ${taskId}: platform=${platform} ws=${wsId} article=${content?.article_id || '?'} title="${(content?.title || '').substring(0, 30)}"`);
 
     res.json({ task_id: taskId, status: "accepted" });
 
     try {
-        const automation = automations[platform];
-        if (!automation) {
-            throw new Error(`No automation registered for platform: ${platform}`);
+        let result;
+
+        // ═══ 百家号: API存草稿 + 浏览器发布 ═══
+        if (platform === "baijiahao_publish") {
+            const title = content?.title || content?.article?.title || "";
+            const body = content?.content || content?.article?.content || content?.article?.body || "";
+            const digest = content?.digest || content?.article?.digest || "";
+            const coverImage = options?.cover_image || content?.cover_image || null;
+
+            logger.info(`[${taskId}] Baijiahao: hybrid (API draft + browser publish)`);
+            const bhResult = await baijiahaoApiPublish({
+                workspaceId: wsId, title, content: body, digest, coverImage,
+            });
+            result = {
+                success: bhResult.success && (bhResult.published !== false),
+                article_id: bhResult.article_id || "",
+                article_url: bhResult.article_url || "",
+                error: bhResult.error || bhResult.publish_error || "",
+                status: bhResult.published ? "success" : (bhResult.success ? "draft_only" : "error"),
+                strategy: "hybrid",
+            };
         }
-        // 发布脚本：优先 publish → publishFlow → execute
-        const handler = automation.publish || automation.publishFlow || automation.execute;
-        const result = await handler({
-            taskId, account,
-            enterprise: { workspace_id: wsId },
-            content,  // ← v2.10 修复: content 作为顶级参数传入（修复 v2.9 数据流断层）
-            options: {
-                headless: HEADLESS,
-                screenshotDir: SCREENSHOT_DIR,
-                workspace_id: wsId,
-                timeout: options?.timeout_seconds || 300,
-                article: content, // 保留 options.article 向后兼容
-                ...options,
-            },
-            logger,
-        });
-        tasks.set(taskId, { status: "completed", result, finished_at: new Date().toISOString() });
-        reportToCloud(taskId, { success: true, platform, ...result });
+        // ═══ 浏览器 RPA：头条 / 搜狐 / 小红书 / 其他 ═══
+        else {
+            const automation = automations[platform];
+            if (!automation) {
+                throw new Error(`No automation registered for platform: ${platform}`);
+            }
+            const handler = automation.publish || automation.publishFlow || automation.execute;
+            result = await handler({
+                taskId, account,
+                enterprise: { workspace_id: wsId },
+                content,
+                options: {
+                    headless: HEADLESS,
+                    screenshotDir: SCREENSHOT_DIR,
+                    workspace_id: wsId,
+                    timeout: options?.timeout_seconds || 300,
+                    article: content,
+                    ...options,
+                },
+                logger,
+            });
+            result.strategy = result.strategy || "browser_rpa";
+        }
+
+        const elapsed = ((Date.now() - publishStart) / 1000).toFixed(1);
+        tasks.set(taskId, { status: "completed", platform, result, elapsed: elapsed + 's', finished_at: new Date().toISOString() });
+        logger.info(`[publish] ${taskId}: COMPLETED in ${elapsed}s — success=${result.success ?? false} url=${(result.article_url || result.article_id || '').substring(0, 60)}`);
+        reportToCloud(taskId, { success: result.success ?? false, platform, elapsed: elapsed + 's', ...result });
     } catch (err) {
+        const elapsed = ((Date.now() - publishStart) / 1000).toFixed(1);
         const errorMsg = err.message || String(err);
-        tasks.set(taskId, { status: "failed", error: errorMsg, finished_at: new Date().toISOString() });
-        reportToCloud(taskId, { success: false, error: errorMsg, platform });
+        tasks.set(taskId, { status: "failed", platform, error: errorMsg, elapsed: elapsed + 's', finished_at: new Date().toISOString() });
+        logger.error(`[publish] ${taskId}: FAILED in ${elapsed}s — ${errorMsg}`);
+        reportToCloud(taskId, { success: false, error: errorMsg, platform, elapsed: elapsed + 's' });
     }
 });
 
@@ -953,3 +1056,5 @@ app.listen(PORT, BIND_ADDR, () => {
 
 process.on("SIGTERM", () => { logger.info("SIGTERM — shutting down"); process.exit(0); });
 process.on("SIGINT", () => { logger.info("SIGINT — shutting down"); process.exit(0); });
+process.on("uncaughtException", (err) => { logger.error(`Uncaught exception: ${err.message}`, { stack: err.stack }); });
+process.on("unhandledRejection", (reason) => { logger.error(`Unhandled rejection: ${reason?.message || reason}`); });

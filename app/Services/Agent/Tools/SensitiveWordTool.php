@@ -39,7 +39,6 @@ class SensitiveWordTool implements AgentToolInterface
         $fullText = $title . "\n" . $content;
 
         $hits = SensitiveWord::query()
-            ->where('status', 'active')
             ->get()
             ->filter(fn (SensitiveWord $word) => stripos($fullText, $word->word) !== false)
             ->map(fn (SensitiveWord $word) => $word->word)

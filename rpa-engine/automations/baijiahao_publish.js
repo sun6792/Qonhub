@@ -17,6 +17,7 @@
  *   - 发布限流 → 返回 RATE_LIMITED
  */
 
+import fs from "fs";
 import { BasePlatformScript, PUBLISH_STATUS } from "../lib/BasePlatformScript.js";
 
 export const platform = "baijiahao_publish";
@@ -78,73 +79,123 @@ class BaijiahaoPublishScript extends BasePlatformScript {
         }
         await this.ss(page, "02_editor");
 
-        // ═══ Step 3: 填写标题 ═══
-        this.log("Step 3: Filling content...");
-        await this.simulateMouseHover(page);
-        await this.typeHuman(page, [
-            'input[placeholder*="标题"], textarea[placeholder*="标题"], [class*="title"] input',
-            '.title-input input',
-        ], e.title);
-        await this.wait(500, 1500);
+        // ═══ Step 3: 填写标题 (nativeSetter绕过React) ═══
+        this.log("Step 3: Title...");
+        const safeTitle = (e.title || '').substring(0, 30);
+        await page.evaluate((title) => {
+            const ta = document.querySelector('input[placeholder*="标题"], textarea[placeholder*="标题"], [class*="title"] input, .title-input input');
+            if (!ta) return;
+            const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement?.prototype || window.HTMLTextAreaElement.prototype, 'value')?.set;
+            if (nativeSetter) { nativeSetter.call(ta, title); } else { ta.value = title; }
+            ta.dispatchEvent(new Event('input', { bubbles: true }));
+            ta.dispatchEvent(new Event('change', { bubbles: true }));
+        }, safeTitle);
+        this.log(`Title: OK (${safeTitle})`);
+        await this.wait(500, 1000);
 
-        // ═══ Step 4: 填写正文 ═══
-        // 百家号编辑器可能使用 contenteditable 或 textarea
-        await this.simulateHumanBrowsing(page);
-        const bodyEl = await this.findElement(page, [
-            '[contenteditable="true"]', '.editor-content', '.ql-editor',
-            'textarea[placeholder*="正文"], [class*="content"] textarea',
-        ]);
-        if (bodyEl) {
-            await bodyEl.click();
-            await this.wait(300, 800);
-            // contenteditable 用 type，textarea 用 fill
-            await bodyEl.fill("");
-            for (const ch of e.body || "") {
-                await bodyEl.type(ch, { delay: this.rand(60, 120) });
-            }
-        }
-        await this.wait(500, 1500);
+        // ═══ Step 4: 填正文 (insertHTML — 绕开剪贴板, 零乱码) ═══
+        this.log("Step 4: Body (insertHTML)...");
+        const bodyHtml = (e.body || e.content || '').trim();
+        await page.evaluate((html) => {
+            const ed = document.querySelector('[contenteditable="true"], .editor-content, .ql-editor');
+            if (!ed) return;
+            ed.focus();
+            document.execCommand('selectAll', false, '');
+            document.execCommand('insertHTML', false, html);
+        }, bodyHtml);
+        await this.wait(1000, 1500);
+        const charCount = await page.evaluate(() => {
+            const ed = document.querySelector('[contenteditable="true"]');
+            return ed ? (ed.textContent || '').length : 0;
+        });
+        this.log(`Body: ${charCount > 10 ? 'OK' : 'FAIL'} (${charCount} chars)`);
         await this.ss(page, "03_content_filled");
 
-        // ═══ Step 5: 发布 ═══
-        this.log("Step 5: Submitting...");
-        await this.simulateMouseHover(page);
-        const submitBtn = await this.findElement(page, [
-            'button:has-text("发布"), button:has-text("提交"), button:has-text("保存并发布")',
-            '[class*="publish"] button',
-        ]);
-        if (submitBtn) {
-            await submitBtn.click();
-            await this.wait(3000, 6000);
+        // ═══ Step 5: 上传封面 ═══
+        const coverPath = e.cover_image || this.options?.cover_image || null;
+        if (coverPath && fs.existsSync(coverPath)) {
+            this.log("Step 5: Cover...");
+            // 点封面区域
+            const coverBtn = await this.findElement(page, [
+                '[class*="cover-add"], [class*="cover-upload"], span:text("上传封面"), div:text("添加封面")',
+                '.cover-trigger, [class*="cover"] button',
+            ], 3000);
+            if (coverBtn) { await coverBtn.click(); await this.wait(1000, 2000); }
+            // 找 file input
+            const fileInput = await this.findElement(page, ['input[type="file"]'], 3000);
+            if (fileInput) {
+                await fileInput.setInputFiles(coverPath);
+                this.log('Cover: uploaded ✅');
+                await this.wait(3000, 5000);
+                // 确认按钮
+                const confirmBtn = await this.findElement(page, [
+                    'button:text("确认"), button:text("确定"), button:text("完成")'
+                ], 2000);
+                if (confirmBtn) { await confirmBtn.click(); await this.wait(1000, 1500); }
+            } else {
+                this.log('Cover: file input not found');
+            }
+            await this.ss(page, "04_cover");
+        } else {
+            this.log('Step 5: No cover image');
         }
-        await this.ss(page, "04_published");
 
-        // ═══ Step 6: 检测结果 ═══
-        this.log("Step 6: Detecting result...");
-        const body = await page.textContent("body");
+        // ═══ Step 7: 发布 ═══
+        this.log("Step 7: Publishing...");
+        // 找发布按钮
+        const published = await page.evaluate(() => {
+            const btns = document.querySelectorAll('button');
+            for (const btn of btns) {
+                const t = (btn.textContent || '').trim();
+                if ((t === '发布' || (t.includes('发布') && !t.includes('草稿') && !t.includes('预览') && !t.includes('定时'))) && btn.offsetParent !== null) {
+                    btn.click(); return 'clicked';
+                }
+            }
+            return 'no_button';
+        });
+        this.log(`Publish btn: ${published}`);
+        await this.wait(2000, 3000);
 
-        // 检查错误
-        if (body.includes("验证码") || body.includes("滑块")) {
+        // 确认弹窗
+        const confirmed = await page.evaluate(() => {
+            const btns = document.querySelectorAll('button');
+            for (const btn of btns) {
+                const t = (btn.textContent || '').trim();
+                if ((t === '确认' || t === '确定' || t === '发布' || t === '确认发布') && btn.offsetParent !== null) {
+                    btn.click(); return 'confirmed';
+                }
+            }
+            return 'no_confirm';
+        });
+        this.log(`Confirm: ${confirmed}`);
+        await this.wait(3000, 5000);
+        await this.ss(page, "05_published");
+
+        // ═══ Step 8: 检测结果 ═══
+        const resultBody = await page.textContent("body");
+        if (resultBody.includes("验证码") || resultBody.includes("滑块")) {
             return { status: PUBLISH_STATUS.CAPTCHA_BLOCKED, article_url: "" };
         }
-        if (body.includes("违规") || body.includes("敏感") || body.includes("驳回")) {
+        if (resultBody.includes("违规") || resultBody.includes("敏感") || resultBody.includes("驳回")) {
             return { status: PUBLISH_STATUS.CONTENT_REJECTED, article_url: "" };
         }
-        if (body.includes("超限") || body.includes("上限") || body.includes("今天已")) {
+        if (resultBody.includes("太快") || resultBody.includes("频繁") || resultBody.includes("超限")) {
             return { status: PUBLISH_STATUS.RATE_LIMITED, article_url: "" };
         }
 
         // 抓取文章 URL
         let articleUrl = "";
-        const urlLinks = await page.$$('a[href*="baijiahao.baidu.com"], a[href*="/s?id="]');
-        for (const link of urlLinks) {
-            const href = await link.getAttribute("href");
-            if (href && href.includes("baijiahao")) {
-                articleUrl = href;
-                this.log(`  Article URL: ${articleUrl}`);
-                break;
+        try {
+            // 检查跳转到文章列表
+            const curUrl = page.url();
+            if (curUrl.includes("articles") || curUrl.includes("content")) {
+                articleUrl = curUrl;
+            } else {
+                const links = await page.$$('a[href*="/s?id="], a[href*="baijiahao.baidu.com/s/"]');
+                if (links.length > 0) articleUrl = await links[0].getAttribute("href");
             }
-        }
+            this.log(`Article URL: ${articleUrl || 'not found'}`);
+        } catch {}
 
         return {
             status: articleUrl ? PUBLISH_STATUS.SUCCESS : PUBLISH_STATUS.UNKNOWN_ERROR,

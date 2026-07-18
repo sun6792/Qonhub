@@ -73,7 +73,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 <script>
 const API = "http://127.0.0.1:9901";
 const API_KEY = "__RPA_API_KEY__";
-const CLOUD = "http://127.0.0.1:18080/geo_admin";
+const CLOUD = (() => { try { return new URLSearchParams(window.location.search).get('cloud') || "http://127.0.0.1:18080/geo_admin"; } catch { return "http://127.0.0.1:18080/geo_admin"; } })();
 let currentWs = "";
 let wsList = [];
 

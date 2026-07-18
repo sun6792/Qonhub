@@ -126,7 +126,7 @@ class TaskMonitoringQueryService
         }
 
         /** @var Collection<int, Task> $tasks */
-        $tasks = $query->get();
+        $tasks = $query->limit(500)->get();
 
         return $this->decorateTasks($tasks)->values()->all();
     }

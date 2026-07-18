@@ -690,23 +690,25 @@ class ArticleController extends Controller
         $this->scopeByOperatorWorkspaces($articles, Article::class);
         $articles = $articles->get();
 
-        foreach ($articles as $article) {
-            $workflowState = ArticleWorkflow::normalizeState(
-                $newStatus,
-                (string) ($article->review_status ?? 'pending'),
-                $article->published_at?->format('Y-m-d H:i:s')
-            );
+        DB::transaction(function () use ($articles, $newStatus) {
+            foreach ($articles as $article) {
+                $workflowState = ArticleWorkflow::normalizeState(
+                    $newStatus,
+                    (string) ($article->review_status ?? 'pending'),
+                    $article->published_at?->format('Y-m-d H:i:s')
+                );
 
-            Article::query()->whereKey((int) $article->id)->update([
-                'status' => $workflowState['status'],
-                'review_status' => $workflowState['review_status'],
-                'published_at' => $workflowState['published_at'],
-            ]);
+                Article::query()->whereKey((int) $article->id)->update([
+                    'status' => $workflowState['status'],
+                    'review_status' => $workflowState['review_status'],
+                    'published_at' => $workflowState['published_at'],
+                ]);
 
-            if ($workflowState['status'] === 'published') {
-                $this->distributionOrchestrator->enqueueForArticle((int) $article->id);
+                if ($workflowState['status'] === 'published') {
+                    $this->distributionOrchestrator->enqueueForArticle((int) $article->id);
+                }
             }
-        }
+        });
 
         return back()->with('message', __('admin.articles.message.batch_status_updated', ['count' => count($articleIds)]));
     }
@@ -728,29 +730,31 @@ class ArticleController extends Controller
         $this->scopeByOperatorWorkspaces($articles, Article::class);
         $articles = $articles->get();
 
-        foreach ($articles as $article) {
-            $desiredStatus = (string) ($article->status ?? 'draft');
-            $needsReview = (int) ($article->task->need_review ?? 0);
-            if (in_array($reviewStatus, ['approved', 'auto_approved'], true) && ($reviewStatus === 'auto_approved' || $needsReview === 0)) {
-                $desiredStatus = 'published';
+        DB::transaction(function () use ($articles, $reviewStatus) {
+            foreach ($articles as $article) {
+                $desiredStatus = (string) ($article->status ?? 'draft');
+                $needsReview = (int) ($article->task->need_review ?? 0);
+                if (in_array($reviewStatus, ['approved', 'auto_approved'], true) && ($reviewStatus === 'auto_approved' || $needsReview === 0)) {
+                    $desiredStatus = 'published';
+                }
+
+                $workflowState = ArticleWorkflow::normalizeState(
+                    $desiredStatus,
+                    $reviewStatus,
+                    $article->published_at?->format('Y-m-d H:i:s')
+                );
+
+                Article::query()->whereKey((int) $article->id)->update([
+                    'status' => $workflowState['status'],
+                    'review_status' => $workflowState['review_status'],
+                    'published_at' => $workflowState['published_at'],
+                ]);
+
+                if ($workflowState['status'] === 'published') {
+                    $this->distributionOrchestrator->enqueueForArticle((int) $article->id);
+                }
             }
-
-            $workflowState = ArticleWorkflow::normalizeState(
-                $desiredStatus,
-                $reviewStatus,
-                $article->published_at?->format('Y-m-d H:i:s')
-            );
-
-            Article::query()->whereKey((int) $article->id)->update([
-                'status' => $workflowState['status'],
-                'review_status' => $workflowState['review_status'],
-                'published_at' => $workflowState['published_at'],
-            ]);
-
-            if ($workflowState['status'] === 'published') {
-                $this->distributionOrchestrator->enqueueForArticle((int) $article->id);
-            }
-        }
+        });
 
         return back()->with('message', __('admin.articles.message.batch_review_updated', ['count' => count($articleIds)]));
     }

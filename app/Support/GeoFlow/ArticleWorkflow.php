@@ -51,8 +51,9 @@ final class ArticleWorkflow
     public static function generateUniqueSlug(string $title, ?int $excludeArticleId = null): string
     {
         $slug = self::randomSlug(8);
+        $maxAttempts = 20;
 
-        while (true) {
+        for ($attempt = 0; $attempt < $maxAttempts; $attempt++) {
             try {
                 $q = Article::withTrashed()->where('slug', $slug);
                 if ($excludeArticleId !== null) {
@@ -68,6 +69,9 @@ final class ArticleWorkflow
                 return self::randomSlug(8);
             }
         }
+
+        // 20次都冲突的极端情况，加时间戳确保唯一
+        return $slug . '-' . dechex(time());
     }
 
     private static function randomSlug(int $length): string

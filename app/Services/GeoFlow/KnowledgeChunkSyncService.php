@@ -61,6 +61,8 @@ class KnowledgeChunkSyncService
         }
 
         DB::transaction(function () use ($knowledgeBaseId, $plannedChunks, $generatedEmbeddings, $knowledgeMetadata): void {
+            // 锁定知识库行防止并发同步导致 UNIQUE(knowledge_base_id, chunk_index) 冲突
+            KnowledgeBase::query()->whereKey($knowledgeBaseId)->lockForUpdate()->first();
             KnowledgeChunk::query()->where('knowledge_base_id', $knowledgeBaseId)->delete();
 
             foreach ($plannedChunks as $index => $chunk) {
