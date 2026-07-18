@@ -1189,7 +1189,7 @@ class KnowledgeChunkSyncService
 
     private function embeddingBatchSize(): int
     {
-        return max(1, min(64, (int) config('geoflow.embedding_batch_size', 1)));
+        return max(1, min(300, (int) config('geoflow.embedding_batch_size', 300)));
     }
 
     private function resolveEmbeddingDocumentTitle(int $knowledgeBaseId): string

@@ -29,13 +29,28 @@ class ProcessKnowledgeEmbeddingJob implements ShouldQueue
 
     public function __construct(
         private readonly int $knowledgeBaseId,
-        private readonly string $content,
         private readonly bool $requireRealEmbedding = false
     ) {}
 
     public function handle(KnowledgeChunkSyncService $syncService): void
     {
         $knowledgeBaseId = $this->knowledgeBaseId;
+
+        // 从 DB 读取内容，避免大文本塞 Redis（队列 payload 限制）
+        $knowledgeBase = KnowledgeBase::query()->whereKey($knowledgeBaseId)->first();
+        if (! $knowledgeBase) {
+            Log::warning('KnowledgeEmbeddingJob: knowledge base not found', ['id' => $knowledgeBaseId]);
+            return;
+        }
+        $content = (string) ($knowledgeBase->content ?? '');
+        if ($content === '') {
+            Log::warning('KnowledgeEmbeddingJob: empty content', ['id' => $knowledgeBaseId]);
+            KnowledgeBase::query()->whereKey($knowledgeBaseId)->update([
+                'embedding_status' => 'completed',
+                'embedding_progress' => 100,
+            ]);
+            return;
+        }
 
         // 标记开始处理
         KnowledgeBase::query()->whereKey($knowledgeBaseId)->update([
@@ -47,12 +62,12 @@ class ProcessKnowledgeEmbeddingJob implements ShouldQueue
         try {
             Log::info('KnowledgeEmbeddingJob started', [
                 'knowledge_base_id' => $knowledgeBaseId,
-                'content_length' => mb_strlen($this->content, 'UTF-8'),
+                'content_length' => mb_strlen($content, 'UTF-8'),
             ]);
 
             $chunkCount = $syncService->sync(
                 $knowledgeBaseId,
-                $this->content,
+                $content,
                 $this->requireRealEmbedding
             );
 

@@ -226,7 +226,6 @@ class KnowledgeBaseController extends Controller
         try {
             ProcessKnowledgeEmbeddingJob::dispatch(
                 (int) $knowledgeBase->id,
-                $content,
                 true  // 手动刷新：要求真实 embedding
             )->onQueue('geoflow');
 
@@ -527,8 +526,7 @@ class KnowledgeBaseController extends Controller
     {
         try {
             ProcessKnowledgeEmbeddingJob::dispatch(
-                (int) $knowledgeBase->id,
-                $content
+                (int) $knowledgeBase->id
             )->onQueue('geoflow');
 
             return redirect()
