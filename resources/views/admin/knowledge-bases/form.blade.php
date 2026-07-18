@@ -382,9 +382,9 @@
                 const progressBar = document.querySelector('[data-import-progress-bar]');
                 const clientError = form.querySelector('[data-import-client-error]');
                 const clientErrorMessage = form.querySelector('[data-import-client-error-message]');
-                const allowedExtensions = ['txt', 'md', 'docx'];
+                const allowedExtensions = ['txt', 'md', 'markdown', 'docx', 'doc', 'pdf', 'ppt', 'pptx', 'xls', 'xlsx', 'csv'];
                 const maxFiles = 10;
-                const maxFileBytes = 50 * 1024 * 1024;
+                const maxFileBytes = 100 * 1024 * 1024;
                 let importProgressTimer = null;
 
                 const escapeHtml = function (value) {

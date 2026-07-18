@@ -15,6 +15,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use App\Jobs\ProcessKnowledgeEmbeddingJob;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
@@ -223,29 +224,35 @@ class KnowledgeBaseController extends Controller
         }
 
         try {
-            $chunkCount = $this->chunkSyncService->sync((int) $knowledgeBase->id, $content, false);
-            $stats = $this->loadChunkStats((int) $knowledgeBase->id);
-            $vectorizedCount = (int) ($stats['vectorized_count'] ?? 0);
-
-            if ($chunkCount > 0 && $vectorizedCount < $chunkCount) {
-                return $redirect
-                    ->with('message', __('admin.knowledge_bases.message.chunk_sync_success_fallback', [
-                        'count' => $chunkCount,
-                    ]) . '（' . $vectorizedCount . '/' . $chunkCount . ' 真实向量，其余使用哈希降级，检索功能正常可用）');
-            }
+            ProcessKnowledgeEmbeddingJob::dispatch(
+                (int) $knowledgeBase->id,
+                $content,
+                true  // 手动刷新：要求真实 embedding
+            )->onQueue('geoflow');
 
             return $redirect
                 ->with('message', __('admin.knowledge_bases.message.chunks_refreshed', [
-                    'chunks' => $chunkCount,
-                    'vectorized' => $vectorizedCount,
-                ]));
+                    'chunks' => 0,
+                    'vectorized' => 0,
+                ]) . '（向量化已加入后台队列，请稍后刷新查看进度）');
         } catch (\Throwable $exception) {
-            report($exception);
-
-            return $redirect
-                ->withErrors(__('admin.knowledge_bases.message.chunks_refresh_error', [
-                    'message' => $exception->getMessage(),
-                ]));
+            // 队列不可用时降级同步
+            try {
+                $chunkCount = $this->chunkSyncService->sync((int) $knowledgeBase->id, $content, true);
+                $stats = $this->loadChunkStats((int) $knowledgeBase->id);
+                $vectorizedCount = (int) ($stats['vectorized_count'] ?? 0);
+                return $redirect
+                    ->with('message', __('admin.knowledge_bases.message.chunks_refreshed', [
+                        'chunks' => $chunkCount,
+                        'vectorized' => $vectorizedCount,
+                    ]));
+            } catch (\Throwable $e) {
+                report($e);
+                return $redirect
+                    ->withErrors(__('admin.knowledge_bases.message.chunks_refresh_error', [
+                        'message' => $e->getMessage(),
+                    ]));
+            }
         }
     }
 
@@ -288,6 +295,8 @@ class KnowledgeBaseController extends Controller
                 'usage_count' => (int) ($knowledgeBase->usage_count ?? 0),
                 'chunk_count' => (int) ($knowledgeBase->chunk_count ?? 0),
                 'vectorized_chunk_count' => (int) ($knowledgeBase->vectorized_chunk_count ?? 0),
+                'embedding_status' => (string) ($knowledgeBase->embedding_status ?? 'pending'),
+                'embedding_progress' => (int) ($knowledgeBase->embedding_progress ?? 0),
                 'created_at' => $knowledgeBase->created_at?->format('Y-m-d H:i:s'),
                 'updated_at' => $knowledgeBase->updated_at?->format('Y-m-d H:i:s'),
             ];
@@ -510,26 +519,38 @@ class KnowledgeBaseController extends Controller
     }
 
     /**
-     * 保存知识库后再执行切片同步，避免外部模型调用占用数据库事务。
+     * 保存知识库后再异步调度切片+向量化，避免外部 API 调用阻塞 HTTP 响应。
      *
      * @param  array<string, mixed>  $routeParameters
      */
     private function redirectAfterChunkSync(KnowledgeBase $knowledgeBase, string $content, string $routeName, array $routeParameters, string $successMessageKey): RedirectResponse
     {
         try {
-            $chunkCount = $this->chunkSyncService->sync((int) $knowledgeBase->id, $content);
+            ProcessKnowledgeEmbeddingJob::dispatch(
+                (int) $knowledgeBase->id,
+                $content
+            )->onQueue('geoflow');
 
             return redirect()
                 ->route($routeName, $routeParameters)
-                ->with('message', __('admin.knowledge_bases.message.'.$successMessageKey, ['count' => $chunkCount]));
+                ->with('message', __('admin.knowledge_bases.message.'.$successMessageKey, ['count' => 0])
+                    . '（向量化已加入后台队列，请稍后刷新查看处理进度）');
         } catch (\Throwable $exception) {
-            return redirect()
-                ->route($routeName, $routeParameters)
-                ->withErrors([
-                    'chunk_sync' => __('admin.knowledge_bases.message.chunk_sync_deferred', [
-                        'message' => $exception->getMessage(),
-                    ]),
-                ]);
+            // 队列不可用时降级为同步执行
+            try {
+                $chunkCount = $this->chunkSyncService->sync((int) $knowledgeBase->id, $content);
+                return redirect()
+                    ->route($routeName, $routeParameters)
+                    ->with('message', __('admin.knowledge_bases.message.'.$successMessageKey, ['count' => $chunkCount]));
+            } catch (\Throwable $e) {
+                return redirect()
+                    ->route($routeName, $routeParameters)
+                    ->withErrors([
+                        'chunk_sync' => __('admin.knowledge_bases.message.chunk_sync_deferred', [
+                            'message' => $e->getMessage(),
+                        ]),
+                    ]);
+            }
         }
     }
 

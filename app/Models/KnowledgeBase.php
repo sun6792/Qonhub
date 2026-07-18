@@ -27,6 +27,9 @@ class KnowledgeBase extends Model
         'effective_date',
         'risk_level',
         'review_status',
+        'embedding_status',
+        'embedding_progress',
+        'embedding_error',
     ];
 
     protected function casts(): array

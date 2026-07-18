@@ -138,6 +138,16 @@
                                         <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-800">
                                             {{ __('admin.knowledge_bases.text_unit', ['count' => number_format((int) $item['word_count'])]) }}
                                         </span>
+                                        @php $embStatus = $item['embedding_status'] ?? 'pending'; @endphp
+                                        @if ($embStatus === 'processing')
+                                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800" title="向量化处理中...">
+                                                ⏳ 处理中 {{ $item['embedding_progress'] ?? 0 }}%
+                                            </span>
+                                        @elseif ($embStatus === 'failed')
+                                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700" title="向量化失败，使用哈希降级">
+                                                ⚠️ 降级
+                                            </span>
+                                        @endif
                                         @if ((int) ($item['chunk_count'] ?? 0) > 0)
                                             <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-700">
                                                 {{ __('admin.knowledge_bases.vectorized_summary', [
